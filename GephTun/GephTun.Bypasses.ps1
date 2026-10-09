@@ -86,6 +86,11 @@ function Confirm-GephTunBypass($Peer, [switch]$Preloaded) {
     if (-not $adapter.HardwareInterface -or $adapter.Status -ne 'Up') { Throw-GephTunTransient 'NETWORK_UNAVAILABLE' 'The Geph bypass physical adapter is unavailable.' }
     $expected=@($script:Session.OriginalRoutes | Where-Object { $_.InterfaceIndex -eq $Peer.InterfaceIndex -and $_.InterfaceGuid -eq $adapter.InterfaceGuid.ToString() })
     if ($expected.Count -eq 0) { Throw-GephTunTransient 'NETWORK_CHANGED' 'The Geph bypass adapter no longer matches this session.' }
+    $baseline=@($script:Session.OriginalRoutes | Where-Object {
+        $_.InterfaceIndex -eq $Peer.InterfaceIndex -and $_.InterfaceGuid -eq $adapter.InterfaceGuid.ToString() -and
+        (Test-GephTunPrefix $Peer.Prefix.Split('/')[0] $_.DestinationPrefix)
+    } | Sort-Object @{Expression={ [int]$_.DestinationPrefix.Split('/')[1] };Descending=$true},Cost)
+    if ($baseline.Count -eq 0 -or $baseline[0].NextHop -ne $Peer.NextHop) { Throw-GephTunTransient 'NETWORK_CHANGED' 'The bypass gateway no longer matches the saved physical route.' }
     if ($new) {
         Add-GephTunOwnedRoute $Peer.Prefix $Peer.InterfaceIndex $Peer.NextHop 'Bypass'
         if ($Preloaded) { $script:BypassCounters.Preloaded++ }
@@ -96,6 +101,17 @@ function Confirm-GephTunBypass($Peer, [switch]$Preloaded) {
         $_.DestinationPrefix -eq $Peer.Prefix -and $_.InterfaceIndex -eq $Peer.InterfaceIndex -and $_.NextHop -eq $Peer.NextHop
     })
     if ($actual.Count -ne 1) { throw ('The Geph bypass route is missing or ambiguous: '+$Peer.Prefix) }
+    # Find-NetRoute returns the chosen route and source-address record. A
+    # matching host route alone is insufficient when another interface wins.
+    try { $selection=@(Find-NetRoute -RemoteIPAddress $Peer.Prefix.Split('/')[0] -ErrorAction Stop) }
+    catch { Throw-GephTunTransient 'PEER_SNAPSHOT' ('Selected bypass route could not be queried: '+$_.Exception.Message) }
+    $selected=@($selection | Where-Object { $_.PSObject.Properties['DestinationPrefix'] })
+    if ($selected.Count -ne 1) { throw 'Selected bypass route is missing or ambiguous; no foreign route was modified.' }
+    if ($selected[0].DestinationPrefix -ne $Peer.Prefix -or [int]$selected[0].InterfaceIndex -ne [int]$Peer.InterfaceIndex -or $selected[0].NextHop -ne $Peer.NextHop) {
+        Throw-GephTunTransient 'NETWORK_CHANGED' 'Windows selected a competing Geph bypass route; recover before repairing this session.'
+    }
+    $sources=@($selection | Where-Object { $_.PSObject.Properties['IPAddress'] })
+    if ($sources.Count -gt 1 -or ($sources.Count -eq 1 -and [int]$sources[0].InterfaceIndex -ne [int]$Peer.InterfaceIndex)) { throw 'Selected bypass source interface is inconsistent.' }
     $owned=@($script:Session.Routes | Where-Object { $_.Kind -eq 'Bypass' -and $_.DestinationPrefix -eq $Peer.Prefix })
     if ($owned.Count -gt 0 -and ([int]$actual[0].RouteMetric -ne [int]$owned[0].RouteMetric -or $owned[0].InterfaceGuid -ne $adapter.InterfaceGuid.ToString())) {
         throw ('An owned Geph bypass was changed: '+$Peer.Prefix)

@@ -16,7 +16,7 @@ function New-Fixture {
     $script:module = Import-Module $modulePath -Force -PassThru -DisableNameChecking
     & $script:module {
         $script:Fixture = [pscustomobject]@{
-            Stop = $null; Cancel = $null; OwnerAlive = $true; Order = (New-Object 'Collections.Generic.List[string]')
+            Stop = $null; Cancel = $null; RecoveryCalls=0; RecoverAfter=0; OwnerAlive = $true; Order = (New-Object 'Collections.Generic.List[string]')
             RestoreFails = $false; Residue = $false; CancelAfterRestore = $false; CancelDuringWait = $false
             LeaseOpens=0;LeaseCloses=0;HardStartFailure = $false; TransientStarts = 0; Starts = 0; Snapshots = 0; SnapshotFailures = 0
             ProxyPath = 'C:\Geph\geph.exe'; Fingerprints = @('network-a','network-a','network-a'); FingerprintIndex = 0
@@ -40,8 +40,8 @@ function New-Fixture {
         function script:Set-GephTunStatus([string]$Status,[string]$Message) { $script:Fixture.Order.Add('status:'+$Status) }
         function script:Set-GephTunReconnectStatus([string]$Message) { $script:Fixture.Order.Add('waiting') }
         function script:Restore-GephTunSession {
-            $script:Fixture.Order.Add('restore')
-            if ($script:Fixture.RestoreFails) { throw 'Injected cleanup failure' }
+            $script:Fixture.RecoveryCalls++;$script:Fixture.Order.Add('restore')
+            if ($script:Fixture.RestoreFails -and ($script:Fixture.RecoverAfter -eq 0 -or $script:Fixture.RecoveryCalls -lt $script:Fixture.RecoverAfter)) { throw 'Injected cleanup failure' }
             $script:Session = $null
             if ($script:Fixture.CancelAfterRestore) { $script:Fixture.Stop = [pscustomobject]@{Token=('a'*32)} }
         }
@@ -51,6 +51,7 @@ function New-Fixture {
             if ($script:Fixture.CancelDuringWait) { $script:Fixture.Stop = [pscustomobject]@{Token=('a'*32)} }
             Assert-GephTunIntentContinuing
         }
+        function script:Wait-GephTunRecoveryDelay($Milliseconds) {$script:Fixture.Order.Add('recovery-delay:'+ $Milliseconds)}
         function script:Start-Sleep { [CmdletBinding()]param($Milliseconds,$Seconds) }
         function script:Get-GephTunDefaultRoutes { return [pscustomobject]@{InterfaceIndex=7;InterfaceGuid='wifi';Gateway='192.0.2.1'} }
         function script:Get-GephTunNetworkFingerprint($Network) {
@@ -253,6 +254,71 @@ try {
             Test-GephTunFirewallBaseline; return $true
         }
         Assert-True $value 'An enabled baseline was rejected.'
+    }
+    Test-Case 'Repeated real recovery loop failures stop at three attempts with journal and protection intact' {
+        $ok=& $module {
+            $script:Fixture.RestoreFails=$true;$script:ProtectionLease=[pscustomobject]@{Fixture=$true}
+            try{Wait-GephTunRecovery;$false}catch{
+                $script:Fixture.RecoveryCalls -eq 3 -and $null -ne $script:Session -and $null -eq $script:ProtectionLease -and
+                $script:Fixture.LeaseCloses -eq 1 -and $_.Exception.Message -like '*Injected cleanup failure*' -and $_.Exception.Message -like '*persistent protection was not disabled*'
+            }
+        }
+        Assert-True $ok 'Recovery was unbounded, lost its journal, or silently unlocked.'
+    }
+    Test-Case 'Recovery backoff increases and a later successful cleanup ends retries' {
+        $ok=& $module {$script:Fixture.RestoreFails=$true;$script:Fixture.RecoverAfter=3;Wait-GephTunRecovery;$script:Fixture.RecoveryCalls -eq 3 -and $null -eq $script:Session -and ($script:Fixture.Order -join ',') -match 'recovery-delay:1000.*recovery-delay:2000'}
+        Assert-True $ok 'Backoff or successful recovery was incorrect.'
+    }
+    Test-Case 'Cancellation stops repeated cleanup but preserves incomplete recovery state' {
+        $ok=& $module {$script:Fixture.RestoreFails=$true;$script:Fixture.Stop=[pscustomobject]@{Token=('a'*32)};try{Wait-GephTunRecovery;$false}catch{$script:Fixture.RecoveryCalls -eq 1 -and $null -ne $script:Session}}
+        Assert-True $ok 'Cancellation erased the journal or kept retrying.'
+    }
+    Test-Case 'Operator can retry cleanup after the original worker exhausts recovery' {
+        $ok=& $module {
+            $script:Fixture.RestoreFails=$true;try{Wait-GephTunRecovery}catch{}
+            if($null -eq $script:Session){return $false}
+            $script:Fixture.RestoreFails=$false;Wait-GephTunRecovery
+            $script:Fixture.RecoveryCalls -eq 4 -and $null -eq $script:Session
+        }
+        Assert-True $ok 'An exhausted loop prevented a later explicit retry.'
+    }
+    Test-Case 'Permission close failure remains an actionable recovery blocker' {
+        $ok=& $module {
+            $script:Fixture.RestoreFails=$true
+            function script:Close-GephTunProtectionLease {throw 'Injected lease close failure'}
+            try{Wait-GephTunRecovery;$false}catch{$_.Exception.Message -like '*Injected cleanup failure*Injected lease close failure*' -and $null -ne $script:Session}
+        }
+        Assert-True $ok 'Permission uncertainty was suppressed or journal discarded.'
+    }
+
+    foreach($mode in @('CancellationRead','Backoff')) {
+        Test-Case ('Recovery control exception closes permissions and preserves state: '+$mode) {
+            $ok=& $module {param($Mode)
+                $script:Fixture.RestoreFails=$true;Open-GephTunProtectionLease
+                if($Mode -eq 'CancellationRead'){function script:Test-GephTunRecoveryCancelled {throw 'Injected cancellation read failure'}}
+                else{function script:Wait-GephTunRecoveryDelay($Milliseconds) {throw 'Injected backoff failure'}}
+                try{Wait-GephTunRecovery;$false}catch{$_.Exception.Message -match 'Recovery control failed' -and $script:Fixture.LeaseCloses -eq 1 -and $null -ne $script:Session}
+            } $mode
+            Assert-True $ok 'A recovery control exception retained access or discarded the journal.'
+        }
+    }
+    Test-Case 'Explicit operator recovery reacquires the mutex after retry exhaustion' {
+        $ok=& $module {
+            $script:Fixture.RestoreFails=$true;try{Wait-GephTunRecovery}catch{}
+            $script:Fixture.RestoreFails=$false;$script:ConnectionIntent=$null
+            function script:Get-GephTunLock {$script:Fixture.Order.Add('lock');[pscustomobject]@{Fixture=$true}}
+            function script:Release-GephTunLock($Mutex) {$script:Fixture.Order.Add('unlock')}
+            Request-GephTunDisconnect
+            $script:Fixture.RecoveryCalls -eq 4 -and $null -eq $script:Session -and $script:Fixture.Order.Contains('unlock')
+        }
+        Assert-True $ok 'Explicit Disconnect / Recover could not complete a later attempt.'
+    }
+    Test-Case 'Uncertain controller ownership blocks explicit takeover before cleanup' {
+        $ok=& $module {
+            function script:Get-GephTunProcessIdentityState($Identity) {'UNKNOWN'}
+            try{Request-GephTunDisconnect;$false}catch{$script:Fixture.RecoveryCalls -eq 0 -and $null -ne $script:Session}
+        }
+        Assert-True $ok 'Unknown controller identity authorized recovery.'
     }
 }
 finally { if ($null -ne $module) { Remove-Module $module -Force } }
