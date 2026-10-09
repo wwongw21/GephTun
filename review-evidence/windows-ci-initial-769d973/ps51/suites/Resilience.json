@@ -1,0 +1,182 @@
+{
+    "CapturedUtc":  "2026-10-09T18:15:30.8572601Z",
+    "Version":  "1.5.0",
+    "Scope":  "Actual PowerShell controller functions with isolated module-scope doubles; no live Windows/network acceptance.",
+    "PowerShellVersion":  "5.1.20348.5622",
+    "Total":  34,
+    "Passed":  34,
+    "Failed":  0,
+    "Skipped":  0,
+    "Tests":  [
+                  {
+                      "Name":  "Typed failures retain their code through exception wrapping",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Unknown and security failures are not in the reconnect allow-list",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Only six documented transient classes may reconnect",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A matching stop request is latched while no session exists",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A foreign stop token cannot cancel the controller",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A closed owner cancels retries",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Expired reconnect budget prevents another setup checkpoint",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "The old session is recovered before a fresh connection is attempted",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Cleanup failure cannot start a replacement session",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Residual session journal prevents reconnect",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Disconnect during cleanup prevents a new session",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Disconnect during the stabilization wait prevents a new session",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "An already requested disconnect never starts recovery-driven reconnect",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Geph executable path changes require manual review",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "The network is rechecked after the blocking proxy probe",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Transient failed starts are bounded and can recover",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A fourth start is never attempted in one recovery cycle",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A hard preflight failure is not retried",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Rapid reconnect loops trip the circuit breaker",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Old reconnect episodes age out of the circuit breaker",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Peer observation retries take fresh snapshots",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Peer observation retries stop after three reads",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A changed physical gateway is typed for clean-session recovery",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Disabled firewall baseline is rejected without changing profiles",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Enabled firewall baseline is accepted without mutations",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Repeated real recovery loop failures stop at three attempts with journal and protection intact",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Recovery backoff increases and a later successful cleanup ends retries",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Cancellation stops repeated cleanup but preserves incomplete recovery state",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Operator can retry cleanup after the original worker exhausts recovery",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Permission close failure remains an actionable recovery blocker",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Recovery control exception closes permissions and preserves state: CancellationRead",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Recovery control exception closes permissions and preserves state: Backoff",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Explicit operator recovery reacquires the mutex after retry exhaustion",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Uncertain controller ownership blocks explicit takeover before cleanup",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  }
+              ]
+}

@@ -16,7 +16,7 @@ function Assert-True($Value,[string]$Message){if(-not $Value){throw $Message}}
 function Test-Case($Name,[scriptblock]$Body){try{& $Body;$results.Add([pscustomobject]@{Name=$Name;Result='PASS';Detail=''})}catch{$results.Add([pscustomobject]@{Name=$Name;Result='FAIL';Detail=$_.Exception.Message})}}
 $policy=[GephTun.Security.WfpPolicy]
 $base=@($policy::Baseline('C:\Windows\System32\svchost.exe'))
-$transport=@($policy::Transport([string[]]@('C:\Geph\geph5-client.exe'),[ulong[]]@(111)))
+$transport=@($policy::Transport([string[]]@('C:\Geph\geph5-client.exe'),[System.UInt64[]]@(111)))
 $tunnel=@($policy::Tunnel(222))
 function Evaluate($Rules,[guid]$Layer,[hashtable]$Packet){
     $matches=@(foreach($rule in $Rules){
@@ -35,9 +35,9 @@ function Evaluate($Rules,[guid]$Layer,[hashtable]$Packet){
                     if(($bytes[$i] -band $mask) -ne ($c.Bytes[$i] -band $mask)){$ok=$false;break};$bits-=$n
                 }
             }
-            elseif($c.Match -eq 6){if(([ulong]$value -band $c.Number) -ne $c.Number){$ok=$false;break}}
-            elseif($c.Match -eq 8){if(([ulong]$value -band $c.Number) -ne 0){$ok=$false;break}}
-            elseif([ulong]$value -ne $c.Number){$ok=$false;break}
+            elseif($c.Match -eq 6){if(([System.UInt64]$value -band $c.Number) -ne $c.Number){$ok=$false;break}}
+            elseif($c.Match -eq 8){if(([System.UInt64]$value -band $c.Number) -ne 0){$ok=$false;break}}
+            elseif([System.UInt64]$value -ne $c.Number){$ok=$false;break}
         }
         if($ok){$rule}
     })
@@ -45,7 +45,7 @@ function Evaluate($Rules,[guid]$Layer,[hashtable]$Packet){
     if($matches.Count -eq 0){return 'NO_POLICY'}
     if($matches[0].Permit){return 'PERMIT'};return 'BLOCK'
 }
-function Packet([string]$Image='C:\Other\browser.exe',[int]$Protocol=6,[ulong]$Local=111,[ulong]$Next=111,[int]$Flags=0){
+function Packet([string]$Image='C:\Other\browser.exe',[int]$Protocol=6,[System.UInt64]$Local=111,[System.UInt64]$Next=111,[int]$Flags=0){
     $packet=@{}
     $packet[$policy::App.ToString()]=$Image
     $packet[$policy::Protocol.ToString()]=$Protocol
@@ -57,6 +57,18 @@ function Packet([string]$Image='C:\Other\browser.exe',[int]$Protocol=6,[ulong]$L
     $packet[$policy::RemotePort.ToString()]=443
     $packet[$policy::RemoteAddress.ToString()]='2001:db8::1'
     return $packet
+}
+Test-Case 'Lease LUID types resolve on PowerShell 5.1 and match the native managed signature' {
+    $tokens=$null;$errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PackageDirectory 'GephTun.Protection.ps1'),[ref]$tokens,[ref]$errors)
+    Assert-True ($errors.Count -eq 0) 'Protection module failed to parse.'
+    $legacyAliases=@($ast.FindAll({param($node)$node -is [Management.Automation.Language.TypeConstraintAst] -and $node.TypeName.FullName -match '^(ulong|ushort|uint)(\[\])?$'},$true))
+    Assert-True ($legacyAliases.Count -eq 0) 'A PowerShell 7-only unsigned alias was reintroduced into runtime protection.'
+    $types=@($ast.FindAll({param($node)$node -is [Management.Automation.Language.TypeConstraintAst] -and $node.TypeName.FullName -eq 'System.UInt64[]'},$true))
+    Assert-True ($types.Count -eq 1 -and $types[0].TypeName.GetReflectionType() -eq [System.UInt64[]]) 'Runtime LUID conversion does not resolve to the exact UInt64 array type.'
+    $method=[GephTun.Security.WfpController].GetMethod('OpenLease')
+    Assert-True ($method.GetParameters()[1].ParameterType -eq [System.UInt64[]]) 'Native managed lease signature differs from the PowerShell conversion.'
+    Assert-True (([System.UInt64[]]@(111)).GetType() -eq [System.UInt64[]]) 'The policy-plan fixture cannot construct portable unsigned LUIDs.'
 }
 Test-Case 'x64 native layouts match the declared SDK offsets' {[GephTun.Security.WfpController]::AssertLayout()}
 Test-Case 'All rule keys are unique and weights are legal range indexes' {
@@ -122,8 +134,8 @@ Test-Case 'Loopback remains available while disconnected' {Assert-True ((Evaluat
 Test-Case 'Zero interface and empty transport lists are rejected' {
     $rejected=0
     try{$null=$policy::Tunnel(0)}catch{$rejected++}
-    try{$null=$policy::Transport([string[]]@(),[ulong[]]@(111))}catch{$rejected++}
-    try{$null=$policy::Transport([string[]]@('C:\Geph\geph.exe'),[ulong[]]@(0))}catch{$rejected++}
+    try{$null=$policy::Transport([string[]]@(),[System.UInt64[]]@(111))}catch{$rejected++}
+    try{$null=$policy::Transport([string[]]@('C:\Geph\geph.exe'),[System.UInt64[]]@(0))}catch{$rejected++}
     Assert-True ($rejected -eq 3) 'Unsafe inputs were accepted.'
 }
 $failed=@($results|Where-Object Result -eq 'FAIL').Count

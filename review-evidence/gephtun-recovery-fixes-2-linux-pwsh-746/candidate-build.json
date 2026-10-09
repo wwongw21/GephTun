@@ -1,0 +1,14 @@
+{
+  "Version": "1.5.0",
+  "ManifestEntries": 126,
+  "TotalFiles": 127,
+  "StaticChecks": 250,
+  "ManifestAndSourceEvidence": "PASS",
+  "PowerShellExecution": "NOT_RUN",
+  "CSharpCompilation": "NOT_RUN",
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "ProductionQualified": false,
+  "Archive": "GephTun-1.5.0-recovery-fixes-2.zip",
+  "Bytes": 10629074,
+  "Sha256": "f83287fd573b430ae2370b1a1c499a8368c4b9cb11e6dfe2c027184f1ee1828d"
+}

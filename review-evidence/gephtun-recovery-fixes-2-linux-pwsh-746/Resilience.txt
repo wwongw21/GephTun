@@ -1,0 +1,40 @@
+
+Name
+----                                                                           
+Typed failures retain their code through exception wrapping
+Unknown and security failures are not in the reconnect allow-list
+Only six documented transient classes may reconnect
+A matching stop request is latched while no session exists
+A foreign stop token cannot cancel the controller
+A closed owner cancels retries
+Expired reconnect budget prevents another setup checkpoint
+The old session is recovered before a fresh connection is attempted
+Cleanup failure cannot start a replacement session
+Residual session journal prevents reconnect
+Disconnect during cleanup prevents a new session
+Disconnect during the stabilization wait prevents a new session
+An already requested disconnect never starts recovery-driven reconnect
+Geph executable path changes require manual review
+The network is rechecked after the blocking proxy probe
+Transient failed starts are bounded and can recover
+A fourth start is never attempted in one recovery cycle
+A hard preflight failure is not retried
+Rapid reconnect loops trip the circuit breaker
+Old reconnect episodes age out of the circuit breaker
+Peer observation retries take fresh snapshots
+Peer observation retries stop after three reads
+A changed physical gateway is typed for clean-session recovery
+Disabled firewall baseline is rejected without changing profiles
+Enabled firewall baseline is accepted without mutations
+Repeated real recovery loop failures stop at three attempts with journal and pr
+otection intact
+Recovery backoff increases and a later successful cleanup ends retries
+Cancellation stops repeated cleanup but preserves incomplete recovery state
+Operator can retry cleanup after the original worker exhausts recovery
+Permission close failure remains an actionable recovery blocker
+Recovery control exception closes permissions and preserves state: Cancellation
+Read
+Recovery control exception closes permissions and preserves state: Backoff
+Explicit operator recovery reacquires the mutex after retry exhaustion
+Uncertain controller ownership blocks explicit takeover before cleanup
+

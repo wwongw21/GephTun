@@ -339,6 +339,7 @@ def static_checks(root: Path) -> dict:
         'Windows/native qualification is explicitly pending':'NativeWindowsAcceptance: NOT_RUN' in text('VALIDATION.md'),
     })
     checks.update({
+        'Runtime protection uses PowerShell 5.1-compatible UInt64 arrays': '[System.UInt64[]]$luids' in protection and not re.search(r'\[(?:ulong|ushort|uint)(?:\[\])?\]', protection),
         'Boot identity uses exact typed UTC ticks': 'ConvertTo-GephTunProcessStartUtc $Worker.StartUtc' in boot and 'DateTimeOffset' in boot,
         'Failed setup closes only its own acquired lease': 'ReferenceEquals($ownedStartLease,$script:ProtectionLease)' in setup and '-not $startSucceeded' in setup,
         'Recovery retry budget preserves persistent blocking': '$attempt -le 3' in function(core,'Wait-GephTunRecovery') and 'Close-GephTunProtectionLease' in function(core,'Wait-GephTunRecovery') and 'Disable-GephTunProtection' not in function(core,'Wait-GephTunRecovery'),

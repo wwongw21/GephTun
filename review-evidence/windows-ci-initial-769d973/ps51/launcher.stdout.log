@@ -1,0 +1,36 @@
+Isolated validation host: 5.1.20348.5622; standard user; no live network acceptance.
+GephTun 1.5.0: integrity PASS for 126 files. 249 STATIC checks passed. PowerShell/C# execution and native Windows acceptance were NOT RUN; this is not production qualification.
+Running Source in a fresh process...
+Running WfpPolicy in a fresh process...
+Running Bypasses in a fresh process...
+Running Protection in a fresh process...
+Running Resilience in a fresh process...
+Running Controller in a fresh process...
+Running DnsMandatory in a fresh process...
+Running BootRecovery in a fresh process...
+Running Package in a fresh process...
+
+Suite        ExitCode Result Detail                   Receipt                                     
+-----        -------- ------ ------                   -------                                     
+Source              0 PASS                            D:\a\_temp\gephtun-validation\suites\Source.
+                                                      json                                        
+WfpPolicy           1 FAIL   No receipt was produced. D:\a\_temp\gephtun-validation\suites\WfpPoli
+                                                      cy.json                                     
+Bypasses            0 PASS                            D:\a\_temp\gephtun-validation\suites\Bypasse
+                                                      s.json                                      
+Protection          0 PASS                            D:\a\_temp\gephtun-validation\suites\Protect
+                                                      ion.json                                    
+Resilience          0 PASS                            D:\a\_temp\gephtun-validation\suites\Resilie
+                                                      nce.json                                    
+Controller          0 PASS                            D:\a\_temp\gephtun-validation\suites\Control
+                                                      ler.json                                    
+DnsMandatory        0 PASS                            D:\a\_temp\gephtun-validation\suites\DnsMand
+                                                      atory.json                                  
+BootRecovery        0 PASS                            D:\a\_temp\gephtun-validation\suites\BootRec
+                                                      overy.json                                  
+Package             0 PASS                            D:\a\_temp\gephtun-validation\suites\Package
+                                                      .json                                       
+
+
+Results: D:\a\_temp\gephtun-validation\suites
+This runner does not alter the bundled historical/static qualification metadata or certify a production release.

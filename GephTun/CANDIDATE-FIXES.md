@@ -7,6 +7,10 @@ candidate and inherits none of that candidate's passing test claims.
 The candidate fixes exact UTC process identity after JSON conversion, failed
 session-start temporary permission ownership, bounded recovery, actual Windows
 Geph bypass route selection, and scheduled-task action/principal ownership.
+Revision recovery-fixes-2 also replaces the PowerShell 7-only ulong alias with
+System.UInt64 in runtime permission opening and managed policy tests, preserving
+the native unsigned LUID type. A regression checks the runtime cast against the
+managed lease signature without calling native WFP.
 The development branch is `fix/gephtun-1.5.0-recovery`.
 
 Persistent WFP blocking has a separate lifetime. Failed connection setup,

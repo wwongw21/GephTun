@@ -1,0 +1,38 @@
+
+Name
+----                                                                           
+Normal close disposes only the temporary lease
+Policy verification failure closes permissions and reports Unknown
+No lease cannot count as a verified protected session
+Tunnel authorization is revoked before session resources are cleaned
+A revoke error closes the full temporary lease instead of retaining obsolete ac
+cess
+Persistent blocking cannot be enabled without explicit consent
+Persistent protection cannot be removed without explicit consent
+Actual failed session start closes its acquired lease: preflight
+Actual failed session start closes its acquired lease: cancel
+Actual failed session start closes its acquired lease: adapter
+Actual failed session start closes its acquired lease: probe
+A successful actual session start retains its own permissions
+A partially acquired lease is closed if acquisition throws
+Failed rollback retains the session journal but closes newly owned permissions
+A failed direct start cannot close a preexisting controller lease
+Starting over an existing session is refused without modifying its lease
+Explicit protection disable requires completed recovery: CleanupFailure
+Explicit protection disable requires completed recovery: PendingJournal
+Explicit protection disable requires completed recovery: Recovered
+A failed Dispose retains ownership and can be retried safely
+JSON process identity round trip retains fractional seconds and offsets
+Core identity accepts equivalent JSON timestamp: 2026-10-09T00:00:00.1234567Z
+Core identity accepts equivalent JSON timestamp: 2026-10-09T05:45:00.1234567+05
+:45
+Core identity accepts equivalent JSON timestamp: 2026-10-08T20:30:00.1234567-03
+:30
+Malformed timestamp never permits process cleanup: bad
+Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00.1234567
+Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00.12345678
+Z
+Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00+25:00
+Unspecified DateTime and unreadable process metadata remain UNKNOWN
+Actual process exit is DEAD and one tick of PID reuse is DEAD
+

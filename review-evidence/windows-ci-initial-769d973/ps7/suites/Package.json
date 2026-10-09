@@ -1,0 +1,46 @@
+{
+  "Version": "1.5.0",
+  "CapturedUtc": "2026-10-09T18:15:36.8539009Z",
+  "Scope": "Package integrity and temporary corruption fixtures; no runtime execution.",
+  "Total": 7,
+  "Passed": 7,
+  "Failed": 0,
+  "Skipped": 0,
+  "Tests": [
+    {
+      "Name": "Complete current package verifies",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Modified runtime source is rejected",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Missing resilience helper is rejected",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Unlisted installation files are rejected",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Forged production qualification is rejected",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Unsafe Windows archive paths are rejected",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "An output inside the package is rejected",
+      "Result": "PASS",
+      "Detail": ""
+    }
+  ]
+}

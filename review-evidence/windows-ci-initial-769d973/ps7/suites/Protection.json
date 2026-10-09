@@ -1,0 +1,161 @@
+{
+  "Version": "1.5.0",
+  "CapturedUtc": "2026-10-09T18:15:27.5926839Z",
+  "Scope": "Actual PowerShell lease lifecycle with doubles. No native WFP calls or OS changes.",
+  "Total": 30,
+  "Passed": 30,
+  "Failed": 0,
+  "Skipped": 0,
+  "Tests": [
+    {
+      "Name": "Normal close disposes only the temporary lease",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Policy verification failure closes permissions and reports Unknown",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "No lease cannot count as a verified protected session",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Tunnel authorization is revoked before session resources are cleaned",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A revoke error closes the full temporary lease instead of retaining obsolete access",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Persistent blocking cannot be enabled without explicit consent",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Persistent protection cannot be removed without explicit consent",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual failed session start closes its acquired lease: preflight",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual failed session start closes its acquired lease: cancel",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual failed session start closes its acquired lease: adapter",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual failed session start closes its acquired lease: probe",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A successful actual session start retains its own permissions",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A partially acquired lease is closed if acquisition throws",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Failed rollback retains the session journal but closes newly owned permissions",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A failed direct start cannot close a preexisting controller lease",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Starting over an existing session is refused without modifying its lease",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Explicit protection disable requires completed recovery: CleanupFailure",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Explicit protection disable requires completed recovery: PendingJournal",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Explicit protection disable requires completed recovery: Recovered",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A failed Dispose retains ownership and can be retried safely",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON process identity round trip retains fractional seconds and offsets",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Core identity accepts equivalent JSON timestamp: 2026-10-09T00:00:00.1234567Z",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Core identity accepts equivalent JSON timestamp: 2026-10-09T05:45:00.1234567+05:45",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Core identity accepts equivalent JSON timestamp: 2026-10-08T20:30:00.1234567-03:30",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Malformed timestamp never permits process cleanup: bad",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00.1234567",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00.12345678Z",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00+25:00",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Unspecified DateTime and unreadable process metadata remain UNKNOWN",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual process exit is DEAD and one tick of PID reuse is DEAD",
+      "Result": "PASS",
+      "Detail": ""
+    }
+  ]
+}

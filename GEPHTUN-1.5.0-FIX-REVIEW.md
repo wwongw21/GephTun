@@ -5,7 +5,7 @@ on original candidate commit `452180886b43f1faed849c57af18315052e1d755`.
 `GEPHTUN-1.5.0-REVIEW.md` remains the unchanged previous review. The remote
 `candidate/gephtun-1.5.0-test` still resolves to the original commit. All 42 files
 under `GephTun/docs/history/` were compared byte-for-byte with that commit and
-remain unchanged. New candidate revision is `recovery-fixes-1`, version 1.5.0,
+remain unchanged. New candidate revision is `recovery-fixes-2`, version 1.5.0,
 `ProductionQualified=false`. No final release or production publication occurred.
 
 ## Implemented findings
@@ -23,12 +23,38 @@ automatic controller restart was added. WFP C# and emergency-unlock source remai
 unchanged. No safety assertion was removed to make the previous BootRecovery
 failure pass. The release tool's source-function extractor now stops at
 Export-ModuleMember so a last function's static check does not accidentally
-include exported function names; six new safety invariants were added.
+include exported function names; seven new safety invariants were added, including a portable unsigned LUID type check.
+
+## Windows CI compatibility correction
+
+Initial Windows CI on commit `769d9739d1832433ae4aa7ec48a27f63cb694921`
+ran on Windows Server 2022. PowerShell 7.6.6 passed 9/9 suites, 252 checks.
+Windows PowerShell 5.1.20348.5622 passed eight suites (227 checks) but WfpPolicy
+failed during initialization: `Unable to find type [ulong]`. It emitted no
+receipt, so its 25 policy assertions were NOT RUN, not passing or individually
+failed assertions. Both uploaded host receipts say `Administrator=false`.
+The run is https://github.com/wwongw21/GephTun/actions/runs/37971913444;
+its artifacts/logs are preserved separately in
+`review-evidence/windows-ci-initial-769d973/`.
+
+The same PowerShell 7-only alias existed in runtime Open-GephTunProtectionLease.
+Replaced scalar/array casts with fully named System.UInt64, retaining the exact
+native unsigned 64-bit signature. Added a policy regression that inspects the
+runtime cast, rejects newer unsigned aliases, and checks reflection against
+OpenLease's managed signature. It does not open a WFP lease. All existing
+blocking assertions remain intact. This compatibility correction is additional
+to the five implemented findings.
+
+GitHub API access recovered after the user saved environment settings. GitHub
+CLI artifact download initially returned Forbidden for redirected blob URLs;
+a normal TLS-verified Python download of the same authorized artifact URLs
+succeeded after the storage domain was allowed. No new task was necessary, and
+no API token or signed download URL is included in committed evidence.
 
 ## Final current-host results
 
 Fresh receipts and per-suite logs are committed outside the sealed package in
-`review-evidence/gephtun-recovery-fixes-linux-pwsh-746/`. The final receipt's source
+`review-evidence/gephtun-recovery-fixes-2-linux-pwsh-746/`. The final receipt's source
 hashes were checked against the current package. These are new results, not old
 candidate receipts copied into qualification. Bundled qualification metadata
 remains static-only and honestly says PowerShell/C# execution NOT_RUN; the
@@ -37,10 +63,10 @@ separate current-host evidence below records actual Linux execution.
 | Result | Check | Counts / scope |
 | --- | --- | --- |
 | PASS | Python integrity after supported build/reseal | 126 manifest entries, 127 files; exact manifest/source evidence coverage. |
-| PASS | Python static | 249 passed, 0 failed. Lexical/source/AST/binary/DNS-input checks, not native acceptance. |
+| PASS | Python static | 250 passed, 0 failed. Lexical/source/AST/binary/DNS-input checks, not native acceptance. |
 | PASS | Verify-GephTun.ps1 | Read-only integrity/static verification on Linux PowerShell 7.4.6. |
 | PASS | Source | 40/40 PowerShell parser/current-host C#5 compiler checks; not Windows .NET Framework compilation. |
-| PASS | WfpPolicy | 25/25 managed plan checks; no native WFP installation. |
+| PASS | WfpPolicy | 26/26 managed plan checks; no native WFP installation. |
 | PASS | Bypasses | 35/35 actual registry/cache and core route functions with doubles. |
 | PASS | Protection | 30/30 actual lease/start/disable-gate/identity functions with doubles. |
 | PASS | Resilience | 34/34 isolated controller/recovery checks. |
@@ -48,16 +74,16 @@ separate current-host evidence below records actual Linux execution.
 | PASS | DnsMandatory | 20/20 in-memory DNS fixtures. |
 | PASS | BootRecovery | 43/43 standalone boot fixtures with temporary files and command doubles. |
 | PASS | Package | 7/7 isolated integrity/corruption/output-path cases. |
-| PASS | Full default runner | 9/9 suites; 252 passed, 0 failed, 0 skipped; every suite process exited 0. |
-| PASS | Candidate ZIP verification | Supported build and verify-zip both exited 0. 10,628,366 bytes; SHA-256 below. |
+| PASS | Full default runner | 9/9 suites; 253 passed, 0 failed, 0 skipped; every suite process exited 0. |
+| PASS | Candidate ZIP verification | Supported build and verify-zip both exited 0. 10,629,074 bytes; SHA-256 below. |
 | PASS | Workflow lint | actionlint 1.7.7, ShellCheck disabled; exit 0. |
 | PASS | CI helper parser | Zero PowerShell 7.4.6 Linux parser errors; Windows execution remains unrun. |
 
 Candidate archive:
-`/workspace/gephtun-artifacts/final/GephTun-1.5.0-recovery-fixes-1.zip`
+`/workspace/gephtun-artifacts/GephTun-1.5.0-recovery-fixes-2.zip`
 
 SHA-256:
-`8e15d3bc012bf384d8777b3921c24d672e3da988ededb8ba873d706b74f1c193`
+`f83287fd573b430ae2370b1a1c499a8368c4b9cb11e6dfe2c027184f1ee1828d`
 
 ### Development failures, resolved or expected
 
@@ -89,12 +115,10 @@ SHA-256:
 
 ### Could not run / deliberately excluded
 
-Windows PowerShell 5.1 and PowerShell 7 **on Windows**, Windows .NET Framework
-compilation, and the disposable Windows standard-account launcher cannot run on
-this Linux host. GitHub API initially failed at the cloud proxy with CONNECT
-403. After the user saved the network settings, API access succeeded. Windows CI
-results will be recorded separately below once the development branch is pushed;
-Linux receipts and workflow lint are never substituted for them.
+Windows execution is unavailable on this Linux host. Actual Windows CI results
+and initial failures are recorded separately in this document; Linux receipts
+and workflow lint are never substituted for Windows CI. Final results for the
+compatibility-corrected revision will be recorded after its new CI run completes.
 
 Windows-only WFP installation, packet-leak, crash, reboot, physical-network
 acceptance and Windows 11 kill-switch certification are **NOT TESTED**. Native
@@ -122,7 +146,9 @@ failures. Linux collects current JSON receipts. Both jobs check that committed
 package bytes were not changed by testing. Token permissions are contents:read;
 checkout credentials are not persisted; Windows matrix fail-fast is false.
 There is no broad test-file discovery or invocation of dangerous opt-in scripts.
-The launcher/account/ACL logic still needs actual Windows CI validation.
+Initial Windows CI exercised the launcher/account/ACL logic successfully on both
+engines, including the 5.1 suite failure path and artifact retention. New revision
+results are reported separately below.
 
 ## Remaining risks and operator path
 
@@ -177,12 +203,12 @@ version checks. XDG paths are necessary because the home cache is read-only.
 python3 GephTun/tools/release_tool.py check GephTun
 python3 GephTun/tools/release_tool.py static GephTun
 python3 GephTun/tools/release_tool.py seal GephTun > /tmp/gephtun-fix-seal.json
-python3 GephTun/tools/release_tool.py build GephTun --output /workspace/gephtun-artifacts/final/GephTun-1.5.0-recovery-fixes-1.zip > /tmp/gephtun-fix-build-revised.json
-python3 GephTun/tools/release_tool.py verify-zip /workspace/gephtun-artifacts/final/GephTun-1.5.0-recovery-fixes-1.zip > /tmp/gephtun-fix-zip-revised.json
-python3 GephTun/tools/release_tool.py check GephTun > /tmp/gephtun-fix-revised-check.json
-python3 GephTun/tools/release_tool.py static GephTun > /tmp/gephtun-fix-revised-static.json
-XDG_CACHE_HOME=/tmp/gephtun-pwsh/cache XDG_CONFIG_HOME=/tmp/gephtun-pwsh/config XDG_DATA_HOME=/tmp/gephtun-pwsh/data /tmp/gephtun-pwsh/pwsh -NoLogo -NoProfile -NonInteractive -File GephTun/Verify-GephTun.ps1 -PackageDirectory GephTun > /tmp/gephtun-fix-revised-verify.txt 2>&1
-XDG_CACHE_HOME=/tmp/gephtun-pwsh/cache XDG_CONFIG_HOME=/tmp/gephtun-pwsh/config XDG_DATA_HOME=/tmp/gephtun-pwsh/data /tmp/gephtun-pwsh/pwsh -NoLogo -NoProfile -NonInteractive -File GephTun/tests/Run-UpdateValidation.ps1 -PackageDirectory GephTun -OutputDirectory /tmp/gephtun-fix-sealed-linux-pwsh-746 > /tmp/gephtun-fix-sealed-validation.log 2>&1
+python3 GephTun/tools/release_tool.py build GephTun --output /workspace/gephtun-artifacts/GephTun-1.5.0-recovery-fixes-2.zip > /tmp/gephtun-revision2-build.json
+python3 GephTun/tools/release_tool.py verify-zip /workspace/gephtun-artifacts/GephTun-1.5.0-recovery-fixes-2.zip > /tmp/gephtun-revision2-zip.json
+python3 GephTun/tools/release_tool.py check GephTun > /tmp/gephtun-revision2-check.json
+python3 GephTun/tools/release_tool.py static GephTun > /tmp/gephtun-revision2-static.json
+XDG_CACHE_HOME=/tmp/gephtun-pwsh/cache XDG_CONFIG_HOME=/tmp/gephtun-pwsh/config XDG_DATA_HOME=/tmp/gephtun-pwsh/data /tmp/gephtun-pwsh/pwsh -NoLogo -NoProfile -NonInteractive -File GephTun/Verify-GephTun.ps1 -PackageDirectory GephTun > /tmp/gephtun-revision2-verify.txt 2>&1
+XDG_CACHE_HOME=/tmp/gephtun-pwsh/cache XDG_CONFIG_HOME=/tmp/gephtun-pwsh/config XDG_DATA_HOME=/tmp/gephtun-pwsh/data /tmp/gephtun-pwsh/pwsh -NoLogo -NoProfile -NonInteractive -File GephTun/tests/Run-UpdateValidation.ps1 -PackageDirectory GephTun -OutputDirectory /tmp/gephtun-revision2-linux-pwsh-746 > /tmp/gephtun-revision2-validation.log 2>&1
 /tmp/gephtun-actionlint/actionlint -shellcheck= .github/workflows/gephtun-tests.yml
 XDG_CACHE_HOME=/tmp/gephtun-pwsh/cache XDG_CONFIG_HOME=/tmp/gephtun-pwsh/config XDG_DATA_HOME=/tmp/gephtun-pwsh/data /tmp/gephtun-pwsh/pwsh -NoLogo -NoProfile -NonInteractive -Command '$t=$null;$e=$null;[void][System.Management.Automation.Language.Parser]::ParseFile("/workspace/GephTun/.github/scripts/Test-GephTunCandidate.ps1",[ref]$t,[ref]$e);if($e.Count){$e|Format-List;exit 1};"CI helper parse: PASS"'
 git diff --check

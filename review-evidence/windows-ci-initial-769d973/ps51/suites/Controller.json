@@ -1,0 +1,102 @@
+{
+    "CapturedUtc":  "2026-10-09T18:15:32.3841424Z",
+    "Version":  "1.5.0",
+    "Scope":  "Actual session supervisor with deterministic clocks and complete OS/transport doubles; not Windows acceptance.",
+    "PowerShellVersion":  "5.1.20348.5622",
+    "Total":  18,
+    "Passed":  18,
+    "Failed":  0,
+    "Skipped":  0,
+    "Tests":  [
+                  {
+                      "Name":  "Healthy monitoring refreshes the verified heartbeat",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A missing peer recovers without tearing down a verified session",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "An unreadable peer snapshot gets the same bounded grace",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A prolonged peer gap leaves monitoring with the typed failure",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A firewall failure is never waived during a peer gap",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A routes failure is never waived during a peer gap",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A dns-policy failure is never waived during a peer gap",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A wfp failure is never waived during a peer gap",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "All invariant checks still execute during the grace period",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A transient DNS failure is retried within the heartbeat",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Three DNS failures enter grace and a later successful check recovers",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Sustained DNS failure expires the grace period",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Disconnect during grace ends monitoring without another probe",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A physical transition returns a typed clean-reconnect reason",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Tunnel engine death is a hard failure",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "An unhealthy DNS relay is a hard failure",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Owner exit ends the session rather than auto-reconnecting",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Direct module callers without a connection intent do not silently opt into retries",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  }
+              ]
+}

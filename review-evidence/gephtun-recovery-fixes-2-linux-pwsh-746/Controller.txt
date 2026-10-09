@@ -1,0 +1,23 @@
+
+Name
+----                                                                           
+Healthy monitoring refreshes the verified heartbeat
+A missing peer recovers without tearing down a verified session
+An unreadable peer snapshot gets the same bounded grace
+A prolonged peer gap leaves monitoring with the typed failure
+A firewall failure is never waived during a peer gap
+A routes failure is never waived during a peer gap
+A dns-policy failure is never waived during a peer gap
+A wfp failure is never waived during a peer gap
+All invariant checks still execute during the grace period
+A transient DNS failure is retried within the heartbeat
+Three DNS failures enter grace and a later successful check recovers
+Sustained DNS failure expires the grace period
+Disconnect during grace ends monitoring without another probe
+A physical transition returns a typed clean-reconnect reason
+Tunnel engine death is a hard failure
+An unhealthy DNS relay is a hard failure
+Owner exit ends the session rather than auto-reconnecting
+Direct module callers without a connection intent do not silently opt into retr
+ies
+

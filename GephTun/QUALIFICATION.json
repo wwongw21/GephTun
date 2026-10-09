@@ -34,7 +34,7 @@
     },
     {
       "Path": "GephTun.Protection.ps1",
-      "Sha256": "e88df3f947fac07b1be8c823d0974b733a3ad49031c34f8f566403de5630e3e8"
+      "Sha256": "60242977048c9ea834c2c923efc89e95193ad464002da596c4a4206ea4ed64c2"
     },
     {
       "Path": "GephTun.Resilience.ps1",
@@ -74,7 +74,7 @@
     },
     {
       "Path": "RELEASE.json",
-      "Sha256": "06234db76b53ee165479eaa38066b6fbc73a26003ec35858b12465396d2314f1"
+      "Sha256": "dff3879c44e03c9ed627ff9b7b0b6f565294f053329d3bf4b8fa93bae75d1216"
     },
     {
       "Path": "Start-GephTun.cmd",
@@ -150,7 +150,7 @@
     },
     {
       "Path": "tests/WfpPolicy.Tests.ps1",
-      "Sha256": "8b10c0657f897c34c2075cddadeac008954156bb59bc12158cde018ddff095c6"
+      "Sha256": "e48e20becbac854836f69f50b450ee42111f54f1a6bad45bc124f80441f3c945"
     },
     {
       "Path": "tests/proxy-helper-driver.ps1",
@@ -198,17 +198,17 @@
     },
     {
       "Path": "tools/release_tool.py",
-      "Sha256": "3aed22ccba0e45b0302d14733c270dbc8d63f5c3f20f3a3a3bcec83c082884e1"
+      "Sha256": "62b0d00ac91b56955280806f21b5c716ef9da5d6b6a7db23f9c50a6628db6a23"
     }
   ],
   "Evidence": [
     {
       "Path": "tests/static-results.json",
-      "Sha256": "58b8d8ed098e72f15f7f07e531c598daa33d1bb239ea89ae203f0111daa8a4f3"
+      "Sha256": "66e110f5f9fefbd4455572db0a0a67063bbd108b5a5678940c481b0ea6f20b6b"
     },
     {
       "Path": "tests/current-validation.json",
-      "Sha256": "3be68a8bab588216bc807e31b4ec533772a84800edebaef6e38b7e4301421b64"
+      "Sha256": "cc1625f7b736df4e58b67b78a237de0070b5a86499e2d83b83012c5afe93c811"
     }
   ]
 }

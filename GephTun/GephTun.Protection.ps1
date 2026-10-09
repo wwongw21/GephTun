@@ -113,7 +113,7 @@ function Open-GephTunProtectionLease {
     })
     $adapters = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object { $_.HardwareInterface -and $_.Status -eq 'Up' })
     if ($adapters.Count -eq 0) { Throw-GephTunTransient 'NETWORK_UNAVAILABLE' 'No active physical adapter is available for Geph bootstrap.' }
-    [ulong[]]$luids = @($adapters | ForEach-Object { [GephTun.Security.WfpController]::InterfaceLuid($_.InterfaceGuid.ToString()) })
+    [System.UInt64[]]$luids = @($adapters | ForEach-Object { [GephTun.Security.WfpController]::InterfaceLuid($_.InterfaceGuid.ToString()) })
     $script:ProtectionLease = [GephTun.Security.WfpController]::OpenLease([GephTun.Security.TrustedImage[]]$images, $luids)
     $script:ProtectionObserved='Enabled'
     Write-GephTunLog 'Temporary exact-image Geph TCP permissions opened on verified physical interfaces. The persistent blocker remains installed.'

@@ -1,0 +1,29 @@
+
+[32;1mName                                                                          [0m[32;1m Result[0m[32;1m Detail[0m
+[32;1m----                                                                          [0m [32;1m------[0m [32;1m------[0m
+x64 native layouts match the declared SDK offsets                              PASS   
+All rule keys are unique and weights are legal range indexes                   PASS   
+Boot plan has four non-loopback IP blocking rules and no permits               PASS   
+Disconnected Connect4 has a deny fallback                                      PASS   
+Disconnected Connect6 has a deny fallback                                      PASS   
+Disconnected Accept4 has a deny fallback                                       PASS   
+Disconnected Accept6 has a deny fallback                                       PASS   
+Disconnected Forward4 has a deny fallback                                      PASS   
+Disconnected Forward6 has a deny fallback                                      PASS   
+Ordinary physical protocol 6 remains blocked with a live Geph lease            PASS   
+Ordinary physical protocol 17 remains blocked with a live Geph lease           PASS   
+Ordinary physical protocol 1 remains blocked with a live Geph lease            PASS   
+Ordinary physical protocol 58 remains blocked with a live Geph lease           PASS   
+Geph TCP is permitted only on its approved physical path                       PASS   
+The same remote IP does not grant a browser or PowerShell transport permission PASS   
+Geph UDP is not silently enabled                                               PASS   
+Tunnel TCP requires both current local and next-hop LUID                       PASS   
+Removing the temporary tunnel plan restores blocking                           PASS   
+Removing every temporary permission also blocks Geph internet                  PASS   
+Arrival-interface alternative requires reauthorization                         PASS   
+Application IPv6 remains blocked even with a live IPv4 tunnel                  PASS   
+DHCP permit is restricted to system host, UDP and client/server ports          PASS   
+IPv6 neighbor maintenance does not permit global ICMPv6                        PASS   
+Loopback remains available while disconnected                                  PASS   
+Zero interface and empty transport lists are rejected                          PASS   
+

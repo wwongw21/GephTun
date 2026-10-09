@@ -8,6 +8,6 @@
   "ProductionQualified": false,
   "Target": "Windows 11 x64 / Windows PowerShell 5.1",
   "AutomaticCrashRecovery": "NOT_IMPLEMENTED; recommended for later",
-  "CandidateRevision": "recovery-fixes-1",
+  "CandidateRevision": "recovery-fixes-2",
   "CandidateBaseCommit": "452180886b43f1faed849c57af18315052e1d755"
 }
