@@ -1,0 +1,14 @@
+{
+  "Kind": "GephTunRecoveryArchiveIndex",
+  "Archive": "C:\\Users\\William\\Documents\\GephTun-Archives\\2026-10-04-reconciliation-204758-706e06ad\\original-projects.zip",
+  "ArchiveSha256": "46d9b3a176b6598722c8b17b73d08d6cd95edbf7a724a97ab5b5480699eea4de",
+  "OriginalInventory": "C:\\Users\\William\\Documents\\GephTun-Archives\\2026-10-04-reconciliation-204758-706e06ad\\original-inventory.json",
+  "OriginalInventorySha256": "2413c0ac932630126c79879dbc5c487d7278772afed43dc889223998eadb3c46",
+  "Verification": "C:\\Users\\William\\Documents\\GephTun-Archives\\2026-10-04-reconciliation-204758-706e06ad\\archive-verification.json",
+  "Files": 15745,
+  "OriginalBytes": 1329980640,
+  "EveryArchivedFileReadAndHashed": true,
+  "BaselinePackageSha256": "20b3b49a98cae200a80a9fe8c4aa74eeaed2ad6ae49ab4542a220e5544115cd6",
+  "Restore": "Use the inventory ArchivePath to restore chosen originals into a new empty folder; never overwrite a running installation.",
+  "SourceVariantReview": "C:\\Users\\William\\Documents\\GephTun-Archives\\2026-10-04-reconciliation-204758-706e06ad\\source-variant-review.json"
+}

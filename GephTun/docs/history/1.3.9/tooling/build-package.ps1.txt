@@ -1,0 +1,130 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param([string]$SourceDirectory, [string]$OutputDirectory, [switch]$RuntimeOnly, [switch]$SourceTree)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+# $PSScriptRoot is empty while param() defaults are evaluated on Windows
+# PowerShell 5.1 -File runs; resolve the default in the script body instead.
+if (-not $SourceDirectory) { $SourceDirectory = Split-Path -Parent $PSScriptRoot }
+. (Join-Path $PSScriptRoot 'Package.Common.ps1')
+$source = Get-GephPackageFullPath $SourceDirectory
+# Use the verifier shipped with this invoked builder. SourceDirectory is data;
+# executing its verifier would let an input package bypass the build checks.
+$verifier = Join-Path (Split-Path -Parent $PSScriptRoot) 'Verify-GephTun.ps1'
+Assert-GephPackageNoRedirect $verifier
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path (Split-Path -Parent $source) 'build' }
+$output = Get-GephPackageFullPath $OutputDirectory
+Assert-GephPackageOutput $output $source -Directory
+$files = Get-GephPackageInventory $source -SourceTree:$SourceTree
+$release = Get-Content -LiteralPath (Join-Path $source 'RELEASE.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert-GephPackageRelease $release
+$validation = Assert-GephPackageValidation $source $release.Version $files
+$items = New-Object 'Collections.Generic.List[object]'
+foreach ($relative in @($files.Keys | Sort-Object)) {
+    if ($relative -eq 'PACKAGE-MANIFEST.json') { continue }
+    $item = $files[$relative]
+    if ($relative -match '(^|/)(\.|__pycache__)' -or $item.Extension -in @('.tmp','.pyc','.zip')) { throw ('Remove temporary build input: ' + $relative) }
+    $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $items.Add([pscustomobject]@{ Path = $relative; Bytes = [long]$item.Length; Sha256 = $hash; FullPath = $item.FullName })
+}
+[void][IO.Directory]::CreateDirectory($output)
+Assert-GephPackageOutput $output $source -Directory
+$buildName = 'GephTun-' + $release.Version + '-Windows-Production-Candidate'
+if ($RuntimeOnly) { $buildName = 'GephTun-' + $release.Version + '-Windows' }
+$zipPath = Join-Path $output ($buildName + '.zip')
+Assert-GephPackageOutput $zipPath $source
+$stage = Join-Path $output ('GephTun-stage-' + [guid]::NewGuid().ToString('N'))
+$package = Join-Path $stage 'GephTun'
+$temporaryZip = Join-Path $stage 'package.zip'
+try {
+    [void][IO.Directory]::CreateDirectory($package)
+    foreach ($item in $items) {
+        $target = Join-Path $package $item.Path
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
+        [IO.File]::Copy($item.FullPath, $target, $false)
+    }
+    $manifest = [ordered]@{
+        Package = $release.Package; Version = $release.Version; Status = $release.Status; Date = $release.Date
+        InputArchiveSha256 = $release.InputArchiveSha256
+        Validation = 'tests/current-validation.json'; NativeWindowsAcceptance = 'NOT_RUN'
+        Files = @($items | Sort-Object Path | Select-Object Path, Bytes, Sha256)
+    }
+    [IO.File]::WriteAllText((Join-Path $package 'PACKAGE-MANIFEST.json'), ($manifest | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+    $null = & $verifier -PackageDirectory $package -Quiet
+    if ($RuntimeOnly) {
+        # Derive the runtime only after the complete engineering snapshot passes
+        # the existing verifier. Its exact manifest and evidence remain the
+        # reproducible link to the separate engineering/source delivery.
+        $engineering = $package
+        $package = Join-Path (Join-Path $stage 'runtime') 'GephTun'
+        [void][IO.Directory]::CreateDirectory($package)
+        $mapping = [ordered]@{}
+        foreach ($relative in @('GephTun.Core.psm1','GephTun-BootReconcile.ps1','GephTun.Network.cs','GephTun.UI.ps1','GephTun.Worker.ps1','GephTun.WorkerHost.ps1','Launch-GephTun.cmd','Launch-GephTun.ps1','Start-GephTun.cmd','Stop-GephTun.cmd','RELEASE.json','DEPENDENCIES.json','bin/tun2socks-windows-amd64.exe','bin/wintun.dll','licenses/tun2socks-LICENSE.txt','licenses/Wintun-LICENSE.txt')) { $mapping[$relative] = $relative }
+        $mapping['Verify-GephTun.ps1'] = 'tests/Verify-Runtime.ps1'
+        $mapping['README.md'] = 'RUNTIME-README.md'
+        $mapping['licenses/tun2socks-THIRD-PARTY-LICENSES.txt'] = 'third_party/tun2socks-THIRD-PARTY-LICENSES.txt'
+        $runtimeSources = @(foreach ($relative in $mapping.Keys) {
+            $origin = [string]$mapping[$relative]
+            $inputPath = Join-Path $engineering $origin
+            if (-not [IO.File]::Exists($inputPath)) { throw ('Missing runtime build input: ' + $origin) }
+            $target = Join-Path $package $relative
+            [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
+            [IO.File]::Copy($inputPath,$target,$false)
+            if (Test-GephPackageSource $relative) {
+                [pscustomobject]@{Path=$relative;OriginPath=$origin;Sha256=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()}
+            }
+        })
+        $qualification = [ordered]@{
+            Package='GephTun';Kind='RuntimeQualification';Version=$release.Version
+            ProductionQualified=$false;NativeWindowsAcceptance='NOT_RUN'
+            EngineeringManifestSha256=(Get-FileHash -LiteralPath (Join-Path $engineering 'PACKAGE-MANIFEST.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+            CurrentValidationSha256=(Get-FileHash -LiteralPath (Join-Path $engineering 'tests/current-validation.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+            EngineeringQualificationSha256=(Get-FileHash -LiteralPath (Join-Path $engineering 'QUALIFICATION.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+            RequiredTotals=$validation.RequiredTotals;SupplementalTotals=$validation.SupplementalTotals;Totals=$validation.Totals
+            Sources=$runtimeSources
+            Scope='Runtime files were derived from the verified engineering snapshot identified by these hashes. Full test records and patched dependency source are in the separate Engineering package. Native Windows acceptance has not been run.'
+        }
+        Write-GephPackageNewJson (Join-Path $package 'QUALIFICATION.json') $qualification
+        $runtimeFiles = Get-GephPackageInventory $package
+        $items = New-Object 'Collections.Generic.List[object]'
+        foreach ($relative in @($runtimeFiles.Keys | Sort-Object)) {
+            $file = $runtimeFiles[$relative]
+            $items.Add([pscustomobject]@{Path=$relative;Bytes=[long]$file.Length;Sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()})
+        }
+        $manifest = [ordered]@{
+            Package='GephTun';Kind='Runtime';Version=$release.Version;Status=$release.Status;Date=$release.Date
+            InputArchiveSha256=$release.InputArchiveSha256;NativeWindowsAcceptance='NOT_RUN'
+            EngineeringManifestSha256=$qualification.EngineeringManifestSha256
+            CurrentValidationSha256=$qualification.CurrentValidationSha256
+            EngineeringQualificationSha256=$qualification.EngineeringQualificationSha256
+            Files=@($items | Sort-Object Path)
+        }
+        Write-GephPackageNewJson (Join-Path $package 'PACKAGE-MANIFEST.json') $manifest
+        # Invoke the builder's own verifier, never one supplied by input data.
+        $verifier = Join-Path $PSScriptRoot 'Verify-Runtime.ps1'
+        Assert-GephPackageNoRedirect $verifier
+        $null = & $verifier -PackageDirectory $package -Quiet
+    }
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::Open($temporaryZip, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $paths = @($items.Path) + @('PACKAGE-MANIFEST.json')
+        foreach ($relative in @($paths | Sort-Object)) {
+            $entry = $archive.CreateEntry(('GephTun/' + $relative), [IO.Compression.CompressionLevel]::Optimal)
+            $entry.LastWriteTime = [DateTimeOffset]::Parse(($release.Date + 'T00:00:00+00:00'))
+            $inputStream = [IO.File]::OpenRead((Join-Path $package $relative))
+            $targetStream = $entry.Open()
+            try { $inputStream.CopyTo($targetStream) } finally { $targetStream.Dispose(); $inputStream.Dispose() }
+        }
+    } finally { $archive.Dispose() }
+    $verifyRoot = Join-Path $stage 'roundtrip'
+    [IO.Compression.ZipFile]::ExtractToDirectory($temporaryZip, $verifyRoot)
+    $null = & $verifier -PackageDirectory (Join-Path $verifyRoot 'GephTun') -Quiet
+    Assert-GephPackageOutput $zipPath $source
+    [IO.File]::Move($temporaryZip, $zipPath)
+    [pscustomobject]@{ Archive = $zipPath; Sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant(); Files = $items.Count + 1; Version = $release.Version }
+} finally {
+    # Only this invocation's randomly named staging folder is removed.
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+}

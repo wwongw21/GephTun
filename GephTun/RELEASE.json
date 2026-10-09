@@ -1,0 +1,11 @@
+{
+  "Package": "GephTun",
+  "Version": "1.5.0",
+  "Status": "WFP and bypass implementation; native acceptance pending",
+  "Date": "2026-10-09",
+  "InputArchiveSha256": "625f5465acc0f1b061f12d46c51c5e231d0626bb4845fe0af1095aae2412ebb1",
+  "Channel": "Test candidate",
+  "ProductionQualified": false,
+  "Target": "Windows 11 x64 / Windows PowerShell 5.1",
+  "AutomaticCrashRecovery": "NOT_IMPLEMENTED; recommended for later"
+}

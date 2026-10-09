@@ -1,0 +1,611 @@
+{
+  "sourceFile": "GephTun.Network.cs",
+  "sourceSha256": "524c3af280fca57ca31b8be280de0cdacc1978a5e78f9063919279259a625273",
+  "testScriptFile": "proxy-helper-tests.py",
+  "testScriptSha256": "91d4298e086d796ff52a791caeec5a3a9c9db7c58798b48413f20c460f0914eb",
+  "driverSha256": "da748c8232f91df0cfd66c4fd4b824231eb0febf12108de00bb75d570ba1d7ba",
+  "declaredTlsCases": [
+    "TLS trusted",
+    "TLS untrusted",
+    "TLS wrong_hostname",
+    "bounded timeout hang_tls"
+  ],
+  "tlsTrustSkipReason": "Windows validates TLS against its certificate stores and does not honor the test-process SSL_CERT_FILE/SSL_CERT_DIR mock CA; no machine trust store is changed.",
+  "tlsTrustCases": false,
+  "Sources": [
+    {
+      "Path": "GephTun.Network.cs",
+      "Sha256": "524c3af280fca57ca31b8be280de0cdacc1978a5e78f9063919279259a625273"
+    },
+    {
+      "Path": "tests/proxy-helper-tests.py",
+      "Sha256": "91d4298e086d796ff52a791caeec5a3a9c9db7c58798b48413f20c460f0914eb"
+    },
+    {
+      "Path": "tests/proxy-helper-driver.ps1",
+      "Sha256": "da748c8232f91df0cfd66c4fd4b824231eb0febf12108de00bb75d570ba1d7ba"
+    }
+  ],
+  "complete": true,
+  "runtime": {
+    "dotnetVersion": "4.0.30319.42000",
+    "languageVersion": 5,
+    "updateChecksDisabledRequested": true,
+    "telemetryOptOutRequested": true,
+    "ready": true,
+    "powershellVersion": "5.1.26100.9444"
+  },
+  "platform": "win32",
+  "scope": "offline mocks; no Windows adapters, routing, Geph service, or live internet tested",
+  "relayListenerPort": 15353,
+  "productionSourceCompiledUnmodified": true,
+  "relaySourcePortSubstitution": true,
+  "tlsTimeoutCaseExecuted": true,
+  "tests": [
+    {
+      "name": "SOCKS rejects greeting_version",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.039
+    },
+    {
+      "name": "SOCKS rejects auth",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "SOCKS rejects reject_auth",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects truncated_greeting",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects connect_version",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects reserved",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects address_type",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects rep",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects unknown_rep",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects empty_domain",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "SOCKS rejects truncated_reply",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.002
+    },
+    {
+      "name": "partial reads and complete bind reply ATYP 1",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.106
+    },
+    {
+      "name": "partial reads and complete bind reply ATYP 3",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.108
+    },
+    {
+      "name": "partial reads and complete bind reply ATYP 4",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.122
+    },
+    {
+      "name": "TLS trusted",
+      "result": "SKIP",
+      "passed": false,
+      "reason": "Windows validates TLS against its certificate stores and does not honor the test-process SSL_CERT_FILE/SSL_CERT_DIR mock CA; no machine trust store is changed.",
+      "elapsedSeconds": 0
+    },
+    {
+      "name": "TLS untrusted",
+      "result": "SKIP",
+      "passed": false,
+      "reason": "Windows validates TLS against its certificate stores and does not honor the test-process SSL_CERT_FILE/SSL_CERT_DIR mock CA; no machine trust store is changed.",
+      "elapsedSeconds": 0
+    },
+    {
+      "name": "TLS wrong_hostname",
+      "result": "SKIP",
+      "passed": false,
+      "reason": "Windows validates TLS against its certificate stores and does not honor the test-process SSL_CERT_FILE/SSL_CERT_DIR mock CA; no machine trust store is changed.",
+      "elapsedSeconds": 0
+    },
+    {
+      "name": "bounded timeout hang_greeting",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 8.031
+    },
+    {
+      "name": "bounded timeout hang_tls",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 8.027
+    },
+    {
+      "name": "DNS rejects wrong_id",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.004
+    },
+    {
+      "name": "DNS rejects wrong_name",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "DNS rejects wrong_type",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "DNS rejects wrong_class",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "DNS rejects wrong_qr",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "DNS rejects rcode",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "DNS rejects short_frame",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "DNS rejects truncated_frame",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.004
+    },
+    {
+      "name": "DNS response names allow ASCII case folding",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.003
+    },
+    {
+      "name": "255-octet DNS name remains valid when compressed in an answer",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.583
+    },
+    {
+      "name": "upstream bad_a is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.035
+    },
+    {
+      "name": "upstream bad_aaaa is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.022
+    },
+    {
+      "name": "upstream bad_cname is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.038
+    },
+    {
+      "name": "upstream bad_soa is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.035
+    },
+    {
+      "name": "upstream opt_bad_length is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.034
+    },
+    {
+      "name": "upstream opt_duplicate is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.041
+    },
+    {
+      "name": "upstream opt_in_answer is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.031
+    },
+    {
+      "name": "upstream opt_nonroot is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.049
+    },
+    {
+      "name": "upstream opt_bad_version is rejected before forwarding or healthy-probe success",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.027
+    },
+    {
+      "name": "DNS health probe rejects opt_extended_error",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.006
+    },
+    {
+      "name": "DNS health probe rejects tcp_truncated",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.005
+    },
+    {
+      "name": "DNS health probe rejects cname_only",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.005
+    },
+    {
+      "name": "DNS health probe rejects unrelated_a",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.004
+    },
+    {
+      "name": "DNS health probe rejects cname_cycle",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.005
+    },
+    {
+      "name": "DNS health probe follows CNAME to IPv4 independent of record order",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.004
+    },
+    {
+      "name": "4096 deterministic adversarial wire mutations stay bounded and reject safely",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.831,
+      "metrics": {
+        "seed": "0x47657068",
+        "mutatedQueries": 2048,
+        "mutatedResponses": 2048,
+        "acceptedQueries": 244,
+        "acceptedResponses": 271,
+        "rejected": 3581
+      }
+    },
+    {
+      "name": "trickled DNS framing consumes one overall deadline instead of resetting on every byte",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 8.016,
+      "metrics": {
+        "elapsedSeconds": 8.015,
+        "totalDeadlineSeconds": 8
+      }
+    },
+    {
+      "name": "AAAA queries get an empty local answer without any proxy connection",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.01
+    },
+    {
+      "name": "relayed responses keep A records and drop upstream AAAA records",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.02
+    },
+    {
+      "name": "AAAA removal preserves an owner name compressed into the removed record",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.009
+    },
+    {
+      "name": "pointer-like TXT and unknown RDATA bytes do not bypass AAAA filtering",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.011
+    },
+    {
+      "name": "AAAA filtering expands legacy compressed RDATA names and preserves name case",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.009
+    },
+    {
+      "name": "modified replies clear AD and remove signatures that cover removed AAAA records",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.038
+    },
+    {
+      "name": "AAAA filtering returns SERVFAIL on aaaa_malformed_rdata",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.012
+    },
+    {
+      "name": "AAAA filtering returns SERVFAIL on aaaa_overflow",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.015
+    },
+    {
+      "name": "synthetic EDNS replies preserve DO/CD and negotiate unsupported versions with BADVERS",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.013
+    },
+    {
+      "name": "disposed relay releases both listeners for exclusive restart",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.0
+    },
+    {
+      "name": "failed TCP bind releases earlier UDP bind",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.01
+    },
+    {
+      "name": "loopback UDP and fragmented TCP roundtrip preserve transaction IDs",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.354
+    },
+    {
+      "name": "malformed UDP/TCP names, header flags, EDNS options and short frames are dropped",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 1.44
+    },
+    {
+      "name": "UDP honors default512 and EDNS size with TCP retry",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.013
+    },
+    {
+      "name": "65535-byte DNS frame is bounded; UDP truncates transport overflow",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.012
+    },
+    {
+      "name": "upstream error yields SERVFAIL without changing listener health or logging query",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.035
+    },
+    {
+      "name": "64 segmented pipelined UDP-sized DNS queries preserve order; client reconnect works",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 5.424,
+      "metrics": {
+        "pipelinedRequests": 64,
+        "upstreamRequests": 43,
+        "connectionRequestLimit": 64
+      }
+    },
+    {
+      "name": "reused TCP recovers from upstream SERVFAIL and rejects a later malformed frame",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.011
+    },
+    {
+      "name": "idle reusable TCP client is reclaimed within the eight-second deadline",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 8.019,
+      "metrics": {
+        "idleTimeoutSeconds": 8.009,
+        "workersAfterTimeout": 0
+      }
+    },
+    {
+      "name": "512 mixed TCP/UDP, A/AAAA and EDNS requests finish correctly with bounded workers",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.292,
+      "metrics": {
+        "requests": 512,
+        "concurrentClients": 8,
+        "upstreamRequests": 384,
+        "peakUpstreamConnections": 5,
+        "elapsedSeconds": 0.281,
+        "medianLatencyMs": 3.899,
+        "p95LatencyMs": 11.234,
+        "maximumLatencyMs": 29.331,
+        "workersAfterLoad": 0,
+        "socketsAfterLoad": 0
+      }
+    },
+    {
+      "name": "fresh relay serves eight DNS clients promptly alongside eight slow TCP clients",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.63,
+      "metrics": {
+        "freshProcess": true,
+        "slowTcpClients": 8,
+        "udpRequests": 8,
+        "mockUpstreamDelaySeconds": 0,
+        "successful": 8,
+        "overloadServfail": 0,
+        "upstreamConnections": 8,
+        "peakUpstreamConnections": 4,
+        "maximumBatchSeconds": 0.019,
+        "startupSeconds": 0.046,
+        "workerThreadsWhileRunning": 16,
+        "listenerThreadsWhileRunning": 2,
+        "workerThreadsAfterDispose": 0,
+        "listenerThreadsAfterDispose": 0,
+        "queuedAfterDispose": 0,
+        "listenersRebound": true
+      }
+    },
+    {
+      "name": "fresh 32-query burst completes every admitted request despite a 200ms upstream delay",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.84,
+      "metrics": {
+        "freshProcess": true,
+        "slowTcpClients": 0,
+        "udpRequests": 32,
+        "mockUpstreamDelaySeconds": 0.2,
+        "successful": 16,
+        "overloadServfail": 16,
+        "upstreamConnections": 16,
+        "peakUpstreamConnections": 16,
+        "maximumBatchSeconds": 0.234,
+        "startupSeconds": 0.06,
+        "workerThreadsWhileRunning": 16,
+        "listenerThreadsWhileRunning": 2,
+        "workerThreadsAfterDispose": 0,
+        "listenerThreadsAfterDispose": 0,
+        "queuedAfterDispose": 0,
+        "listenersRebound": true
+      }
+    },
+    {
+      "name": "queued callbacks cancel; one shutdown deadline reports unfinished workers and retry joins them",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 5.308,
+      "metrics": {
+        "internalSchedulingFixture": true,
+        "checks": [
+          {
+            "name": "queued stop cancels fifteen callbacks while one callback is active",
+            "result": "PASS",
+            "internalSchedulingFixture": true,
+            "queuedBeforeStop": 15,
+            "activeBeforeStop": 1,
+            "canceledCallbacksExecuted": 0,
+            "shutdownSeconds": 0.0010014,
+            "workerThreadsAfterDispose": 0
+          },
+          {
+            "name": "shutdown shares one deadline and retries after explicit incomplete termination",
+            "result": "PASS",
+            "internalSchedulingFixture": true,
+            "uncooperativeCallbacks": 16,
+            "firstWorkerReleasedAfterSeconds": 4,
+            "timeoutSeconds": 5.0096546,
+            "exceptionType": "System.TimeoutException",
+            "workerThreadsAliveAtExplicitTimeout": 15,
+            "retryDisposalSeconds": 0.00021999999999999998,
+            "workerThreadsAfterRetry": 0
+          },
+          {
+            "name": "both controlled shutdown scenarios release listeners for immediate rebind",
+            "result": "PASS",
+            "immediateRebinds": 2,
+            "workerThreadsAfterDispose": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "mixed TCP slow clients and stalled UDP share16 slots; overload is bounded and recovers",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.101,
+      "metrics": {
+        "stalledTcpClients": 8,
+        "queuedOrStalledUdpRequests": 8,
+        "workerCeiling": 16,
+        "upstreamsStartedAtSaturation": 3,
+        "activeUpstreamsAfterClientsClose": 8,
+        "overloadServfail": true,
+        "recoveredAfterClientsClose": true
+      }
+    },
+    {
+      "name": "40 successive start/query/stop cycles release sockets and preserve listener restart",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.59,
+      "metrics": {
+        "startStopCycles": 40,
+        "requests": 80,
+        "upstreamsAfterDisposal": 0,
+        "workerThreadsAfterEveryDispose": 0,
+        "listenerThreadsAfterEveryDispose": 0,
+        "queuedAfterEveryDispose": 0
+      }
+    },
+    {
+      "name": "64 UDP requests share16 workers; dispose closes stalled upstreams and listeners",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 1.102
+    },
+    {
+      "name": "dispose interrupts a partial local TCP frame",
+      "result": "PASS",
+      "passed": true,
+      "elapsedSeconds": 0.058
+    }
+  ],
+  "total": 73,
+  "passed": 70,
+  "failed": 0,
+  "skipped": 3,
+  "coverageComplete": false
+}

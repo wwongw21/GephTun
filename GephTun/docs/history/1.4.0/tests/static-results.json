@@ -1,0 +1,913 @@
+{
+  "Kind": "StaticSourceChecks",
+  "Version": "1.4.0",
+  "CapturedUtc": "2026-10-09T13:19:59.477288+00:00",
+  "Scope": "Python AST, lexical framing (NOT PowerShell/C# parse or compile), source assertions, DNS INPUT framing, native SHA/PE checks only.",
+  "PowerShellExecution": "NOT_RUN",
+  "CSharpCompilation": "NOT_RUN",
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "Total": 149,
+  "Passed": 149,
+  "Failed": 0,
+  "Sources": [
+    {
+      "Path": "DEPENDENCIES.json",
+      "Sha256": "0539bfd833da95988a6999f8d6171bc3bb073b74ce992a2c443d5ac8ee3c7a79"
+    },
+    {
+      "Path": "GephTun-BootReconcile.ps1",
+      "Sha256": "4d2cff454adcdb00fc076cefe6ebadebd3e3d82770a4b81c6a4b9912b72b77c4"
+    },
+    {
+      "Path": "GephTun.Core.psm1",
+      "Sha256": "da9426507a008506de35f4619ab147f5122eb824292bf8f12c5a632ad5979437"
+    },
+    {
+      "Path": "GephTun.Network.cs",
+      "Sha256": "d5af45962ba84886e62fa5385304870d46237362722f384d259ea1b00ab34a39"
+    },
+    {
+      "Path": "GephTun.Resilience.ps1",
+      "Sha256": "f8a451d0a72859b52062db4f6716eb7cf7efd057e4106783d28953871742f9ae"
+    },
+    {
+      "Path": "GephTun.UI.ps1",
+      "Sha256": "5a8069be8a13fb218019ddd9b84354ff9c9813a202c48a85df21d2bf6d33e9df"
+    },
+    {
+      "Path": "GephTun.Worker.ps1",
+      "Sha256": "642611841be2a6f4d689609fac625f8e04273341dc78bdd892638254bd7a2f0d"
+    },
+    {
+      "Path": "GephTun.WorkerHost.ps1",
+      "Sha256": "760605967fc8489ccd83d53c4df6c94d318642aab76f2e80e23dcb961e310e1c"
+    },
+    {
+      "Path": "Launch-GephTun.cmd",
+      "Sha256": "c4a8708c6f2f3046620c746af58c915afc2dfb829d3e97655ffd516d8834bdbc"
+    },
+    {
+      "Path": "Launch-GephTun.ps1",
+      "Sha256": "274cbe09478a2f8a0ade4be208c5e027d79f4baf3744073fca4e942fecf54310"
+    },
+    {
+      "Path": "RELEASE.json",
+      "Sha256": "2506d296828b263188910ac7e49bc5968fd735ef1732652c3130f2eb322257e3"
+    },
+    {
+      "Path": "Start-GephTun.cmd",
+      "Sha256": "d36714eb01db025b7c71d6477c5b12e5a6a7f683dc8262e6f68a9844914b50b2"
+    },
+    {
+      "Path": "Stop-GephTun.cmd",
+      "Sha256": "a0c2db5c91c7c0f28153ccc4cbcbc011b1a9ea8d0c45362c5d6a33a016cfaa26"
+    },
+    {
+      "Path": "Verify-GephTun.ps1",
+      "Sha256": "40a1b85a536f83ffe924f6e7d01f26ab105aeb667e95f5caaaadb8c78978e57d"
+    },
+    {
+      "Path": "tests/BootRecovery.Tests.ps1",
+      "Sha256": "a00f14d11420e85e4daeb38d19378794f23ea6fe30c652291780b30a509d89c7"
+    },
+    {
+      "Path": "tests/Controller.Tests.ps1",
+      "Sha256": "3e5459df89536358d29476803a693aa419fb03986feb004c01b0dab0cf9205f6"
+    },
+    {
+      "Path": "tests/Diagnostics.Tests.ps1",
+      "Sha256": "3c8fbc7f87063f9bf80a6a271d492a3d8eaa64a03ac9fb6483e4e4bf1b9f9c04"
+    },
+    {
+      "Path": "tests/DnsMandatory.Tests.ps1",
+      "Sha256": "3e166352e0901b9953960eb84c0a3918f315004541dc239e86c4c3e8290297a2"
+    },
+    {
+      "Path": "tests/Measure-WindowsResources.ps1",
+      "Sha256": "9a5ab55d793404051232baa62161169d3c179c9f6c0d8d7996ad28062429341b"
+    },
+    {
+      "Path": "tests/Package.Common.ps1",
+      "Sha256": "ff0fe496ac116088460f7204172d07d089b298eece60ed863fd862de7a08cbd3"
+    },
+    {
+      "Path": "tests/Package.Tests.ps1",
+      "Sha256": "22a1db01b06366afab47f167e556adc0693d0e02bbb2e907cb704df1e83c193f"
+    },
+    {
+      "Path": "tests/Resilience.Tests.ps1",
+      "Sha256": "58a5087a3139d85db6c21b3df6c2539fd2c090b8c5296caf456a0bba2e432514"
+    },
+    {
+      "Path": "tests/Run-UpdateValidation.ps1",
+      "Sha256": "90871ee34c0f5d44cab26dafae872c89ea2eef0ca3b1362b1ee21ff81249c373"
+    },
+    {
+      "Path": "tests/Targeted-D001-SvcParamFilter.ps1",
+      "Sha256": "5e869092c59b0162cb48fc11c1122ade34b96e568109023f28c06ff235bfe4eb"
+    },
+    {
+      "Path": "tests/Test-NrptConflict.ps1",
+      "Sha256": "d3867f80bab202c6ec99e692bdfa43ff3cb609b25bb0f5df52427803273f5a55"
+    },
+    {
+      "Path": "tests/Validate-Source.ps1",
+      "Sha256": "a35b6a0975c0ad5a5e90777ab95604bc851bd89e7659c62474c2baf5efaeee24"
+    },
+    {
+      "Path": "tests/proxy-helper-driver.ps1",
+      "Sha256": "da748c8232f91df0cfd66c4fd4b824231eb0febf12108de00bb75d570ba1d7ba"
+    },
+    {
+      "Path": "tests/proxy-helper-tests.py",
+      "Sha256": "91d4298e086d796ff52a791caeec5a3a9c9db7c58798b48413f20c460f0914eb"
+    },
+    {
+      "Path": "tests/tray-harness.ps1",
+      "Sha256": "f8f93c988e9d3620fe6b2228130e001a5dd574075d0de5462ed0e4e5060e9918"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-BypassQueries.ps1",
+      "Sha256": "4b6aedbecd6f60ebf3bbc3cc60e2a9cf2309c1d2ff5ed838e664027f8da6dedc"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Sha256": "fd7ad45ef8f16c411ff8dd900057246a12af9625e3ebefc133fb45076a35e16a"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Sha256": "8d0e2994576ad347d1ae18bc435c31adad6a8307099921b4c9c6b194e8f89394"
+    },
+    {
+      "Path": "tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Sha256": "c934914eb7b3f32d5d2b162412fc999db852406410b19b8b5cb7f39ba66eef17"
+    },
+    {
+      "Path": "tools/diagnostics/Diagnostics.Common.ps1",
+      "Sha256": "3df2f899fdaae6f99304b6ec66287e722b5772df63527e9e016670ceb7fbdeaf"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Sha256": "e6fc125bdd63478e810abc1bcfaa34ffe267396b9e44bcc62869fdc0f4a0ca18"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Sha256": "e5be64c177e2f58e7ac2acffe21f1470ac115d6a3169c25d7d689b30353bbc7c"
+    },
+    {
+      "Path": "tools/diagnostics/Measure-CimWorkload.ps1",
+      "Sha256": "fa555e4f902d8b8adad2312e6e5951a978414433781b643bde208f124757eb42"
+    },
+    {
+      "Path": "tools/release_tool.py",
+      "Sha256": "631224bafa0842c066e4cc38ce0e00bae3670842908b7b5ac70ecd52dd38def4"
+    }
+  ],
+  "Tests": [
+    {
+      "Name": "Release identity is this unqualified 1.4.0 candidate",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: DEPENDENCIES.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: GephTun-BootReconcile.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: GephTun-BootReconcile.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: GephTun.Core.psm1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: GephTun.Core.psm1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: GephTun.Network.cs",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: GephTun.Resilience.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: GephTun.Resilience.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: GephTun.UI.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: GephTun.UI.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: GephTun.Worker.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: GephTun.Worker.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: GephTun.WorkerHost.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: GephTun.WorkerHost.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: Launch-GephTun.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: Launch-GephTun.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: RELEASE.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: Verify-GephTun.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: Verify-GephTun.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/DEPENDENCY-VERIFICATION.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/PACKAGE-MANIFEST.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/QUALIFICATION.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/RECONCILIATION.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/original-archive-index.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/original-cleanup-summary.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/original-evidence-index.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/acceptance-results.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/controller-results.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/current-validation.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/diagnostic-results.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/package-results.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/parser-compile-results.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/proxy-helper-results.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: docs/history/1.3.9/receipts/ui-results.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/BootRecovery.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/BootRecovery.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Controller.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Controller.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Diagnostics.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Diagnostics.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/DnsMandatory.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/DnsMandatory.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Measure-WindowsResources.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Measure-WindowsResources.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Package.Common.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Package.Common.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Package.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Package.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Resilience.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Resilience.Tests.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Run-UpdateValidation.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Run-UpdateValidation.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Targeted-D001-SvcParamFilter.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Targeted-D001-SvcParamFilter.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Test-NrptConflict.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Test-NrptConflict.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/Validate-Source.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/Validate-Source.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: tests/dns-mandatory-fixtures.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/proxy-helper-driver.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/proxy-helper-driver.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Python AST parse: tests/proxy-helper-tests.py",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tests/tray-harness.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tests/tray-harness.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: third_party/tun2socks-source-delivery-rebuild.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: third_party/tun2socks-validation-1.3.4.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: third_party/tun2socks-validation-1.3.5.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: third_party/tun2socks-vulnerability-screen.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/benchmarks/Measure-BypassQueries.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/benchmarks/Measure-BypassQueries.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "JSON parse: tools/benchmarks/performance-fixtures.json",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/diagnostics/Diagnostics.Common.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/diagnostics/Diagnostics.Common.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Lexical framing only: tools/diagnostics/Measure-CimWorkload.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Windows PowerShell 5.1-safe text encoding: tools/diagnostics/Measure-CimWorkload.ps1",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Python AST parse: tools/release_tool.py",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Controller functions have unique names",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Controller loads the new resilience helper",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Worker establishes intent before first setup",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Worker cleans its intent in finalization",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Disconnect latches a worker-lifetime token",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Stop reader does not consume the cancellation marker",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Active intent preserves operation-cancellation marker",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Clean recovery precedes fresh setup",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Residual journal blocks automatic reconnect",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Cancellation is rechecked after old cleanup",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Reconnect uses a monotonic 180-second checkpoint budget",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Reconnect limits three attempts and three cycles per ten minutes",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Geph installation path is pinned through reconnect",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Physical network is observed again after blocking Geph probe",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Stable physical network includes address and identity",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Peer failures retry complete observations at most three times",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Peer diagnostics log socket and failure context",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Peer address/adapter reads are not silently ignored",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Missing saved physical route requests a fresh session",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Grace checks firewall/route/DNS invariants before continuing",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Peer and DNS grace are both bounded",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Grace only declares Connected after a successful probe",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: DNS heartbeat logs relay pressure and error timestamp",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Fresh sessions do not enable global firewall profiles",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Preflight rejects disabled global firewall profiles",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Legacy global-profile recovery remains available",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Legacy boot profile residue prevents task deletion",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Boot cleanup verifies remaining owned rules before disarming",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: UI gates configuration and exit on live intent",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: UI displays candidate status and direct-network warning",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: DNS incompatible mandatory IPv6 hints are discarded",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: DNS mandatory references and ordering are validated",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: DNS relay maximum concurrency is not increased",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Runtime claims no general kill switch",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Current test runner uses fresh processes and external results",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Source invariant: Automatic reconnect uses only the six documented transient codes",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Twenty distinct DNS INPUT fixtures are present",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Optional ipv6hint is removed, ALPN and IPv4 are preserved",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Mandatory ipv6hint makes an HTTPS record incompatible",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Mandatory IPv4 is kept while optional IPv6 is removed",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: An unknown mandatory key is preserved when actually present",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: A mandatory key missing from SvcParams is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: An empty mandatory list is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: The mandatory list cannot name itself",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Unordered mandatory keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Duplicate mandatory keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Odd-length mandatory data is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Duplicate SvcParam keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Unordered SvcParam keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Reserved-invalid SvcParam key 65535 is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Truncated IPv6-hint address length is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Zero-length IPv6-hint value is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Multiple well-formed IPv6 hints are removed",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: A record without IPv6 remains usable",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: Mandatory 65535 is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: An incompatible HTTPS record does not remove a following A record",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DNS INPUT framing only: The mandatory check also applies to SVCB type 64",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Dependency manifest names exactly the retained two binaries",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Retained dependency bytes: tun2socks-windows-amd64.exe",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "AMD64 PE header only: tun2socks-windows-amd64.exe",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Retained dependency bytes: wintun.dll",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "AMD64 PE header only: wintun.dll",
+      "Result": "PASS",
+      "Detail": ""
+    }
+  ]
+}

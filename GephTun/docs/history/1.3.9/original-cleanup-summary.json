@@ -1,0 +1,16 @@
+{
+  "Kind": "GephTunCleanupSummary",
+  "Result": "PASS",
+  "CompletedUtc": "2026-10-04T21:37:46.0065555Z",
+  "DesktopFilesDeleted": 795,
+  "DocumentsFilesDeleted": 14885,
+  "DetailedReceipt": "C:\\Users\\William\\Documents\\GephTun-Archives\\2026-10-04-reconciliation-204758-706e06ad\\deletion-receipt.json",
+  "DetailedReceiptSha256": "87fc06bde3738b1a52c2fc2369dd3cc32fadae733bffb3ba682a3d0da6acaffe",
+  "Excluded": [
+    "Windows networking state",
+    "Installed Geph",
+    "Downloads",
+    "External recordings"
+  ],
+  "FolderDependencyScopeOnly": true
+}

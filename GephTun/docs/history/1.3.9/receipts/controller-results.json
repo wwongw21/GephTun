@@ -1,0 +1,2335 @@
+{
+    "CapturedUtc":  "2026-10-04T21:31:14.0261557Z",
+    "PowerShellVersion":  "5.1.26100.9444",
+    "Platform":  "Win32NT",
+    "ModulePath":  "C:\\Users\\William\\Documents\\GephTun-Archives\\2026-10-04-reconciliation-204758-706e06ad\\candidate-final\\GephTun.Core.psm1",
+    "ModuleSha256":  "700A74309B47AB62A0605F91A4F6D4170A56626631FDC276D201E502A6D81B2A",
+    "Sources":  [
+                    {
+                        "Path":  "GephTun.Core.psm1",
+                        "Sha256":  "700A74309B47AB62A0605F91A4F6D4170A56626631FDC276D201E502A6D81B2A"
+                    },
+                    {
+                        "Path":  "GephTun-BootReconcile.ps1",
+                        "Sha256":  "D6013E904CBA4DE6650E77BA4874C94DD745AA47A21D1EF1AB7576D4D5565AE7"
+                    },
+                    {
+                        "Path":  "tests/BootRecovery.Tests.ps1",
+                        "Sha256":  "E685E3B3780AAE32C21699DD847E3D401126A603200C89CF819C522C5AB74043"
+                    },
+                    {
+                        "Path":  "tests/Controller.Tests.ps1",
+                        "Sha256":  "2A76738D50BCD5C1B2FAA9D334BF8D54B8F2BD487A622416A01C9E6A42648492"
+                    }
+                ],
+    "Total":  296,
+    "Passed":  293,
+    "Failed":  0,
+    "Skipped":  3,
+    "Stress":  {
+                   "RequestedCycles":  100,
+                   "CompletedCycles":  100,
+                   "Cycles":  [
+                                  {
+                                      "Cycle":  1,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  2,
+                                      "Scenario":  "fault",
+                                      "Stage":  "engine-created",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  3,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "binding",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  4,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  5,
+                                      "Scenario":  "fault",
+                                      "Stage":  "ip-address",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  6,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "adapter-dns",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  7,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  8,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:0.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  9,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:128.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  10,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  11,
+                                      "Scenario":  "fault",
+                                      "Stage":  "dns-probe",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  12,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:203.0.113.7/32",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  13,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  14,
+                                      "Scenario":  "fault",
+                                      "Stage":  "binding",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  15,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "ip-interface",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  16,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  17,
+                                      "Scenario":  "fault",
+                                      "Stage":  "adapter-dns",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  18,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "dns-registration",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  19,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  20,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:128.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  21,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "nrpt",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  22,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  23,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:203.0.113.7/32",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  24,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "engine-created",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  25,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  26,
+                                      "Scenario":  "fault",
+                                      "Stage":  "ip-interface",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  27,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "ip-address",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  28,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  29,
+                                      "Scenario":  "fault",
+                                      "Stage":  "dns-registration",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  30,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:0.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  31,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  32,
+                                      "Scenario":  "fault",
+                                      "Stage":  "nrpt",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  33,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "dns-probe",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  34,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  35,
+                                      "Scenario":  "fault",
+                                      "Stage":  "engine-created",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  36,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "binding",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  37,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  38,
+                                      "Scenario":  "fault",
+                                      "Stage":  "ip-address",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  39,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "adapter-dns",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  40,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  41,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:0.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  42,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:128.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  43,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  44,
+                                      "Scenario":  "fault",
+                                      "Stage":  "dns-probe",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  45,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:203.0.113.7/32",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  46,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  47,
+                                      "Scenario":  "fault",
+                                      "Stage":  "binding",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  48,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "ip-interface",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  49,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  50,
+                                      "Scenario":  "fault",
+                                      "Stage":  "adapter-dns",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  51,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "dns-registration",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  52,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  53,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:128.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  54,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "nrpt",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  55,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  56,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:203.0.113.7/32",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  57,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "engine-created",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  58,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  59,
+                                      "Scenario":  "fault",
+                                      "Stage":  "ip-interface",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  60,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "ip-address",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  61,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  62,
+                                      "Scenario":  "fault",
+                                      "Stage":  "dns-registration",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  63,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:0.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  64,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  65,
+                                      "Scenario":  "fault",
+                                      "Stage":  "nrpt",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  66,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "dns-probe",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  67,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  68,
+                                      "Scenario":  "fault",
+                                      "Stage":  "engine-created",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  69,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "binding",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  70,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  71,
+                                      "Scenario":  "fault",
+                                      "Stage":  "ip-address",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  72,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "adapter-dns",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  73,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  74,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:0.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  75,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:128.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  76,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  77,
+                                      "Scenario":  "fault",
+                                      "Stage":  "dns-probe",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  78,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:203.0.113.7/32",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  79,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  80,
+                                      "Scenario":  "fault",
+                                      "Stage":  "binding",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  81,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "ip-interface",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  82,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  83,
+                                      "Scenario":  "fault",
+                                      "Stage":  "adapter-dns",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  84,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "dns-registration",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  85,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  86,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:128.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  87,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "nrpt",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  88,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  89,
+                                      "Scenario":  "fault",
+                                      "Stage":  "route:203.0.113.7/32",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  90,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "engine-created",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  91,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  92,
+                                      "Scenario":  "fault",
+                                      "Stage":  "ip-interface",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  93,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "ip-address",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  94,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  95,
+                                      "Scenario":  "fault",
+                                      "Stage":  "dns-registration",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  96,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "route:0.0.0.0/1",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  97,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  98,
+                                      "Scenario":  "fault",
+                                      "Stage":  "nrpt",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  99,
+                                      "Scenario":  "cancel",
+                                      "Stage":  "dns-probe",
+                                      "Result":  "PASS"
+                                  },
+                                  {
+                                      "Cycle":  100,
+                                      "Scenario":  "success",
+                                      "Stage":  "complete",
+                                      "Result":  "PASS"
+                                  }
+                              ],
+                   "Boundary":  "Complete mocked startup/recovery cycles; no real Windows traffic, driver, firewall or wall-clock soak."
+               },
+    "RecoveryStress":  {
+                           "RequestedCycles":  40,
+                           "CompletedCycles":  40,
+                           "Cycles":  [
+                                          {
+                                              "Cycle":  1,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  2,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  3,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  4,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  5,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  6,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  7,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  8,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  9,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  10,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  11,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  12,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  13,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  14,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  15,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  16,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  17,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  18,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  19,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  20,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  21,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  22,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  23,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  24,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  25,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  26,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  27,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  28,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  29,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  30,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  31,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  32,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  33,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  34,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  35,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  36,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  37,
+                                              "Scenario":  "normal",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  38,
+                                              "Scenario":  "dns",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  39,
+                                              "Scenario":  "route",
+                                              "Result":  "PASS"
+                                          },
+                                          {
+                                              "Cycle":  40,
+                                              "Scenario":  "profile",
+                                              "Result":  "PASS"
+                                          }
+                                      ],
+                           "Boundary":  "Shared-directory mocked repeated connections, with DNS/route/profile permission denials and journal-backed retries; no native ACL or firewall enforcement."
+                       },
+    "JsonStress":  {
+                       "RequestedWrites":  500,
+                       "CompletedWrites":  500,
+                       "ReadSnapshots":  831,
+                       "ConcurrentReadSnapshots":  831,
+                       "StorageScans":  167,
+                       "ConcurrentStorageScans":  167,
+                       "Boundary":  "Real concurrent file snapshots, atomic replacement and tree enumeration on the test host with a mocked ACL provider; native Windows delete-sharing and ACL enforcement still require acceptance."
+                   },
+    "Boundary":  "Portable behavioral controller tests with mocked Windows and network boundaries; no live network mutation.",
+    "Tests":  [
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Process identity releases its process lease when reading fails=False",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Process identity releases its process lease when reading fails=True",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Exact process identity is accepted",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Reused PID with different start time is rejected",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Matching PID and start time with different path is rejected",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A missing process and null identity are safely rejected",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A typed transient process-read failure is retried before status ownership is rejected",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A sustained typed process-read failure remains fail-closed after its bounded retry budget",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Stale session takes priority over a previously connected status",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Clean status starts disconnected without synthesizing a session",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Default route uses total cost and excludes down or virtual adapters",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Missing usable physical gateway is refused",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Session JSON is readable after initial write and replacement",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "JSON snapshots use raw filesystem attributes even when the PowerShell provider fails",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "One observed reparse point is refused even if a later read would look plain",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Plain-path validation preserves denied instead of treating it as a trustworthy path",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Plain-path validation preserves unclassified-io instead of treating it as a trustworthy path",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Plain-path validation preserves sustained-sharing instead of treating it as a trustworthy path",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Plain-path validation recovers from a temporary Windows sharing error 32",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Plain-path validation recovers from a temporary Windows sharing error 33",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON open retries a temporary missing-file condition and returns a complete object",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON open retries a temporary missing-directory condition and returns a complete object",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON open retries a temporary sharing condition and returns a complete object",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A stable missing JSON file returns absence after bounded direct opens",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON read preserves denied and cannot report a clean absent journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON read preserves unclassified-io and cannot report a clean absent journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON read preserves sustained-sharing and cannot report a clean absent journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON read preserves sharing-then-missing and cannot report a clean absent journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A JSON retry refuses a redirection that appeared after its first failed open",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage skips a descendant that reappears after a transient miss",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003c\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003c  \u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003cnull\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003cfalse\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003c42\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003c\"scalar\"\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003c[]\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003c[{}]\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing non-object JSON \u003c{}{}\u003e cannot be mistaken for an absent recovery journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "JSON snapshot reader preserves BOM-aware UTF8 text and date identities",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "JSON snapshot reader preserves BOM-aware Unicode text and date identities",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "500 atomic status replacements remain complete while the controller reads concurrently",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Complete AMD64 dependency fixture with trusted Wintun is accepted",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Missing Wintun is refused before connecting",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Modified dependency bytes are refused by checksum",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Wrong PE architecture is refused even with matching checksum",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Duplicate dependency manifest entries cannot omit Wintun validation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Untrusted Wintun signature is refused",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Stopping an owned process never terminates a reused PID",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Stopping an owned process verifies its saved executable hash",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Route cleanup removes only exact owned next-hop and metric on matching adapter",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Reused interface index cannot remove another adapter route",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing bypass route is neither modified nor recorded as owned",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Route intent is durably saved before mutation and completion is saved afterward",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Failed route creation leaves recovery intent in the durable ledger",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "DNS cleanup preserves every rule with a different ownership tag",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A changed DNS rule is preserved and recovery reports the conflict",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Partial route rollback retains the failed tunnel route and its upstream bypass",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "DNS rollback failure preserves recovery record",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Successful stale-session recovery reads disk and removes the completed ledger",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Invalid recovery ownership token is rejected before any mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Route provider failure propagates and cannot masquerade as absence",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Adapter provider failure propagates and cannot masquerade as absence",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Clean preflight returns a verified proxy and physical network without mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preexisting local NRPT policy is refused before proxy probing",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preexisting effective NRPT policy is refused before proxy probing",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preexisting tunnel route 0.0.0.0/1 is refused before proxy probing",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preexisting tunnel route 128.0.0.0/1 is refused before proxy probing",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preexisting tunnel route ::/1 is refused before proxy probing",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preexisting tunnel route 8000::/1 is refused before proxy probing",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Existing recovery ledger blocks a new connection",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Missing required networking command blocks preflight",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "DNS preflight failure refuses connection before any network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Geph without an observable physical server connection is refused",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "IPv6 containment ranges cover nonlocal unicast including NAT64 and ULA",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A middle exclusion splits the containment space exactly around it",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Exclusions at the historical global-unicast boundaries preserve other blocked space",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Adjacent and duplicate exclusions merge without gaps",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Invalid containment exclusions are rejected",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment exclusions derive only from journaled IPv6 bypass routes",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment installation journals rule and profile intent before either mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A failed rule installation keeps the journaled containment plan for recovery",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment sync follows new Geph IPv6 relay bypasses exactly once",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment verification fails on missing, altered, or stale rules",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment removal verifies ownership and restores disabled profiles",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment is retained while diversion rollback is blocked and removed after it succeeds",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery accepts 1.3.0 schema records without containment and rejects unknown schemas",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preflight rejects leftover containment rules and an unusable firewall",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Partial rollback keeps DNS relay and engine alive until a retry succeeds",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Crash-gap recovery records a uniquely matching process before termination",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Crash-gap recovery ignores different full session tokens and executable paths",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Crash-gap recovery rejects ambiguous matching processes",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Crash-gap recovery rejects a matching process older than the session",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Crash-gap recovery rejects a process whose live path no longer matches",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Relay startup failure rolls back the prepared session before route changes",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "IPv4 prefix matching handles defaults, byte boundaries, and host routes",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "IPv6 prefix matching handles partial bytes, host routes, and family mismatch",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Peer bypasses use longest original prefix then lowest cost on the physical source adapter",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Non-loopback UDP from a same-install Geph helper blocks untrackable bypasses",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Loopback Geph UDP and unrelated-process UDP do not block peer discovery",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Captured Geph peers select their original physical network without premature recovery claims",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Without this session tunnel adapter a captured-address peer still stops the session",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A Geph connection on a foreign adapter is never auto-bypassed",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovered captured peers are installed as ordinary bypass routes",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Removed owned bypass causes monitoring to stop instead of silently allowing a loop",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Twenty-four unchanged peers share one route and adapter snapshot per pass without carrying it into later passes",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Adding a peer invalidates earlier route snapshots before its new bypass is verified",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Persistent status and log write failures do not prevent network recovery",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery retry survives log failures and honors a matching disconnect request",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A changed route metric preserves recovery evidence and the forwarding services",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "DNS rollback failure preserves upstream bypasses until recovery can complete",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preflight route provider failures cannot be interpreted as no conflicting tunnel",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Route creation stops before journal ownership when enumeration fails",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Monitoring accepts the unchanged gateway and exactly the owned effective DNS policy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A containment change during a blocking health probe cannot receive a fresh Connected heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A route change during a blocking health probe cannot receive a fresh Connected heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A dns change during a blocking health probe cannot receive a fresh Connected heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A gateway change during a blocking health probe cannot receive a fresh Connected heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A engine change during a blocking health probe cannot receive a fresh Connected heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A proxy change during a blocking health probe cannot receive a fresh Connected heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A relay change during a blocking health probe cannot receive a fresh Connected heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A successful blocking probe publishes a heartbeat only after its policies stay healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A transient heartbeat probe failure is re-verified before the session is declared dead",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A persistently failing heartbeat probe still ends the session with the original failure",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Connect survives a tombstoned NRPT policy key with one bounded retry",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A persistent NRPT policy failure still fails Connect with the original error",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A healthy supervisor cannot refresh a status from a different worker lifetime with the same PID",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Owner UI process death during a blocking probe leaves supervision for ordinary recovery without a fresh heartbeat",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Owner UI process death between supervisor ticks leaves the saved session for ordinary recovery",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A consumed unreadable disconnect request never crashes the supervisor loop",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "An oversized state document fails with the explicit size-limit message",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Monitoring detects a removed local DNS policy before another loop",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Monitoring detects a more-specific effective DNS policy added by another program",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Monitoring detects an edited DNS forwarder address",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Monitoring detects a changed DHCP gateway on the same physical adapter",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Monitoring detects replacement of the preferred physical adapter",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Captured peer fallback rejects a reused tunnel interface index",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Failed recovered-bypass installation never publishes success",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A reported bypass creation without the resulting route is rejected",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Scoped Connect cancellation before preflight prevents every setup mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Cancellation files cannot target a different Connect operation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Connect refuses path traversal in its operation token before reading state",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "The cooperative setup deadline prevents the next startup stage",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A matching session disconnect cancels setup immediately after durable preparation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Proxy detection verifies an IPv4 Geph listener and rechecks its process identity",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "An IPv6-only Geph listener cannot authorize an unrelated IPv4 SOCKS listener",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Proxy detection rejects a Geph process restart during its connectivity probe",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Proxy listener provider failure remains distinguishable from an absent proxy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Connection setup stops when its owning UI process exits",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Journal round trips preserve exact UTC process identity strings on modern PowerShell",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery request read failure keeps the relay alive and retries",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery request delete failure keeps the relay alive and retries",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Process termination pins the original handle before identity and hash checks",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Denied process-handle access cannot be treated as an already stopped engine",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery ledger write failure preserves the previous record and live services",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Full startup and disconnect honor Windows parameter contracts and clean every owned surface",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Connect arms the boot recovery task before the first persistent firewall mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A refused boot recovery task registration fails Connect before any persistent mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A clean disconnect removes the boot recovery task after every owned surface",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Preflight cannot treat an unreadable task scheduler as no recovery task",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Disconnect preserves recovery script and journal when task removal silently leaves the task",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Disconnect preserves recovery script and journal when task absence cannot be read",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Disconnect never mistakes a permission error containing not found for task absence",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "An interrupted recovery keeps the boot recovery task armed",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot reconciliation removes stale owned policy and keeps live-session and foreign rules",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot reconciliation without a session record removes every owned rule",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A malformed session record preserves ownership uncertainty and recovery",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A live worker must be a PowerShell process with a matching start time",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot reconciliation is idempotent when every owned rule is already gone",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after route:203.0.113.7/32 recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after engine-created recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after binding recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after ip-interface recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after ip-address recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after adapter-dns recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after dns-registration recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after route:0.0.0.0/1 recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after route:128.0.0.0/1 recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after nrpt recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Startup failure after dns-probe recovers every journaled mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A firewall profile crash after mutation is recoverable from the on-disk intent",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Profile intent save failure prevents profile enablement",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Partial profile recovery never replays a profile already restored on a previous attempt",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects disabled-rule before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects restricted-profile before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects not-effective before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects disabled-firewall before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects disabled-local-policy before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects excluded-adapter before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects restricted-program before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects restricted-package before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects restricted-protocol before reporting healthy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter local-user without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter remote-user without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter remote-machine without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter authentication without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter encryption without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter override without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter persistent-only without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter missing-field without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter missing-filter without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter duplicate-filter without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Containment detects security filter denied without assuming its unscoped serialization",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A consistent literal security-list rendering is compared against the freshly created rule",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A consistent null security-list rendering is compared against the freshly created rule",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A consistent empty security-list rendering is compared against the freshly created rule",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Security capture failure missing rolls back the newly created rule and profile intent",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Security capture failure duplicate rolls back the newly created rule and profile intent",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Security capture failure denied rolls back the newly created rule and profile intent",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Security capture failure unexpected-authentication rolls back the newly created rule and profile intent",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A legacy schema 2 containment journal recovers without a live security baseline",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Firewall provider failure retains the containment journal during recovery",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Firewall address order and equivalent expanded IPv6 text do not trigger false alarms",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "An empty provider Package value stays healthy after the 1.3.2 live connect failure",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Borrowed IPv6 relay routes are exempt without becoming owned recovery targets",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Current peer exclusions drop obsolete destinations even if owned recovery routes remain",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery rejects foreign-firewall-name before any network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery rejects foreign-firewall-display before any network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery rejects broad-bypass before any network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery rejects arbitrary-tunnel before any network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery rejects bad-profile before any network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Recovery rejects missing-route-guid before any network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A live journal overrides missing status",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A live journal overrides disconnected status",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A live journal overrides foreign-worker status",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Crash-gap discovery rejects a recycled PID with the same executable and a later start time",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Crash-gap discovery accepts only the sub-microsecond fraction discarded by CIM",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A tunnel route for a different adapter cannot be recovered under this session",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Connect never reports healthy after containment is disabled during its final network probe",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Connect rechecks the physical gateway after a long final probe",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Connect refuses a replaced Geph proxy process even when the final probe succeeded",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A replaced secondary physical adapter cannot reuse an original route snapshot",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A mismatched saved tunnel name is rejected before crash-gap recovery can adopt another session process",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A mismatched saved process path is rejected before any cleanup mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Concurrent disappearance of an already-clean recovery journal does not trap the controller in recovery",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies owner permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies write permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies delete-child permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies change-permissions permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies take-ownership permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies null-dacl permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies inherited-write permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies file-write permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies read-only permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies deny permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies state-session permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies state-status permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies state-disconnect permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies state-result permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage classifies state-log permissions before trusting state or messages",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "SKIP",
+                      "Test":  "Protected storage classifies redirected-file permissions before trusting state or messages",
+                      "Detail":  "BLOCKED_BY_HOST: Windows denied symbolic-link fixture creation because the required privilege is absent. Rerun this case from the approved elevated test host; its redirection protection is NOT_RUN here."
+                  },
+                  {
+                      "Result":  "SKIP",
+                      "Test":  "Protected storage classifies redirected-directory permissions before trusting state or messages",
+                      "Detail":  "BLOCKED_BY_HOST: Windows denied symbolic-link fixture creation because the required privilege is absent. Rerun this case from the approved elevated test host; its redirection protection is NOT_RUN here."
+                  },
+                  {
+                      "Result":  "SKIP",
+                      "Test":  "Protected storage classifies redirected-dangling-file permissions before trusting state or messages",
+                      "Detail":  "BLOCKED_BY_HOST: Windows denied symbolic-link fixture creation because the required privilege is absent. Rerun this case from the approved elevated test host; its redirection protection is NOT_RUN here."
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Storage initialization rejects root-write before ACL normalization can erase its evidence",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Storage initialization rejects session-write before ACL normalization can erase its evidence",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Storage initialization rejects directory-owner before ACL normalization can erase its evidence",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Concurrent root-create is validated before child ACL mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Concurrent root-create-child is validated before child ACL mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Concurrent root-appears-before-branch is validated before child ACL mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage handles disappeared-file without hiding real ACL errors",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage handles disappeared-root without hiding real ACL errors",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Protected storage handles denied-read without hiding real ACL errors",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A saved disabled profile restores through the documented GpoBoolean parameter contract",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A truncated-json journal is preserved without any cleanup mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A missing-token journal is preserved without any cleanup mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A future-schema journal is preserved without any cleanup mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A wrong-dns-tag journal is preserved without any cleanup mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "A invalid-profile journal is preserved without any cleanup mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "40 repeated connections retry denied DNS route and profile recovery from the saved journal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "100 complete user connection cycles leave no journal or owned network state after success failure and cancellation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot confirmed stale recovery succeeds: NoJournal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot confirmed stale recovery succeeds: Dead",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot confirmed stale recovery succeeds: PidReused",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot confirmed stale recovery succeeds: WrongProcess",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot confirmed stale recovery succeeds: Transient",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot confirmed stale recovery succeeds: Abandoned",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot confirmed stale recovery succeeds: SameNameForeignTask",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot already-clean recovery is idempotent: Empty",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot already-clean recovery is idempotent: TaskAbsent",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: NrptUnreadable",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: FirewallUnreadable",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: ProcessDenied",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: MissingIdentity",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: JournalDenied",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: Malformed",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: Busy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot uncertain state preserves all recovery: MutexDenied",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot incomplete cleanup preserves recovery: NrptDenied",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot incomplete cleanup preserves recovery: FirewallDenied",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot incomplete cleanup preserves recovery: Remaining",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot incomplete cleanup preserves recovery: VerifyUnreadable",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot task removal failure preserves its script: TaskRemovalDenied",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot task removal failure preserves its script: TaskStillPresent",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot unreadable task-absence confirmation preserves its script",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot keeps live-session policy and recovery while removing stale foreign-session policy",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Boot failed cleanup can be retried successfully using the retained script",
+                      "Detail":  ""
+                  }
+              ]
+}

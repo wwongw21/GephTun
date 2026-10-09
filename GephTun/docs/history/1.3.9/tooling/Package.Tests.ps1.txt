@@ -1,0 +1,906 @@
+#Requires -Version 5.1
+# Isolated packaging regressions. Synthetic binaries/reports are TEST FIXTURES,
+# never Windows acceptance evidence. No network, administrator actions, or real
+# application files are executed. The packaging scripts themselves are exercised.
+[CmdletBinding()]
+param([string]$PackageDirectory, [string]$ResultJson)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+# $PSScriptRoot is empty while param() defaults are evaluated on Windows
+# PowerShell 5.1 -File runs; resolve the default in the script body instead.
+if (-not $PackageDirectory) { $PackageDirectory = Split-Path -Parent $PSScriptRoot }
+$script:InputRoot = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($PackageDirectory))
+# A report must bind the test harness that actually executes. Checking this before
+# importing candidate helpers also makes a mismatched harness fail without running
+# scripts from the selected input directory.
+$candidateHarness = Join-Path $script:InputRoot 'tests/Package.Tests.ps1'
+if (-not [IO.File]::Exists($candidateHarness) -or
+    (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash -ne
+    (Get-FileHash -LiteralPath $candidateHarness -Algorithm SHA256).Hash) {
+    throw 'The executing package test harness differs from the source-bound harness. Invoke the harness from the selected package.'
+}
+. (Join-Path $script:InputRoot 'tests/Package.Common.ps1')
+if ($ResultJson) {
+    $script:ReportOutput = Get-GephPackageFullPath $ResultJson
+    Assert-GephPackageOutput $script:ReportOutput (Get-GephPackageFullPath $script:InputRoot)
+}
+$script:Results = New-Object 'Collections.Generic.List[object]'
+$script:RoundtripSource=$null;$script:RoundtripOutput=$null;$script:RoundtripArchive=$null;$script:RoundtripEngineering=$null
+$script:RuntimeBaseline=$null;$script:RuntimeBuildArchive=$null
+$script:TestRoot = Join-Path ([IO.Path]::GetTempPath()) ('GephTun-package-tests-' + [guid]::NewGuid().ToString('N'))
+[void][IO.Directory]::CreateDirectory($script:TestRoot)
+$script:OwnedSources = @('Verify-GephTun.ps1','tests/Package.Common.ps1','tests/build-package.ps1','tests/Validate-Source.ps1','tests/Collect-Validation.ps1','tests/Package.Tests.ps1','tests/Verify-Runtime.ps1','tests/Run-WindowsValidation.ps1')
+$script:SourceSnapshot = @(foreach ($relative in $script:OwnedSources) { [pscustomobject]@{ Path = $relative; Sha256 = (Get-FileHash -LiteralPath (Join-Path $script:InputRoot $relative) -Algorithm SHA256).Hash.ToLowerInvariant() } })
+$script:SuitePaths = [ordered]@{ Controller='tests/controller-results.json'; Network='tests/proxy-helper-results.json'; UI='tests/ui-results.json'; Source='tests/parser-compile-results.json'; Package='tests/package-results.json'; Acceptance='tests/acceptance-results.json' }
+$script:TlsCaseNames = @('TLS trusted','TLS untrusted','TLS wrong_hostname','bounded timeout hang_tls')
+$script:TlsTrustCaseNames = @('TLS trusted','TLS untrusted','TLS wrong_hostname')
+$script:LinkCaseNames = @('Build rejects a redirected output ancestor into the source','Package verifier rejects redirected source ancestors','Verifier rejects redirected package entries','Source validator rejects redirected result ancestors')
+
+function Assert-Equal($Actual, $Expected, [string]$Message = '') {
+    if ($Actual -ne $Expected) { throw ('{0} Expected <{1}>; got <{2}>.' -f $Message, $Expected, $Actual) }
+}
+function Assert-True($Actual, [string]$Message = '') { if (-not $Actual) { throw ('Assertion failed: ' + $Message) } }
+function Assert-Throws([scriptblock]$Action, [string]$Pattern = '') {
+    $caught = $null
+    try { & $Action | Out-Null } catch { $caught = $_ }
+    if ($null -eq $caught) { throw 'Expected rejection, but the operation succeeded.' }
+    if ($Pattern -and $caught.Exception.Message -notmatch $Pattern) { throw ('Expected <{0}>; got <{1}>.' -f $Pattern, $caught.Exception.Message) }
+}
+function Write-FixtureJson([string]$Path, $Value) {
+    [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
+}
+function Read-FixtureJson([string]$Root, [string]$Relative) { Get-Content -LiteralPath (Join-Path $Root $Relative) -Raw -Encoding UTF8 | ConvertFrom-Json }
+function Get-FixtureHash([string]$Root, [string]$Relative) { (Get-FileHash -LiteralPath (Join-Path $Root $Relative) -Algorithm SHA256).Hash.ToLowerInvariant() }
+function Refresh-FixtureManifest([string]$Root) {
+    $entries = @(foreach ($file in @(Get-ChildItem -LiteralPath $Root -Recurse -File)) {
+        $relative = $file.FullName.Substring($Root.Length + 1).Replace('\','/')
+        if ($relative -eq 'PACKAGE-MANIFEST.json') { continue }
+        [pscustomobject]@{ Path=$relative; Bytes=[long]$file.Length; Sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    })
+    $release=Read-FixtureJson $Root 'RELEASE.json'
+    Write-FixtureJson (Join-Path $Root 'PACKAGE-MANIFEST.json') ([pscustomobject]@{
+        Package='GephTun'; Version='0.0.0'; SyntheticFixture=$true; Files=$entries
+        Status=$release.Status;Date=$release.Date;InputArchiveSha256=$release.InputArchiveSha256
+        Validation='tests/current-validation.json';NativeWindowsAcceptance='NOT_RUN'
+    })
+}
+function New-BaselineFixture {
+    $root = Join-Path $script:TestRoot 'baseline'
+    [void][IO.Directory]::CreateDirectory((Join-Path $root 'tests'))
+    [void][IO.Directory]::CreateDirectory((Join-Path $root 'bin'))
+    [void][IO.Directory]::CreateDirectory((Join-Path $root 'licenses'))
+    [void][IO.Directory]::CreateDirectory((Join-Path $root 'third_party'))
+    foreach ($relative in $script:OwnedSources) { [IO.File]::Copy((Join-Path $script:InputRoot $relative), (Join-Path $root $relative)) }
+    foreach ($relative in @('GephTun.Core.psm1','GephTun-BootReconcile.ps1','GephTun.UI.ps1','GephTun.Worker.ps1','GephTun.WorkerHost.ps1','Launch-GephTun.ps1','Launch-GephTun.cmd','Start-GephTun.cmd','Stop-GephTun.cmd','tests/Controller.Tests.ps1','tests/BootRecovery.Tests.ps1','tests/UI.Tests.ps1','tests/tray-harness.ps1','tests/proxy-helper-driver.ps1','tests/proxy-helper-tests.py','tests/Acceptance.Tests.ps1','tests/Collect-WindowsAcceptance.ps1','tests/Test-NrptConflict.ps1')) {
+        [IO.File]::WriteAllText((Join-Path $root $relative), '# SYNTHETIC TEST FIXTURE ONLY; never execute as the application.')
+    }
+    [IO.File]::WriteAllText((Join-Path $root 'GephTun.Network.cs'), ('// SYNTHETIC TEST FIXTURE ONLY' + [Environment]::NewLine + 'namespace Fixture' + [guid]::NewGuid().ToString('N') + ' { public class Example {} }'))
+    [IO.File]::WriteAllText((Join-Path $root 'README.md'), 'SYNTHETIC TEST FIXTURE ONLY; never release this directory.')
+    foreach ($relative in @('RUNTIME-README.md','licenses/tun2socks-LICENSE.txt','licenses/Wintun-LICENSE.txt','third_party/tun2socks-THIRD-PARTY-LICENSES.txt')) {
+        [IO.File]::WriteAllText((Join-Path $root $relative), 'SYNTHETIC TEST FIXTURE ONLY; never release this directory.')
+    }
+    $binaries = @(foreach ($name in @('tun2socks-windows-amd64.exe','wintun.dll')) {
+        $bytes = New-Object byte[] 256
+        $bytes[0]=0x4d; $bytes[1]=0x5a; $bytes[0x3c]=0x80; $bytes[0x80]=0x50; $bytes[0x81]=0x45; $bytes[0x84]=0x64; $bytes[0x85]=0x86
+        [IO.File]::WriteAllBytes((Join-Path (Join-Path $root 'bin') $name), $bytes)
+        [pscustomobject]@{ File=$name; Sha256=(Get-FixtureHash $root ('bin/'+$name)); SyntheticFixture=$true }
+    })
+    Write-FixtureJson (Join-Path $root 'RELEASE.json') ([pscustomobject]@{ Package='GephTun'; Version='0.0.0'; Status='SYNTHETIC TEST FIXTURE ONLY'; Date='2026-01-01'; InputArchiveSha256=('0'*64) })
+    Write-FixtureJson (Join-Path $root 'DEPENDENCIES.json') ([pscustomobject]@{ Version='0.0.0'; Binaries=$binaries })
+    $sources = @(foreach ($file in @(Get-ChildItem -LiteralPath $root -Recurse -File)) {
+        $relative=$file.FullName.Substring($root.Length+1).Replace('\','/')
+        if (Test-GephPackageSource $relative) { [pscustomobject]@{ Path=$relative; Sha256=(Get-FixtureHash $root $relative) } }
+    })
+    foreach ($name in $script:SuitePaths.Keys) {
+        $tests = @([pscustomobject]@{ Result='PASS'; Test='Synthetic fixture test record, never release evidence'; Detail='' })
+        if ($name -eq 'Network') { $tests += @(foreach ($caseName in $script:TlsCaseNames) { [pscustomobject]@{Result='PASS';Name=$caseName;Detail='Synthetic fixture only.'} }) }
+        if ($name -eq 'Package') { $tests += @(foreach ($caseName in $script:LinkCaseNames) { [pscustomobject]@{Result='PASS';Test=$caseName;Detail='Synthetic fixture only.'} }) }
+        if ($name -eq 'Source') {
+            $tests = @(foreach ($entry in $sources) {
+                if ([IO.Path]::GetExtension($entry.Path) -in @('.ps1','.psm1','.cs')) { [pscustomobject]@{ File=$entry.Path; Passed=$true; Sha256=$entry.Sha256; Detail='Synthetic fixture record only' } }
+            })
+        }
+        $reportSources = $sources
+        if ($name -eq 'Controller') { $reportSources = @($sources | Where-Object { $_.Path -in @('GephTun.Core.psm1','GephTun-BootReconcile.ps1','tests/Controller.Tests.ps1','tests/BootRecovery.Tests.ps1') }) }
+        if ($name -eq 'Network') { $reportSources = @($sources | Where-Object { $_.Path -in @('GephTun.Network.cs','tests/proxy-helper-tests.py','tests/proxy-helper-driver.ps1') }) }
+        if ($name -eq 'Package') { $reportSources = @($sources | Where-Object { $_.Path -in $script:OwnedSources }) }
+        if ($name -eq 'UI') { $reportSources = @($sources | Where-Object { $_.Path -in @('GephTun.UI.ps1','GephTun.Worker.ps1','GephTun.WorkerHost.ps1','Launch-GephTun.ps1','Launch-GephTun.cmd','Start-GephTun.cmd','Stop-GephTun.cmd','tests/UI.Tests.ps1','tests/tray-harness.ps1') }) }
+        if ($name -eq 'Acceptance') { $reportSources = @($sources | Where-Object { $_.Path -in @('tests/Acceptance.Tests.ps1','tests/Collect-WindowsAcceptance.ps1','tests/Test-NrptConflict.ps1','tests/Package.Common.ps1') }) }
+        $report = [pscustomobject]@{
+            SyntheticFixture=$true; complete=$true; Total=$tests.Count; Passed=$tests.Count; Failed=0; Skipped=0; Tests=$tests; Sources=$reportSources
+            ModuleSha256=(Get-FixtureHash $root 'GephTun.Core.psm1'); sourceSha256=(Get-FixtureHash $root 'GephTun.Network.cs')
+            testScriptSha256=(Get-FixtureHash $root 'tests/proxy-helper-tests.py'); driverSha256=(Get-FixtureHash $root 'tests/proxy-helper-driver.ps1')
+            Scope='SYNTHETIC TEST FIXTURE ONLY; no real suite was run to create this report.'
+        }
+        if ($name -eq 'Package') { $report | Add-Member -NotePropertyName SymbolicLinkCasesExecuted -NotePropertyValue $true }
+        if ($name -eq 'Network') {
+            $report | Add-Member -NotePropertyName tlsTrustCases -NotePropertyValue $true
+            $report | Add-Member -NotePropertyName tlsTimeoutCaseExecuted -NotePropertyValue $true
+            $report | Add-Member -NotePropertyName declaredTlsCases -NotePropertyValue $script:TlsCaseNames
+        }
+        Write-FixtureJson (Join-Path $root $script:SuitePaths[$name]) $report
+    }
+    & (Join-Path $root 'tests/Collect-Validation.ps1') -PackageDirectory $root | Out-Null
+    Add-FixtureQualification $root
+    return $root
+}
+function New-Fixture {
+    $root = Join-Path $script:TestRoot ([guid]::NewGuid().ToString('N'))
+    Copy-Item -LiteralPath $script:Baseline -Destination $root -Recurse
+    return $root
+}
+function Ensure-RoundtripFixture {
+    # Each test that uses a built archive provisions its own prerequisite.
+    # The former shared Roundtrip* variables made results depend on the
+    # preceding test's success and order.
+    if ($script:RoundtripSource -and $script:RoundtripArchive -and $script:RoundtripEngineering -and
+        [IO.File]::Exists($script:RoundtripArchive) -and
+        [IO.Directory]::Exists($script:RoundtripSource) -and
+        [IO.Directory]::Exists($script:RoundtripEngineering)) { return }
+    $root=New-Fixture
+    $output=Join-Path $script:TestRoot ('roundtrip-prerequisite-'+[guid]::NewGuid().ToString('N'))
+    $built=Invoke-Build $root $output
+    $expanded=Join-Path $script:TestRoot ('roundtrip-expanded-prerequisite-'+[guid]::NewGuid().ToString('N'))
+    [IO.Compression.ZipFile]::ExtractToDirectory($built.Archive,$expanded)
+    $script:RoundtripSource=$root
+    $script:RoundtripOutput=$output
+    $script:RoundtripArchive=$built.Archive
+    $script:RoundtripEngineering=Join-Path $expanded 'GephTun'
+}
+function Ensure-RuntimeFixture {
+    Ensure-RoundtripFixture
+    if ($script:RuntimeBaseline -and [IO.File]::Exists((Join-Path $script:RuntimeBaseline 'QUALIFICATION.json'))) { return }
+    $output=Join-Path $script:TestRoot ('runtime-prerequisite-'+[guid]::NewGuid().ToString('N'))
+    $built=& (Join-Path $script:Baseline 'tests/build-package.ps1') -SourceDirectory $script:RoundtripSource -OutputDirectory $output -RuntimeOnly
+    $expanded=Join-Path $script:TestRoot ('runtime-expanded-prerequisite-'+[guid]::NewGuid().ToString('N'))
+    [IO.Compression.ZipFile]::ExtractToDirectory($built.Archive,$expanded)
+    $script:RuntimeBaseline=Join-Path $expanded 'GephTun'
+    $script:RuntimeBuildArchive=$built.Archive
+}
+function Invoke-Verify([string]$Root) { & (Join-Path $script:Baseline 'Verify-GephTun.ps1') -PackageDirectory $Root -Quiet }
+function Invoke-Build([string]$Root, [string]$Output) { & (Join-Path $script:Baseline 'tests/build-package.ps1') -SourceDirectory $Root -OutputDirectory $Output }
+function Quote-WindowsProcessArgument([string]$Value) {
+    # ProcessStartInfo.Arguments is a single command-line string on the
+    # Windows PowerShell/.NET Framework host. Package paths are filesystem
+    # values, never script text; NTFS path components cannot contain a quote.
+    return '"' + $Value + '"'
+}
+function Invoke-WithRawAttributeProvider([scriptblock]$Provider,[scriptblock]$Body) {
+    # PS 5.1 resolves functions dynamically. Save and restore the seam around
+    # every injected filesystem provider so one attribute test cannot alter a
+    # later test's command resolution.
+    $saved=(Get-Command Get-GephPackageRawAttributes -CommandType Function -ErrorAction Stop).ScriptBlock
+    try { Set-Item Function:\Get-GephPackageRawAttributes -Value $Provider; & $Body }
+    finally { Set-Item Function:\Get-GephPackageRawAttributes -Value $saved }
+}
+function New-RuntimeFixture {
+    $root=Join-Path $script:TestRoot ([guid]::NewGuid().ToString('N'))
+    Copy-Item -LiteralPath $script:RuntimeBaseline -Destination $root -Recurse
+    return $root
+}
+function Refresh-RuntimeFixtureManifest([string]$Root) {
+    $manifest=Read-FixtureJson $Root 'PACKAGE-MANIFEST.json'
+    $manifest.Files=@(foreach ($file in @(Get-ChildItem -LiteralPath $Root -Recurse -File)) {
+        $relative=$file.FullName.Substring($Root.Length + 1).Replace('\','/')
+        if ($relative -ne 'PACKAGE-MANIFEST.json') { [pscustomobject]@{Path=$relative;Bytes=[long]$file.Length;Sha256=(Get-FixtureHash $Root $relative)} }
+    })
+    Write-FixtureJson (Join-Path $Root 'PACKAGE-MANIFEST.json') $manifest
+}
+function Invoke-RuntimeVerify([string]$Root) { & (Join-Path $script:Baseline 'tests/Verify-Runtime.ps1') -PackageDirectory $Root -Quiet }
+function Update-FixtureEvidence([string]$Root, [scriptblock]$Change) {
+    $evidence = Read-FixtureJson $Root 'tests/current-validation.json'
+    & $Change $evidence
+    Write-FixtureJson (Join-Path $Root 'tests/current-validation.json') $evidence
+    Refresh-FixtureManifest $Root
+}
+function Test-Case([string]$Name, [scriptblock]$Body) {
+    try { & $Body; $script:Results.Add([pscustomobject]@{ Result='PASS'; Test=$Name; Detail='' }) }
+    catch { $script:Results.Add([pscustomobject]@{ Result='FAIL'; Test=$Name; Detail=$_.Exception.Message }) }
+}
+function Refresh-FixtureSourceBinding([string]$Root, [string]$Relative) {
+    # This updates synthetic fixtures only. It never generates real test evidence.
+    $hash=Get-FixtureHash $Root $Relative
+    foreach ($reportPath in $script:SuitePaths.Values) {
+        $report=Read-FixtureJson $Root $reportPath
+        foreach ($source in $report.Sources) { if ($source.Path -eq $Relative) { $source.Sha256=$hash } }
+        foreach ($test in $report.Tests) {
+            if ((Get-GephPackageProperty $test 'File') -eq $Relative) { $test.Sha256=$hash }
+        }
+        Write-FixtureJson (Join-Path $Root $reportPath) $report
+    }
+    & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $Root -Replace | Out-Null
+    Add-FixtureQualification $Root
+}
+function Add-FixtureQualification([string]$Root) {
+    $evidence=Read-FixtureJson $Root 'tests/current-validation.json'
+    $qualification=[pscustomobject]@{
+        Package='GephTun';Version='0.0.0';ProductionQualified=$false;NativeWindowsAcceptance='NOT_RUN';InputArchiveSha256=('0'*64)
+        PortableRequiredSuitePassed=$evidence.RequiredTotals.Passed;PortableSupplementalPassed=$evidence.SupplementalTotals.Passed
+        PortableFailed=$evidence.Totals.Failed;PortableSkipped=$evidence.Totals.Skipped;Sources=$evidence.Sources
+        RequiredTotals=$evidence.RequiredTotals;SupplementalTotals=$evidence.SupplementalTotals;Totals=$evidence.Totals
+        Evidence=@([pscustomobject]@{Path='tests/current-validation.json';Sha256=Get-FixtureHash $Root 'tests/current-validation.json'},
+            [pscustomobject]@{Path='tests/acceptance-results.json';Sha256=Get-FixtureHash $Root 'tests/acceptance-results.json'})
+    }
+    Write-FixtureJson (Join-Path $Root 'QUALIFICATION.json') $qualification
+    Refresh-FixtureManifest $Root
+}
+
+try {
+    $script:Baseline = New-BaselineFixture
+    Test-Case 'Raw attributes distinguish confirmed absence from a required missing file' {
+        $path=Join-Path $script:TestRoot 'confirmed-absent.json'
+        Assert-Equal (Get-GephPackageAttributes $path -AllowMissing) $null
+        Assert-Throws {Get-GephPackageAttributes $path} ''
+    }
+    Test-Case 'Transient missing and sharing errors settle within the bounded raw attribute retry' {
+        $script:AttributeReadCount=0
+        Invoke-WithRawAttributeProvider {
+            $script:AttributeReadCount++
+            if($script:AttributeReadCount -eq 1){throw [IO.FileNotFoundException]::new('Synthetic atomic replacement gap.')}
+            if($script:AttributeReadCount -eq 2){throw [IO.IOException]::new('Synthetic sharing violation.')}
+            return [IO.FileAttributes]::Normal
+        } {
+            Assert-Equal (Get-GephPackageAttributes 'synthetic-path' -AllowMissing) ([IO.FileAttributes]::Normal)
+            Assert-Equal $script:AttributeReadCount 3
+        }
+    }
+    Test-Case 'Sustained raw IO failure keeps its original exception and never becomes absence' {
+        $script:AttributeReadCount=0;$script:AttributeFailure=[IO.IOException]::new('Synthetic sustained attribute failure.')
+        Invoke-WithRawAttributeProvider {
+            $script:AttributeReadCount++;throw $script:AttributeFailure
+        } {
+            $caught=$null
+            try {$null=Get-GephPackageAttributes 'synthetic-path' -AllowMissing} catch {$caught=$_.Exception}
+            Assert-True ([object]::ReferenceEquals($caught,$script:AttributeFailure)) 'Original failure identity was lost.'
+            Assert-Equal $script:AttributeReadCount 4
+        }
+    }
+    Test-Case 'Denied raw attribute access is never retried or treated as an absent path' {
+        $script:AttributeReadCount=0
+        Invoke-WithRawAttributeProvider {
+            $script:AttributeReadCount++;throw [UnauthorizedAccessException]::new('Synthetic access denied.')
+        } {
+            Assert-Throws {Assert-GephPackageNoRedirect (Join-Path $script:TestRoot 'denied.json')} 'Synthetic access denied'
+            Assert-Equal $script:AttributeReadCount 1
+        }
+    }
+    Test-Case 'One real raw reparse observation is terminal even if a later read could look normal' {
+        $script:AttributeReadCount=0
+        Invoke-WithRawAttributeProvider {
+            $script:AttributeReadCount++
+            if($script:AttributeReadCount -eq 1){return [IO.FileAttributes]::ReparsePoint}
+            return [IO.FileAttributes]::Normal
+        } {
+            Assert-Throws {Assert-GephPackageNoRedirect (Join-Path $script:TestRoot 'redirected.json')} 'Redirected filesystem path'
+            Assert-Equal $script:AttributeReadCount 1
+        }
+    }
+    Test-Case 'Complete fixture passes package and current evidence verification' { Assert-Equal (Invoke-Verify $script:Baseline).Success $true }
+    Test-Case 'Build produces a verifiable extracted archive and removes staging files' {
+        $root=New-Fixture; $output=Join-Path $script:TestRoot 'roundtrip-build'
+        $built=Invoke-Build $root $output
+        Assert-True ([IO.File]::Exists($built.Archive)) 'archive exists'
+        Assert-Equal $built.Sha256 (Get-FileHash -LiteralPath $built.Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+        $expanded=Join-Path $script:TestRoot 'roundtrip-expanded'
+        [IO.Compression.ZipFile]::ExtractToDirectory($built.Archive,$expanded)
+        $verified=Invoke-Verify (Join-Path $expanded 'GephTun')
+        Assert-Equal $verified.Success $true
+        Assert-Equal @(Get-ChildItem -LiteralPath $output -Directory).Count 0 'staging directory removed'
+        $script:RoundtripSource=$root; $script:RoundtripOutput=$output; $script:RoundtripArchive=$built.Archive
+        $script:RoundtripEngineering=Join-Path $expanded 'GephTun'
+    }
+    Test-Case 'Build refuses an existing archive and preserves its bytes' {
+        Ensure-RoundtripFixture
+        $before=(Get-FileHash -LiteralPath $script:RoundtripArchive -Algorithm SHA256).Hash
+        Assert-Throws { Invoke-Build $script:RoundtripSource $script:RoundtripOutput } 'Output already exists'
+        Assert-Equal (Get-FileHash -LiteralPath $script:RoundtripArchive -Algorithm SHA256).Hash $before
+    }
+    Test-Case 'Repeated builds in separate folders have identical archive bytes' {
+        Ensure-RoundtripFixture
+        $second=Invoke-Build $script:RoundtripSource (Join-Path $script:TestRoot 'repeat-build')
+        Assert-Equal $second.Sha256 (Get-FileHash -LiteralPath $script:RoundtripArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    Test-Case 'Runtime archive verifies standalone without engineering tests or historical source' {
+        Ensure-RoundtripFixture
+        $built=& (Join-Path $script:Baseline 'tests/build-package.ps1') -SourceDirectory $script:RoundtripSource -OutputDirectory (Join-Path $script:TestRoot 'runtime-build') -RuntimeOnly
+        $expanded=Join-Path $script:TestRoot 'runtime-expanded'
+        [IO.Compression.ZipFile]::ExtractToDirectory($built.Archive,$expanded)
+        $script:RuntimeBaseline=Join-Path $expanded 'GephTun'
+        $script:RuntimeBuildArchive=$built.Archive
+        $verified=& (Join-Path $script:RuntimeBaseline 'Verify-GephTun.ps1') -Quiet
+        Assert-Equal $verified.Success $true;Assert-Equal $verified.Kind 'Runtime';Assert-Equal $verified.ProductionQualified $false
+        Assert-Equal ([IO.Directory]::Exists((Join-Path $script:RuntimeBaseline 'tests'))) $false
+        Assert-Equal ([IO.Directory]::Exists((Join-Path $script:RuntimeBaseline 'third_party'))) $false
+        Assert-Equal @(Get-ChildItem -LiteralPath $script:RuntimeBaseline -Recurse -File).Count 21
+        Assert-Equal ([IO.Path]::GetFileName($built.Archive)) 'GephTun-0.0.0-Windows.zip'
+        Assert-Equal (Get-FixtureHash $script:RuntimeBaseline 'licenses/tun2socks-THIRD-PARTY-LICENSES.txt') (Get-FixtureHash $script:RoundtripSource 'third_party/tun2socks-THIRD-PARTY-LICENSES.txt')
+    }
+    Test-Case 'Runtime qualification links exact engineering package evidence and unchanged application bytes' {
+        Ensure-RuntimeFixture
+        $qualification=Read-FixtureJson $script:RuntimeBaseline 'QUALIFICATION.json'
+        $engineering=$script:RoundtripEngineering
+        Assert-Equal $qualification.EngineeringManifestSha256 (Get-FixtureHash $engineering 'PACKAGE-MANIFEST.json')
+        Assert-Equal $qualification.CurrentValidationSha256 (Get-FixtureHash $engineering 'tests/current-validation.json')
+        Assert-Equal $qualification.EngineeringQualificationSha256 (Get-FixtureHash $engineering 'QUALIFICATION.json')
+        foreach ($source in $qualification.Sources) { Assert-Equal (Get-FixtureHash $script:RuntimeBaseline $source.Path) (Get-FixtureHash $engineering $source.OriginPath) }
+    }
+    Test-Case 'Runtime corruption and unlisted files are rejected' {
+        $root=New-RuntimeFixture;[IO.File]::AppendAllText((Join-Path $root 'GephTun.Core.psm1'),'changed')
+        Assert-Throws {Invoke-RuntimeVerify $root} 'Runtime checksum or size mismatch'
+        $root=New-RuntimeFixture;[IO.File]::WriteAllText((Join-Path $root 'unexpected.txt'),'unlisted')
+        Assert-Throws {Invoke-RuntimeVerify $root} 'Unlisted runtime files'
+    }
+    Test-Case 'Runtime manifest rehashing cannot hide a missing license or source binding' {
+        $root=New-RuntimeFixture;Remove-Item -LiteralPath (Join-Path $root 'licenses/tun2socks-THIRD-PARTY-LICENSES.txt');Refresh-RuntimeFixtureManifest $root
+        Assert-Throws {Invoke-RuntimeVerify $root} 'exactly the supported runtime files'
+        $root=New-RuntimeFixture;$qualification=Read-FixtureJson $root 'QUALIFICATION.json'
+        $qualification.Sources=@($qualification.Sources | Where-Object {$_.Path -ne 'GephTun.Core.psm1'})
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-RuntimeFixtureManifest $root
+        Assert-Throws {Invoke-RuntimeVerify $root} 'omits a source binding'
+    }
+    Test-Case 'Runtime qualification cannot promote itself to native production acceptance' {
+        $root=New-RuntimeFixture;$qualification=Read-FixtureJson $root 'QUALIFICATION.json';$qualification.ProductionQualified=$true
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-RuntimeFixtureManifest $root
+        Assert-Throws {Invoke-RuntimeVerify $root} 'cannot assert unexecuted native production acceptance'
+    }
+    Test-Case 'Runtime engineering hashes and declared source origins cannot silently drift' {
+        $root=New-RuntimeFixture;$qualification=Read-FixtureJson $root 'QUALIFICATION.json';$qualification.EngineeringManifestSha256='f'*64
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-RuntimeFixtureManifest $root
+        Assert-Throws {Invoke-RuntimeVerify $root} 'engineering evidence binding disagrees'
+        $root=New-RuntimeFixture;$qualification=Read-FixtureJson $root 'QUALIFICATION.json';$qualification.Sources[0].OriginPath='wrong.ps1'
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-RuntimeFixtureManifest $root
+        Assert-Throws {Invoke-RuntimeVerify $root} 'Invalid runtime source origin'
+    }
+    Test-Case 'Runtime builds are deterministic across independent output folders' {
+        Ensure-RuntimeFixture
+        $built=& (Join-Path $script:Baseline 'tests/build-package.ps1') -SourceDirectory $script:RoundtripSource -OutputDirectory (Join-Path $script:TestRoot 'runtime-repeat') -RuntimeOnly
+        Assert-Equal $built.Sha256 (Get-FileHash -LiteralPath $script:RuntimeBuildArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    Test-Case 'Source hashes cannot make a truncated native suite report complete' {
+        $reference=[pscustomobject]@{Tests=@([pscustomobject]@{Test='First';Result='PASS'},[pscustomobject]@{Test='Second';Result='PASS'})}
+        $report=[pscustomobject]@{Tests=@([pscustomobject]@{Test='First';Result='PASS'})}
+        Assert-Throws {Assert-GephPackageCaseCoverage $report $reference 'Controller'} 'exact packaged test cases'
+        $report.Tests+=@([pscustomobject]@{Test='Unexpected';Result='PASS'})
+        Assert-Throws {Assert-GephPackageCaseCoverage $report $reference 'Controller'} 'exact packaged test cases'
+    }
+    Test-Case 'Native suite identity coverage tolerates ordering and explicit platform skips' {
+        $reference=[pscustomobject]@{Tests=@([pscustomobject]@{Name='First';Result='PASS'},[pscustomobject]@{Name='Second';Result='PASS'})}
+        $report=[pscustomobject]@{Tests=@([pscustomobject]@{Name='Second';Result='SKIP';Detail='Unsupported provider.'},[pscustomobject]@{Name='First';Result='PASS'})}
+        Assert-GephPackageCaseCoverage $report $reference 'Network'
+    }
+    Test-Case 'The native desktop receipt must cover every declared layout scenario' {
+        $report=[pscustomobject]@{LayoutScenarios=30;ExpectedLayoutScenarios=30;LayoutMatrix=[pscustomobject]@{FontSizeFactors=@(1,1.5,2);Widths=@(940,640);MessageCases=5}}
+        Assert-GephPackageDesktopCoverage $report
+        $report.LayoutScenarios=1
+        Assert-Throws {Assert-GephPackageDesktopCoverage $report} 'all 30 expected layout scenarios'
+        $report.ExpectedLayoutScenarios=1;$report.LayoutMatrix.FontSizeFactors=@(1);$report.LayoutMatrix.Widths=@(940);$report.LayoutMatrix.MessageCases=1
+        Assert-Throws {Assert-GephPackageDesktopCoverage $report} 'complete expected layout matrix'
+    }
+    Test-Case 'Missing manifest is rejected' { $root=New-Fixture; Remove-Item -LiteralPath (Join-Path $root 'PACKAGE-MANIFEST.json'); Assert-Throws { Invoke-Verify $root } 'MANIFEST.json is missing' }
+    Test-Case 'Malformed manifest JSON is rejected' { $root=New-Fixture; [IO.File]::WriteAllText((Join-Path $root 'PACKAGE-MANIFEST.json'), '{'); Assert-Throws { Invoke-Verify $root } }
+    Test-Case 'Same-size file corruption is rejected' { $root=New-Fixture; $path=Join-Path $root 'README.md'; $bytes=[IO.File]::ReadAllBytes($path); $bytes[0]=$bytes[0] -bxor 1; [IO.File]::WriteAllBytes($path,$bytes); Assert-Throws { Invoke-Verify $root } 'Checksum or size mismatch' }
+    Test-Case 'Missing listed file is rejected' { $root=New-Fixture; Remove-Item -LiteralPath (Join-Path $root 'README.md'); Assert-Throws { Invoke-Verify $root } 'Missing package file' }
+    Test-Case 'Unlisted file is rejected' { $root=New-Fixture; [IO.File]::WriteAllText((Join-Path $root 'unexpected.txt'),'test'); Assert-Throws { Invoke-Verify $root } 'Unlisted files' }
+    Test-Case 'Duplicate manifest path is rejected case insensitively' {
+        $root=New-Fixture; $manifest=Read-FixtureJson $root 'PACKAGE-MANIFEST.json'; $entry=$manifest.Files[0]
+        $manifest.Files+=@([pscustomobject]@{Path=$entry.Path.ToUpperInvariant(); Bytes=$entry.Bytes; Sha256=$entry.Sha256})
+        Write-FixtureJson (Join-Path $root 'PACKAGE-MANIFEST.json') $manifest
+        Assert-Throws { Invoke-Verify $root } 'duplicate manifest path'
+    }
+    Test-Case 'Manifest cannot list itself' {
+        $root=New-Fixture; $manifest=Read-FixtureJson $root 'PACKAGE-MANIFEST.json'; $manifest.Files+=@([pscustomobject]@{Path='PACKAGE-MANIFEST.json';Bytes=0;Sha256=('0'*64)})
+        Write-FixtureJson (Join-Path $root 'PACKAGE-MANIFEST.json') $manifest; Assert-Throws { Invoke-Verify $root } 'Unsafe or duplicate'
+    }
+    Test-Case 'A package cannot drop its qualification record and rehash the omission' {
+        $root=New-Fixture;Remove-Item -LiteralPath (Join-Path $root 'QUALIFICATION.json');Refresh-FixtureManifest $root
+        Assert-Throws {Invoke-Verify $root} 'Required file absent from manifest: QUALIFICATION.json'
+    }
+    Test-Case 'Manifest cannot claim inherited native acceptance even with otherwise valid checksums' {
+        $root=New-Fixture;$manifest=Read-FixtureJson $root 'PACKAGE-MANIFEST.json';$manifest.NativeWindowsAcceptance='PASS'
+        Write-FixtureJson (Join-Path $root 'PACKAGE-MANIFEST.json') $manifest
+        Assert-Throws {Invoke-Verify $root} 'retain unexecuted native acceptance'
+    }
+    Test-Case 'Manifest release metadata cannot drift from the bound release record' {
+        foreach($field in @('Status','Date','InputArchiveSha256')) {
+            $root=New-Fixture;$manifest=Read-FixtureJson $root 'PACKAGE-MANIFEST.json';$manifest.$field='unrelated metadata'
+            Write-FixtureJson (Join-Path $root 'PACKAGE-MANIFEST.json') $manifest
+            Assert-Throws {Invoke-Verify $root} ('Manifest and release metadata disagree: '+$field)
+        }
+    }
+    foreach ($unsafe in @('../escape','folder/../escape','/absolute','C:/absolute','folder\backslash','name:stream','./relative','double//slash','CON.txt','LPT1','trail.','trail ','wild*.txt','wild?.txt','pipe|.txt','less<.txt','quote".txt',('control'+[char]1+'.txt'))) {
+        Test-Case ('Unsafe manifest path rejected: ' + ($unsafe -replace '[\x00-\x1f]','[control]')) {
+            $root=New-Fixture; $manifest=Read-FixtureJson $root 'PACKAGE-MANIFEST.json'
+            $manifest.Files+=@([pscustomobject]@{Path=$unsafe;Bytes=0;Sha256=('0'*64)})
+            Write-FixtureJson (Join-Path $root 'PACKAGE-MANIFEST.json') $manifest
+            Assert-Throws { Invoke-Verify $root } 'Unsafe package path'
+        }
+    }
+    Test-Case 'Required file cannot be removed from package and manifest' {
+        $root=New-Fixture; Remove-Item -LiteralPath (Join-Path $root 'Launch-GephTun.cmd'); Refresh-FixtureManifest $root
+        Assert-Throws { Invoke-Verify $root } 'Required file absent'
+    }
+    Test-Case 'Manifest version and release version must agree' {
+        $root=New-Fixture; $manifest=Read-FixtureJson $root 'PACKAGE-MANIFEST.json'; $manifest.Version='0.0.1'
+        Write-FixtureJson (Join-Path $root 'PACKAGE-MANIFEST.json') $manifest; Assert-Throws { Invoke-Verify $root } 'versions disagree'
+    }
+    Test-Case 'A newline suffix cannot turn a release version into an unsafe archive name' {
+        $root=New-Fixture; $release=Read-FixtureJson $root 'RELEASE.json'; $release.Version="0.0.0`n"
+        Write-FixtureJson (Join-Path $root 'RELEASE.json') $release
+        $output=Join-Path $script:TestRoot 'invalid-release-build'
+        Assert-Throws { Invoke-Build $root $output } 'Invalid release identity'
+        Assert-Equal ([IO.Directory]::Exists($output)) $false
+    }
+    Test-Case 'An invalid ZIP date is rejected before output creation' {
+        $root=New-Fixture; $release=Read-FixtureJson $root 'RELEASE.json'; $release.Date='1979-12-31'
+        Write-FixtureJson (Join-Path $root 'RELEASE.json') $release
+        $output=Join-Path $script:TestRoot 'invalid-date-build'
+        Assert-Throws { Invoke-Build $root $output } 'Invalid release date'
+        Assert-Equal ([IO.Directory]::Exists($output)) $false
+    }
+    Test-Case 'A hash with a newline suffix is rejected as malformed' {
+        Assert-Throws { Assert-GephPackageHash (('a'*64)+"`n") 'synthetic hash' } 'Invalid SHA256'
+    }
+    Test-Case 'Source changed after validation is rejected even after rehashing manifest' {
+        $root=New-Fixture; [IO.File]::AppendAllText((Join-Path $root 'GephTun.Core.psm1'),'# changed'); Refresh-FixtureManifest $root
+        Assert-Throws { Invoke-Verify $root } 'Source changed since validation'
+        Assert-Throws { Invoke-Build $root (Join-Path $script:TestRoot 'stale-build') } 'Source changed since validation'
+    }
+    Test-Case 'A deleted source still named in evidence is rejected' {
+        $root=New-Fixture; Remove-Item -LiteralPath (Join-Path $root 'tests/tray-harness.ps1'); Refresh-FixtureManifest $root
+        Assert-Throws { Invoke-Verify $root } 'Missing validated source'
+    }
+    Test-Case 'A new source absent from evidence is rejected' {
+        $root=New-Fixture; [IO.File]::WriteAllText((Join-Path $root 'added.ps1'),'# added'); Refresh-FixtureManifest $root
+        Assert-Throws { Invoke-Verify $root } 'exact current source set'
+    }
+    Test-Case 'String success flag cannot impersonate boolean success' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.Success='false'}
+        Assert-Throws { Invoke-Verify $root } 'Successful current validation'
+    }
+    Test-Case 'Missing required suite is rejected' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.Suites=@($e.Suites | Where-Object {$_.Name -ne 'Package'})}
+        Assert-Throws { Invoke-Verify $root } 'All five'
+    }
+    Test-Case 'Duplicate suite cannot replace a missing required suite' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.Suites[4]=$e.Suites[0]}
+        Assert-Throws { Invoke-Verify $root } 'duplicate validation suite'
+    }
+    Test-Case 'Suite failure counts are rejected' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.Suites[0].Failed=1}
+        Assert-Throws { Invoke-Verify $root } 'Unsuccessful validation suite'
+    }
+    Test-Case 'String suite counts are rejected' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.Suites[0].Total='1'}
+        Assert-Throws { Invoke-Verify $root } 'Invalid integer count'
+    }
+    Test-Case 'Tampered suite report hash is rejected' {
+        $root=New-Fixture; [IO.File]::AppendAllText((Join-Path $root 'tests/controller-results.json'),' '); Refresh-FixtureManifest $root
+        Assert-Throws { Invoke-Verify $root } 'Source changed since validation'
+    }
+    Test-Case 'Rehashed suite report with inconsistent counts is rejected' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/controller-results.json'; $report.Passed=2
+        Write-FixtureJson (Join-Path $root 'tests/controller-results.json') $report
+        Update-FixtureEvidence $root {param($e) $e.Suites[0].Sha256=Get-FixtureHash $root 'tests/controller-results.json'}
+        Assert-Throws { Invoke-Verify $root } 'counts disagree'
+    }
+    Test-Case 'Rehashed report with a failed test record is rejected' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/controller-results.json'; $report.Tests[0].Result='FAIL'
+        Write-FixtureJson (Join-Path $root 'tests/controller-results.json') $report
+        Update-FixtureEvidence $root {param($e) $e.Suites[0].Sha256=Get-FixtureHash $root 'tests/controller-results.json'}
+        Assert-Throws { Invoke-Verify $root } 'Unsuccessful test record'
+    }
+    Test-Case 'Incomplete network report is rejected even when its hashes and counts agree' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/proxy-helper-results.json'; $report.complete=$false
+        Write-FixtureJson (Join-Path $root 'tests/proxy-helper-results.json') $report
+        Update-FixtureEvidence $root {param($e) ($e.Suites | Where-Object {$_.Name -eq 'Network'}).Sha256=Get-FixtureHash $root 'tests/proxy-helper-results.json'}
+        Assert-Throws { Invoke-Verify $root } 'complete=true'
+    }
+    foreach ($sourceSuite in @('Controller','Network','UI','Source','Package')) {
+        Test-Case ($sourceSuite + ' report cannot omit source bindings') {
+            $root=New-Fixture; $reportPath=$script:SuitePaths[$sourceSuite]; $report=Read-FixtureJson $root $reportPath; $report.Sources=@()
+            Write-FixtureJson (Join-Path $root $reportPath) $report
+            Update-FixtureEvidence $root {param($e) ($e.Suites | Where-Object {$_.Name -eq $sourceSuite}).Sha256=Get-FixtureHash $root $reportPath}
+            Assert-Throws { Invoke-Verify $root } 'exact source set'
+        }
+    }
+    Test-Case 'A stale embedded source hash is rejected after rehashing the outer report' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/controller-results.json'; $report.ModuleSha256='a'*64
+        Write-FixtureJson (Join-Path $root 'tests/controller-results.json') $report
+        Update-FixtureEvidence $root {param($e) $e.Suites[0].Sha256=Get-FixtureHash $root 'tests/controller-results.json'}
+        Assert-Throws { Invoke-Verify $root } 'Source changed since validation'
+    }
+    Test-Case 'Conflicting per-test success fields cannot hide a failure' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/controller-results.json'; $report.Tests[0] | Add-Member -NotePropertyName Passed -NotePropertyValue $false
+        Write-FixtureJson (Join-Path $root 'tests/controller-results.json') $report
+        Update-FixtureEvidence $root {param($e) $e.Suites[0].Sha256=Get-FixtureHash $root 'tests/controller-results.json'}
+        Assert-Throws { Invoke-Verify $root } 'Unsuccessful test record'
+    }
+    Test-Case 'Duplicated successful test records cannot inflate suite counts' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/controller-results.json'
+        $report.Tests+=@($report.Tests[0]); $report.Passed=2; $report.Total=2
+        Write-FixtureJson (Join-Path $root 'tests/controller-results.json') $report
+        Update-FixtureEvidence $root {param($e) $e.Suites[0].Sha256=Get-FixtureHash $root 'tests/controller-results.json'; $e.Suites[0].Passed=2; $e.Suites[0].Total=2}
+        Assert-Throws { Invoke-Verify $root } 'duplicate suite test identity'
+    }
+    Test-Case 'Anonymous successful test records are rejected' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/controller-results.json'; $report.Tests[0].Test=''
+        Write-FixtureJson (Join-Path $root 'tests/controller-results.json') $report
+        Update-FixtureEvidence $root {param($e) $e.Suites[0].Sha256=Get-FixtureHash $root 'tests/controller-results.json'}
+        Assert-Throws { Invoke-Verify $root } 'suite test identity'
+    }
+    Test-Case 'Skipped cases are preserved in evidence and verification without claiming complete coverage' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/package-results.json'
+        $report.Tests+=@([pscustomobject]@{Result='BLOCKED_BY_HOST';Test='Synthetic blocked case';Detail='Synthetic host lacks link capability.'})
+        $report.Total++; $report.Skipped=1
+        Write-FixtureJson (Join-Path $root 'tests/package-results.json') $report
+        $collected=& (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace
+        Assert-Equal $collected.Skipped 1; Assert-Equal $collected.CoverageComplete $false
+        Add-FixtureQualification $root; $verified=Invoke-Verify $root
+        Assert-Equal $verified.Success $true; Assert-Equal $verified.Skipped 1; Assert-Equal $verified.CoverageComplete $false
+        $built=Invoke-Build $root (Join-Path $script:TestRoot 'honest-skips-build')
+        Assert-True ([IO.File]::Exists($built.Archive)) 'validation build can retain honest host limitations'
+        $script:SkipFixture=$root
+    }
+    Test-Case 'An omitted link test cannot disappear from reported totals' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/package-results.json'
+        $report.SymbolicLinkCasesExecuted=$false
+        Write-FixtureJson (Join-Path $root 'tests/package-results.json') $report
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'skipped test records'
+    }
+    Test-Case 'Skipped test records require an inspectable reason' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/package-results.json'
+        $report.Tests+=@([pscustomobject]@{Result='NOT_RUN';Test='Synthetic unexplained skip';Detail=''})
+        $report.Total++; $report.Skipped=1; Write-FixtureJson (Join-Path $root 'tests/package-results.json') $report
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'requires a reason'
+    }
+    Test-Case 'A skipped record cannot also claim success' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/package-results.json'
+        $report.Tests+=@([pscustomobject]@{Result='SKIP';Passed=$true;Test='Synthetic contradictory skip';Detail='Blocked.'})
+        $report.Total++; $report.Skipped=1; Write-FixtureJson (Join-Path $root 'tests/package-results.json') $report
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'cannot also pass'
+    }
+    Test-Case 'Coverage status cannot hide a skipped test' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/package-results.json'
+        $report.Tests+=@([pscustomobject]@{Result='UNSUPPORTED';Test='Synthetic platform case';Detail='Synthetic unsupported platform.'})
+        $report.Total++; $report.Skipped=1; Write-FixtureJson (Join-Path $root 'tests/package-results.json') $report
+        & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace | Out-Null
+        Update-FixtureEvidence $root {param($e) $e.CoverageComplete=$true}
+        Assert-Throws { Invoke-Verify $root } 'coverage status disagrees'
+    }
+    Test-Case 'An entirely skipped suite cannot qualify a validation build' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/package-results.json'
+        foreach ($test in $report.Tests) { $test.Result='NOT_RUN'; $test.Detail='All cases blocked.' }
+        $report.Passed=0; $report.Skipped=$report.Total; $report.SymbolicLinkCasesExecuted=$false
+        Write-FixtureJson (Join-Path $root 'tests/package-results.json') $report
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'Unsuccessful validation suite'
+    }
+    Test-Case 'Overflowing counters are rejected without wrapping into plausible totals' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/package-results.json'
+        $report.Passed=[long]::MaxValue; $report.Skipped=1
+        Write-FixtureJson (Join-Path $root 'tests/package-results.json') $report
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'counts overflow'
+    }
+    Test-Case 'Current source evidence cannot rebind an old controller test report' {
+        $root=New-Fixture; [IO.File]::AppendAllText((Join-Path $root 'tests/Controller.Tests.ps1'),'# altered')
+        Update-FixtureEvidence $root {param($e) ($e.Sources | Where-Object {$_.Path -eq 'tests/Controller.Tests.ps1'}).Sha256=Get-FixtureHash $root 'tests/Controller.Tests.ps1'}
+        Assert-Throws { Invoke-Verify $root } 'Source changed since validation'
+    }
+    Test-Case 'Current parser evidence cannot rebind an old boot recovery controller report' {
+        $root=New-Fixture
+        [IO.File]::AppendAllText((Join-Path $root 'GephTun-BootReconcile.ps1'),'# altered recovery')
+        $hash=Get-FixtureHash $root 'GephTun-BootReconcile.ps1'
+        $sourceReport=Read-FixtureJson $root 'tests/parser-compile-results.json'
+        foreach($entry in $sourceReport.Sources){if($entry.Path -eq 'GephTun-BootReconcile.ps1'){$entry.Sha256=$hash}}
+        foreach($entry in $sourceReport.Tests){if($entry.File -eq 'GephTun-BootReconcile.ps1'){$entry.Sha256=$hash}}
+        Write-FixtureJson (Join-Path $root 'tests/parser-compile-results.json') $sourceReport
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'Source changed since validation'
+    }
+    Test-Case 'Engineering verification requires the standalone recovery script' {
+        $root=New-Fixture
+        Remove-Item -LiteralPath (Join-Path $root 'GephTun-BootReconcile.ps1')
+        Refresh-FixtureManifest $root
+        Assert-Throws { Invoke-Verify $root } 'Required file absent'
+    }
+    Test-Case 'Source inventory excludes only explicit root repository metadata' {
+        $root=New-Fixture
+        [void][IO.Directory]::CreateDirectory((Join-Path $root '.git'))
+        [IO.File]::WriteAllText((Join-Path $root '.git/config'),'fixture git metadata')
+        foreach($leaf in @('.gitignore','.gitattributes','AGENTS.md')){[IO.File]::WriteAllText((Join-Path $root $leaf),'fixture metadata')}
+        [IO.File]::WriteAllText((Join-Path $root 'unexpected.txt'),'must stay visible')
+        $inventory=Get-GephPackageInventory $root -SourceTree
+        Assert-Equal $inventory.ContainsKey('.git/config') $false
+        Assert-Equal $inventory.ContainsKey('.gitignore') $false
+        Assert-Equal $inventory.ContainsKey('AGENTS.md') $false
+        Assert-Equal $inventory.ContainsKey('unexpected.txt') $true
+        Assert-Throws { Invoke-Verify $root } 'Unlisted files'
+    }
+    Test-Case 'Source-tree builds omit repository metadata and verify extracted packages strictly' {
+        $root=New-Fixture
+        [void][IO.Directory]::CreateDirectory((Join-Path $root '.git'))
+        [IO.File]::WriteAllText((Join-Path $root '.git/config'),'fixture git metadata')
+        [IO.File]::WriteAllText((Join-Path $root '.gitignore'),'fixture metadata')
+        $output=Join-Path $script:TestRoot ('git-build-'+[guid]::NewGuid().ToString('N'))
+        $built=& (Join-Path $script:Baseline 'tests/build-package.ps1') -SourceDirectory $root -OutputDirectory $output -SourceTree
+        $extracted=Join-Path $script:TestRoot ('git-extracted-'+[guid]::NewGuid().ToString('N'))
+        [IO.Compression.ZipFile]::ExtractToDirectory($built.Archive,$extracted)
+        $package=Join-Path $extracted 'GephTun'
+        Assert-Equal ([IO.Directory]::Exists((Join-Path $package '.git'))) $false
+        Assert-Equal ([IO.File]::Exists((Join-Path $package '.gitignore'))) $false
+        Assert-Equal (Invoke-Verify $package).Success $true
+        [void][IO.Directory]::CreateDirectory((Join-Path $package '.git'))
+        [IO.File]::WriteAllText((Join-Path $package '.git/config'),'delivery must reject this')
+        Assert-Throws { Invoke-Verify $package } 'Unlisted files'
+    }
+    Test-Case 'Unsafe suite report path is rejected before filesystem access' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.Suites[0].Path='../outside.json'}
+        Assert-Throws { Invoke-Verify $root } 'Unsafe package path'
+    }
+    Test-Case 'Duplicate evidence source is rejected case insensitively' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.Sources+=@([pscustomobject]@{Path=$e.Sources[0].Path.ToUpperInvariant();Sha256=$e.Sources[0].Sha256})}
+        Assert-Throws { Invoke-Verify $root } 'duplicate evidence source'
+    }
+    Test-Case 'Native Windows acceptance cannot be asserted by portable evidence' {
+        $root=New-Fixture; Update-FixtureEvidence $root {param($e) $e.NativeWindowsAcceptance='PASS'}
+        Assert-Throws { Invoke-Verify $root } 'honest native status'
+    }
+    Test-Case 'Build rejects output equal to source without changing source' {
+        $root=New-Fixture; Assert-Throws { Invoke-Build $root $root } 'outside the source'; Assert-Equal (Invoke-Verify $root).Success $true
+    }
+    Test-Case 'Build rejects normalized descendant output paths' {
+        $root=New-Fixture; Assert-Throws { Invoke-Build $root (Join-Path $root 'nested/../build') } 'outside the source'
+        Assert-Equal ([IO.Directory]::Exists((Join-Path $root 'build'))) $false
+    }
+    Test-Case 'Build rejects an existing output file and preserves it' {
+        $root=New-Fixture; $output=Join-Path $script:TestRoot 'occupied-output'; [IO.File]::WriteAllText($output,'keep me')
+        Assert-Throws { Invoke-Build $root $output } 'Output already exists'; Assert-Equal ([IO.File]::ReadAllText($output)) 'keep me'
+    }
+    Test-Case 'Relative output paths follow PowerShell Set-Location' {
+        $root=New-Fixture
+        Push-Location -LiteralPath $root
+        try { $built=Invoke-Build '.' '../relative-build'; Assert-Equal ([IO.Path]::GetDirectoryName($built.Archive)) (Join-Path $script:TestRoot 'relative-build') }
+        finally { Pop-Location }
+    }
+    Test-Case 'Builder treats the source verifier as package data and never executes it' {
+        $root=New-Fixture
+        [IO.File]::WriteAllText((Join-Path $root 'Verify-GephTun.ps1'), "throw 'UNTRUSTED SOURCE VERIFIER EXECUTED'")
+        Refresh-FixtureSourceBinding $root 'Verify-GephTun.ps1'
+        $built=Invoke-Build $root (Join-Path $script:TestRoot 'untrusted-source-verifier-build')
+        Assert-True ([IO.File]::Exists($built.Archive)) 'caller verifier is used'
+        # Corrupt a binary after a source verifier has claimed success; the trusted
+        # caller verifier still rejects it during staging.
+        [IO.File]::WriteAllText((Join-Path $root 'bin/wintun.dll'),'corrupt')
+        Assert-Throws { Invoke-Build $root (Join-Path $script:TestRoot 'untrusted-source-verifier-rejected') } 'Dependency checksum mismatch'
+    }
+    Test-Case 'Failed staged verification removes temporary files and never publishes an archive' {
+        $root=New-Fixture; $binary=Join-Path $root 'bin/wintun.dll'; $bytes=[IO.File]::ReadAllBytes($binary); $bytes[100]=$bytes[100] -bxor 1; [IO.File]::WriteAllBytes($binary,$bytes)
+        $output=Join-Path $script:TestRoot 'failed-build'
+        Assert-Throws { Invoke-Build $root $output } 'Dependency checksum mismatch'
+        Assert-Equal @(Get-ChildItem -LiteralPath $output -Force).Count 0
+    }
+    Test-Case 'Collector rejects stale embedded report hashes and preserves previous evidence' {
+        $root=New-Fixture; $before=Get-FixtureHash $root 'tests/current-validation.json'
+        [IO.File]::AppendAllText((Join-Path $root 'GephTun.Core.psm1'),'# changed')
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'Source changed since validation'
+        Assert-Equal (Get-FixtureHash $root 'tests/current-validation.json') $before
+    }
+    Test-Case 'Collector requires explicit replacement and atomically refreshes valid evidence' {
+        $root=New-Fixture; $before=Get-FixtureHash $root 'tests/current-validation.json'
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root } 'already exists'
+        Assert-Equal (Get-FixtureHash $root 'tests/current-validation.json') $before
+        $actual=& (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace
+        Assert-Equal $actual.Suites 5; Add-FixtureQualification $root; Assert-Equal (Invoke-Verify $root).Success $true
+    }
+    Test-Case 'Source validator rejects a result path inside its source before compiling' {
+        $root=New-Fixture; $before=Get-FixtureHash $root 'GephTun.Core.psm1'
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Validate-Source.ps1') -PackageDirectory $root -ResultJson (Join-Path $root 'GephTun.Core.psm1') } 'outside the source'
+        Assert-Equal (Get-FixtureHash $root 'GephTun.Core.psm1') $before
+    }
+    Test-Case 'Source validator refuses an existing report without overwriting it' {
+        $root=New-Fixture; $output=Join-Path $script:TestRoot 'occupied-report.json'; [IO.File]::WriteAllText($output,'keep report')
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Validate-Source.ps1') -PackageDirectory $root -ResultJson $output } 'Output already exists'
+        Assert-Equal ([IO.File]::ReadAllText($output)) 'keep report'
+    }
+    Test-Case 'Source validator creates a hash-bound report outside source' {
+        $root=New-Fixture; $output=Join-Path $script:TestRoot 'source-validation.json'
+        & (Join-Path $script:Baseline 'tests/Validate-Source.ps1') -PackageDirectory $root -ResultJson $output | Out-Null
+        $report=Get-Content -LiteralPath $output -Raw -Encoding UTF8 | ConvertFrom-Json
+        Assert-Equal $report.Failed 0; Assert-Equal $report.Passed $report.Total; Assert-Equal @($report.Tests).Count $report.Total
+        Assert-True (@($report.Sources).Count -gt $report.Total) 'CMD/Python identities are recorded without pretending to parse them'
+    }
+    Test-Case 'Supplemental skips contribute to global totals and remain source-bound' {
+        $root=New-Fixture; $report=Read-FixtureJson $root 'tests/acceptance-results.json'
+        $report.Tests+=@([pscustomobject]@{Name='Synthetic supplemental limitation';Result='SKIP';Detail='Synthetic unavailable provider.'})
+        $report.Total++;$report.Skipped=1;Write-FixtureJson (Join-Path $root 'tests/acceptance-results.json') $report
+        $collected=& (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace
+        Assert-Equal $collected.RequiredTotals.Skipped 0;Assert-Equal $collected.SupplementalTotals.Skipped 1
+        Assert-Equal $collected.Totals.Skipped 1;Assert-Equal $collected.Skipped 1;Assert-Equal $collected.CoverageComplete $false
+        Add-FixtureQualification $root;Assert-Equal (Invoke-Verify $root).SupplementalTotals.Skipped 1
+    }
+    Test-Case 'A shipped acceptance collector requires its current supplemental report' {
+        $root=New-Fixture;$before=Get-FixtureHash $root 'tests/current-validation.json'
+        Remove-Item -LiteralPath (Join-Path $root 'tests/acceptance-results.json')
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'Missing current suite report'
+        Assert-Equal (Get-FixtureHash $root 'tests/current-validation.json') $before
+    }
+    Test-Case 'A stale supplemental source binding cannot be hidden by collecting fresh totals' {
+        $root=New-Fixture;$report=Read-FixtureJson $root 'tests/acceptance-results.json';$report.Sources[0].Sha256='a'*64
+        Write-FixtureJson (Join-Path $root 'tests/acceptance-results.json') $report
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'Source changed since validation'
+    }
+    Test-Case 'Failed supplemental checks prevent a qualifying validation report' {
+        $root=New-Fixture;$report=Read-FixtureJson $root 'tests/acceptance-results.json';$report.Tests[0].Result='FAIL';$report.Passed=0;$report.Failed=1
+        Write-FixtureJson (Join-Path $root 'tests/acceptance-results.json') $report
+        Assert-Throws { & (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace } 'Unsuccessful validation suite'
+    }
+    Test-Case 'Supplemental evidence cannot be omitted while its source still ships' {
+        $root=New-Fixture;Update-FixtureEvidence $root {param($e) $e.SupplementalSuites=@()}
+        Assert-Throws { Invoke-Verify $root } 'supplemental validation suites are required'
+    }
+    Test-Case 'Combined validation totals cannot disagree with their report groups' {
+        $root=New-Fixture;Update-FixtureEvidence $root {param($e) $e.Totals.Passed++}
+        Assert-Throws { Invoke-Verify $root } 'Validation totals disagree'
+    }
+    Test-Case 'An explicit null result cannot be treated as an absent optional success field' {
+        $report=[pscustomobject]@{Passed=1;Failed=0;Tests=@([pscustomobject]@{Test='Example';Passed=$true;Result=$null})}
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Probe'} 'Unsuccessful test record'
+    }
+    Test-Case 'An explicit null skipped count cannot be silently treated as zero' {
+        $report=[pscustomobject]@{Passed=1;Failed=0;Skipped=$null;Tests=@([pscustomobject]@{Test='Example';Passed=$true})}
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Probe'} 'Invalid integer count'
+    }
+    Test-Case 'A singleton object cannot impersonate a JSON test array' {
+        $report=[pscustomobject]@{Passed=1;Failed=0;Tests=[pscustomobject]@{Test='Example';Passed=$true}}
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Probe'} 'explicit JSON array'
+    }
+    Test-Case 'A failed report-level success flag cannot coexist with all-pass counters' {
+        $report=[pscustomobject]@{Success=$false;Passed=1;Failed=0;Tests=@([pscustomobject]@{Test='Example';Passed=$true})}
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Probe'} 'success flag disagrees'
+    }
+    Test-Case 'A portable suite cannot promote itself to native Windows acceptance' {
+        $report=[pscustomobject]@{NativeWindowsAcceptance='PASS';Passed=1;Failed=0;Tests=@([pscustomobject]@{Test='Example';Passed=$true})}
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Probe'} 'cannot assert native Windows acceptance'
+    }
+    Test-Case 'Unexecuted TLS records cannot disappear behind unrelated skipped tests' {
+        $root=New-Fixture;$report=Read-FixtureJson $root 'tests/proxy-helper-results.json'
+        $report.Tests=@($report.Tests | Where-Object {(Get-GephPackageProperty $_ 'Name') -notin $script:TlsCaseNames})
+        $report.Tests+=@([pscustomobject]@{Name='Unrelated synthetic skip';Result='SKIP';Reason='Unavailable.'})
+        $report.Total=$report.Tests.Count;$report.Passed=1;$report.Skipped=1;$report.tlsTrustCases=$false
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Network'} 'TLS case omitted'
+    }
+    Test-Case 'Unavailable TLS trust scenarios are explicit skips while timeout still executes' {
+        $root=New-Fixture;$report=Read-FixtureJson $root 'tests/proxy-helper-results.json'
+        foreach ($test in $report.Tests) {if ((Get-GephPackageProperty $test 'Name') -in $script:TlsTrustCaseNames) {$test.Result='SKIP';$test.Detail='Synthetic unsupported trust fixture.'}}
+        $report.Passed-=$script:TlsTrustCaseNames.Count;$report.Skipped=$script:TlsTrustCaseNames.Count;$report.tlsTrustCases=$false
+        Write-FixtureJson (Join-Path $root 'tests/proxy-helper-results.json') $report
+        $collected=& (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace
+        Assert-Equal $collected.RequiredTotals.Skipped $script:TlsTrustCaseNames.Count;Assert-Equal $collected.CoverageComplete $false
+        Add-FixtureQualification $root;Assert-Equal (Invoke-Verify $root).Skipped $script:TlsTrustCaseNames.Count
+    }
+    Test-Case 'A TLS trust limitation cannot excuse an unexecuted handshake timeout' {
+        $root=New-Fixture;$report=Read-FixtureJson $root 'tests/proxy-helper-results.json'
+        foreach ($test in $report.Tests) {if ((Get-GephPackageProperty $test 'Name') -in $script:TlsCaseNames) {$test.Result='SKIP';$test.Detail='Synthetic overbroad TLS skip.'}}
+        $report.Passed-=$script:TlsCaseNames.Count;$report.Skipped=$script:TlsCaseNames.Count;$report.tlsTrustCases=$false;$report.tlsTimeoutCaseExecuted=$false
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Network'} 'TLS timeout must execute'
+    }
+    Test-Case 'TLS declarations cannot duplicate a case while omitting another' {
+        $root=New-Fixture;$report=Read-FixtureJson $root 'tests/proxy-helper-results.json';$report.declaredTlsCases[1]=$report.declaredTlsCases[0]
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Network'} 'duplicate declared TLS case'
+    }
+    Test-Case 'Unrelated skips cannot hide missing symbolic-link cases' {
+        $root=New-Fixture;$report=Read-FixtureJson $root 'tests/package-results.json'
+        $report.Tests=@($report.Tests | Where-Object {$_.Test -notin $script:LinkCaseNames})
+        $report.Tests+=@([pscustomobject]@{Test='Unrelated synthetic skip';Result='SKIP';Detail='Unavailable.'})
+        $report.Total=$report.Tests.Count;$report.Passed=1;$report.Skipped=1;$report.SymbolicLinkCasesExecuted=$false
+        Assert-Throws {Get-GephPackageSuiteSummary $report 'Package'} 'Symbolic-link case omitted'
+    }
+    Test-Case 'The executing harness must match the hash it reports before importing candidate code' {
+        $root=New-Fixture;$marker=Join-Path $script:TestRoot 'candidate-helper-executed.txt'
+        [IO.File]::AppendAllText((Join-Path $root 'tests/Package.Tests.ps1'),"`n# Deliberately different target harness.")
+        [IO.File]::WriteAllText((Join-Path $root 'tests/Package.Common.ps1'),("[IO.File]::WriteAllText('"+$marker.Replace("'","''")+"','executed')"))
+        $process=New-Object Diagnostics.Process
+        try {
+            $process.StartInfo.FileName=(Get-Process -Id $PID).Path
+            $harness=Join-Path $script:InputRoot 'tests/Package.Tests.ps1'
+            # Invoke a file with bound arguments. The old encoded wrapper was
+            # unnecessary and triggered Defender's dropper heuristic. Paths
+            # are quoted as data; they never become PowerShell source text.
+            $process.StartInfo.Arguments='-NoProfile -NonInteractive -File ' +
+                (Quote-WindowsProcessArgument $harness) + ' -PackageDirectory ' +
+                (Quote-WindowsProcessArgument $root)
+            $process.StartInfo.UseShellExecute=$false;$process.StartInfo.CreateNoWindow=$true
+            $process.StartInfo.RedirectStandardOutput=$true;$process.StartInfo.RedirectStandardError=$true
+            $process.StartInfo.EnvironmentVariables['POWERSHELL_TELEMETRY_OPTOUT']='1'
+            $process.StartInfo.EnvironmentVariables['DOTNET_CLI_TELEMETRY_OPTOUT']='1'
+            $process.StartInfo.EnvironmentVariables['POWERSHELL_UPDATECHECK']='Off'
+            [void]$process.Start();$stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit(15000)) {$process.Kill();throw 'Mismatched harness did not reject promptly.'}
+            $diagnostic=$stdout.GetAwaiter().GetResult()+$stderr.GetAwaiter().GetResult()
+            Assert-True ($process.ExitCode -ne 0) 'mismatched harness must fail'
+            Assert-True ($diagnostic -match 'executing package test harness differs') 'identity rejection is reported'
+            Assert-Equal ([IO.File]::Exists($marker)) $false 'candidate helper was not imported'
+        } finally {$process.Dispose()}
+    }
+    Test-Case 'Qualification matches source-bound required and supplemental totals' {
+        $root=New-Fixture;Add-FixtureQualification $root;Assert-Equal (Invoke-Verify $root).Success $true
+    }
+    Test-Case 'Qualification group totals cannot contradict the validated totals' {
+        $root=New-Fixture;$qualification=Read-FixtureJson $root 'QUALIFICATION.json';$qualification.Totals.Passed++
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-FixtureManifest $root
+        Assert-Throws {Invoke-Verify $root} 'Qualification totals disagree: Totals.Passed'
+    }
+    Test-Case 'Qualification cannot hide a supplemental count or claim production acceptance' {
+        $root=New-Fixture;Add-FixtureQualification $root;$qualification=Read-FixtureJson $root 'QUALIFICATION.json'
+        $qualification.PortableSupplementalPassed++;Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-FixtureManifest $root
+        Assert-Throws {Invoke-Verify $root} 'Qualification totals disagree'
+        Add-FixtureQualification $root;$qualification=Read-FixtureJson $root 'QUALIFICATION.json';$qualification.ProductionQualified=$true
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-FixtureManifest $root
+        Assert-Throws {Invoke-Verify $root} 'native production status'
+    }
+    Test-Case 'Qualification must retain current source and supplemental evidence hashes' {
+        $root=New-Fixture;Add-FixtureQualification $root;$qualification=Read-FixtureJson $root 'QUALIFICATION.json';$qualification.Sources[0].Sha256='a'*64
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-FixtureManifest $root
+        Assert-Throws {Invoke-Verify $root} 'Source changed since validation'
+        Add-FixtureQualification $root;$qualification=Read-FixtureJson $root 'QUALIFICATION.json'
+        $qualification.Evidence=@($qualification.Evidence | Where-Object {$_.Path -ne 'tests/acceptance-results.json'})
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification;Refresh-FixtureManifest $root
+        Assert-Throws {Invoke-Verify $root} 'Qualification evidence absent'
+    }
+    Test-Case 'Collecting fresh evidence does not require refreshing its dependent qualification first' {
+        $root=New-Fixture;Add-FixtureQualification $root;$qualification=Read-FixtureJson $root 'QUALIFICATION.json';$qualification.Version='0.0.1'
+        Write-FixtureJson (Join-Path $root 'QUALIFICATION.json') $qualification
+        $collected=& (Join-Path $script:Baseline 'tests/Collect-Validation.ps1') -PackageDirectory $root -Replace
+        Assert-Equal $collected.Suites 5
+        Refresh-FixtureManifest $root;Assert-Throws {Invoke-Verify $root} 'Qualification identity'
+    }
+    # Creating a symbolic link can require Windows Developer Mode/admin. Only link
+    # cases are omitted if the host cannot create one; this is explicitly reported.
+    $linkTarget=Join-Path $script:TestRoot 'link-target'; [void][IO.Directory]::CreateDirectory($linkTarget)
+    $probeLink=Join-Path $script:TestRoot 'link-probe'; $script:LinkAvailable=$false
+    try { $null=New-Item -ItemType SymbolicLink -Path $probeLink -Target $linkTarget -ErrorAction Stop; $script:LinkAvailable=$true }
+    catch { $script:LinkSkipReason=$_.Exception.Message }
+    if ($script:LinkAvailable) {
+        Test-Case 'Build rejects a redirected output ancestor into the source' {
+            $root=New-Fixture; $link=Join-Path $script:TestRoot 'output-link'; $null=New-Item -ItemType SymbolicLink -Path $link -Target $root
+            Assert-Throws { Invoke-Build $root (Join-Path $link 'build') } 'Redirected filesystem path'
+            Assert-Equal ([IO.Directory]::Exists((Join-Path $root 'build'))) $false
+        }
+        Test-Case 'Package verifier rejects redirected source ancestors' {
+            $root=New-Fixture; $link=Join-Path $script:TestRoot 'source-link'; $null=New-Item -ItemType SymbolicLink -Path $link -Target $root
+            Assert-Throws { Invoke-Verify (Join-Path $link '.') } 'Redirected filesystem path'
+        }
+        Test-Case 'Verifier rejects redirected package entries' {
+            $root=New-Fixture; $null=New-Item -ItemType SymbolicLink -Path (Join-Path $root 'linked.txt') -Target (Join-Path $root 'README.md')
+            Assert-Throws { Invoke-Verify $root } 'Redirected package entry'
+        }
+        Test-Case 'Source validator rejects redirected result ancestors' {
+            $root=New-Fixture; Assert-Throws { & (Join-Path $script:Baseline 'tests/Validate-Source.ps1') -PackageDirectory $root -ResultJson (Join-Path $probeLink 'report.json') } 'Redirected filesystem path'
+            Assert-Equal ([IO.File]::Exists((Join-Path $linkTarget 'report.json'))) $false
+        }
+    } else {
+        foreach ($name in @('Build rejects a redirected output ancestor into the source','Package verifier rejects redirected source ancestors','Verifier rejects redirected package entries','Source validator rejects redirected result ancestors')) {
+            $script:Results.Add([pscustomobject]@{Result='BLOCKED_BY_HOST';Test=$name;Detail=$script:LinkSkipReason})
+        }
+    }
+    Test-Case 'Packaging sources remained unchanged throughout their suite' {
+        foreach ($entry in $script:SourceSnapshot) { Assert-Equal (Get-FixtureHash $script:InputRoot $entry.Path) $entry.Sha256 $entry.Path }
+    }
+} finally {
+    Remove-Item -LiteralPath $script:TestRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+$failed=@($script:Results | Where-Object {$_.Result -eq 'FAIL'})
+$skipped=@($script:Results | Where-Object {$_.Result -in @('SKIP','NOT_RUN','BLOCKED_BY_HOST','UNSUPPORTED')})
+$report=[ordered]@{
+    CapturedUtc=[DateTime]::UtcNow.ToString('o'); PowerShellVersion=$PSVersionTable.PSVersion.ToString(); Platform=[Environment]::OSVersion.Platform.ToString()
+    Total=$script:Results.Count; Passed=$script:Results.Count-$failed.Count-$skipped.Count; Failed=$failed.Count; Skipped=$skipped.Count
+    Scope='Portable packaging scripts exercised against isolated synthetic fixtures; no Windows/network/admin acceptance.'
+    Sources=$script:SourceSnapshot; Tests=$script:Results.ToArray(); SymbolicLinkCasesExecuted=$script:LinkAvailable
+}
+if (-not $script:LinkAvailable) { $report.SymbolicLinkCasesNotRun=$script:LinkSkipReason }
+if ($ResultJson) {
+    Assert-GephPackageOutput $script:ReportOutput (Get-GephPackageFullPath $script:InputRoot)
+    Write-GephPackageNewJson $script:ReportOutput $report
+}
+foreach ($failure in $failed) { Write-Output ('FAIL: {0}: {1}' -f $failure.Test,$failure.Detail) }
+Write-Output ('{0} package tests; {1} passed; {2} failed; {3} skipped.' -f $report.Total,$report.Passed,$report.Failed,$report.Skipped)
+if ($failed.Count -gt 0) { exit 1 }
+exit 0

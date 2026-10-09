@@ -1,0 +1,21 @@
+{
+  "Version": "1.5.0",
+  "Binaries": [
+    {
+      "File": "tun2socks-windows-amd64.exe",
+      "Version": "2.7.0-gephtun.3",
+      "Architecture": "AMD64",
+      "Sha256": "6435bf99650b47551b46ca1a7b5ac44ff64fdbdf1b13d3ccb0b8c329a5734e8e",
+      "Source": "third_party/tun2socks-2.7.0-gephtun.3-source.tar.gz",
+      "UpstreamSource": "https://github.com/xjasonlyu/tun2socks/releases/tag/v2.7.0",
+      "BuildProvenance": "DEPENDENCY-VERIFICATION.json"
+    },
+    {
+      "File": "wintun.dll",
+      "Version": "0.14.1",
+      "Architecture": "AMD64",
+      "Sha256": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
+      "Source": "https://www.wintun.net/"
+    }
+  ]
+}

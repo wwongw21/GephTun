@@ -1,0 +1,362 @@
+{
+    "Suite":  "Read-only acceptance collector supplemental checks",
+    "CapturedUtc":  "2026-10-04T21:24:28.5767924Z",
+    "PowerShellVersion":  "5.1.26100.9444",
+    "Platform":  "Win32NT",
+    "Total":  66,
+    "Passed":  65,
+    "Failed":  0,
+    "Skipped":  1,
+    "NativeWindowsAcceptance":  "NOT_RUN",
+    "Scope":  "Extracted production comparison/read functions, real temporary file locking/replacement, static command audit and isolated negative collector fixture. No native Windows providers, network mutations or live acceptance.",
+    "Sources":  [
+                    {
+                        "Path":  "tests/Collect-WindowsAcceptance.ps1",
+                        "Sha256":  "7eb7bf89c8c6a7ff51383c97f0095667ed4e9d25d81e2bcf5e48d7b82521ebea"
+                    },
+                    {
+                        "Path":  "tests/Test-NrptConflict.ps1",
+                        "Sha256":  "d3867f80bab202c6ec99e692bdfa43ff3cb609b25bb0f5df52427803273f5a55"
+                    },
+                    {
+                        "Path":  "tests/Acceptance.Tests.ps1",
+                        "Sha256":  "4881412ff9515880a972b4d916121e26c14c93231cc50888fa2b9f1490c63edb"
+                    },
+                    {
+                        "Path":  "tests/Package.Common.ps1",
+                        "Sha256":  "ff0fe496ac116088460f7204172d07d089b298eece60ed863fd862de7a08cbd3"
+                    }
+                ],
+    "Tests":  [
+                  {
+                      "Name":  "NRPT fixture helper cannot be supplied a catch-all namespace",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture refuses a preexisting baseline before mutation",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture uses a scoped namespace and exact cleanup without broad removal",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture rejects a product check that fails for the wrong reason",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture cleans up when the product conflict check throws",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture halts and preserves evidence when exact removal fails",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture cleans a partial add through the own-comment fallback",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture uses the own-comment fallback when identity query fails",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture refuses a blank duplicate Name without an empty removal",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture rejects package-root output before AddRule",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT fixture journals intent and captured identity outside the package",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "NRPT identity checkpoint failure still removes and independently re-queries",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Matching selected facts explicitly retain manual native acceptance scope",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "JSON roundtrip snapshots remain comparable without property-order dependence",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Reused interface index cannot impersonate an original physical adapter",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Changed index with the same GUID correctly follows current DNS mapping",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A virtual adapter at the old index cannot hide missing physical DNS",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Empty physical adapter captures cannot compare as empty equal DNS",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Missing current adapter provider output refuses comparison",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Duplicate physical adapter identities are rejected",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "String hardware flags cannot be mistaken for boolean physical identity",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Changed physical DNS is detected",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Missing DNS server fields cannot silently become empty configuration",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Duplicate DNS family rows cannot hide a missing capture",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Identically missing DNS families cannot claim complete physical DNS restoration",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Firewall profile edits and missing profiles are rejected",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Changed excluded-interface policy cannot hide behind matching profile enablement",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "An absent excluded-interface value cannot impersonate a captured empty array",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Genuine null and empty excluded-interface observations retain equivalent unrestricted meaning",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A snapshot must establish that package identity survived its provider capture",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Package mutation during provider capture is detected against its initial source identity",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Provider observations distinguish absent null empty-string and empty-array values through JSON",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Provider observations retain zero false enum and array values without truthiness conversion",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Firewall rule capture records all seven related provider filters and null Package",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Missing and restricted Package fields remain inspectable without being called unrestricted",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Associated-provider error preserves successful sibling observations and the exact failed query",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Ambiguous associated filter results preserve both rows but mark the capture incomplete",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Store failures stay distinct from a clean machine with no owned rule",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Excess owned-rule diagnostics are bounded and explicitly marked truncated",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Current metadata specifications cover seven filters and security creation parameters",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Declared enum and Boolean parameter types remain distinct through JSON",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Missing native parameters preserve successful sibling metadata and fail the contract",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Command metadata provider failure remains unread rather than missing or accepted",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Present parameters with unreadable declared types cannot claim metadata success",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Ambiguous native command metadata refuses to select an arbitrary contract",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Missing current command metadata prerequisites block baseline comparison",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Same version with different package bytes is rejected",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Different release versions and executing collector tooling are rejected",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Wrong computer and reversed capture order are rejected",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Unknown schemas and non-Recovered stage are rejected",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Failed, unknown and missing prerequisite results cannot produce a comparison pass",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Failed-capture status blocks comparison even if selected fields happen to match",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Provider failure discards partial rows and records a failed capture",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A confirmed empty provider result is distinguishable from a failed read",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "State JSON reader handles absence, valid content, malformed input and limits",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A persistently locked state file remains a failed read after bounded retries",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A directory at the journal path cannot masquerade as an absent session",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "State reads do not depend on cached PowerShell provider attributes",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "An attribute access error remains a failed capture rather than successful absence",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Transient missing attributes recover to a present object without false absence",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "One reparse observation cannot be cleared by a later normal or unavailable attribute read",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Present null, array and scalar journals cannot masquerade as absent state",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Concurrent atomic replacement yields valid state without transient false failures",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "Collector has no network mutation, controller import or remote probe invocation",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  },
+                  {
+                      "Name":  "A missing release and failed providers still produce a saved failure snapshot",
+                      "Result":  "SKIP",
+                      "Detail":  "This specific negative fixture depends on Linux having no Windows providers; all other tests remain portable."
+                  },
+                  {
+                      "Name":  "Acceptance tooling and collector sources remained unchanged during the suite",
+                      "Result":  "PASS",
+                      "Detail":  ""
+                  }
+              ]
+}

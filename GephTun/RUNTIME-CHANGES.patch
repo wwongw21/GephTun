@@ -1,0 +1,2087 @@
+--- /dev/null
++++ b/Emergency-Unlock-GephTun.ps1
+@@ -0,0 +1,18 @@
++#Requires -Version 5.1
++# Manual escape hatch. No service, scheduled unlock, force-kill or global firewall reset.
++# Requires the local source file but NOT ProgramData, Core, the GUI or a valid journal.
++[CmdletBinding()]
++param([switch]$AllowDirectInternet)
++Set-StrictMode -Version 2.0
++$ErrorActionPreference='Stop'
++try {
++    if (-not $AllowDirectInternet) { throw 'This explicitly removes GephTun blocking. First try normal Disconnect / Recover and Disable protection. To confirm direct internet exposure, run with -AllowDirectInternet.' }
++    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or -not [Environment]::Is64BitProcess) { throw 'Use 64-bit Windows PowerShell as administrator.' }
++    $id=[Security.Principal.WindowsIdentity]::GetCurrent()
++    try { if (-not ([Security.Principal.WindowsPrincipal]::new($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Administrator approval is required.' } }
++    finally {$id.Dispose()}
++    if (-not ('GephTun.Security.WfpController' -as [type])) {Add-Type -Path (Join-Path $PSScriptRoot 'GephTun.Wfp.cs')}
++    [GephTun.Security.WfpController]::Disable($true)
++    [GephTun.Security.WfpController]::Inspect() | ConvertTo-Json
++    Write-Warning 'GephTun WFP blocking is removed. This script does not repair orphaned routes/DNS or delete the recovery journal. Run Disconnect / Recover afterward. No general Windows Firewall policy was reset.'
++} catch {Write-Error $_ -ErrorAction Continue;exit 1}
+--- /dev/null
++++ b/GephTun.Bypasses.ps1
+@@ -0,0 +1,168 @@
++# Bounded, identity-aware bypass registry. No Geph engine patch is claimed.
++# Known endpoints are preloaded BEFORE tunnel diversion; genuinely new endpoints
++# still use the validated observation/retry path because Geph has no supplied pre-dial hook.
++$script:BypassRoutesSnapshot = $null
++$script:BypassAdapters = @{}
++$script:BypassRegistry = @{}
++$script:BypassCache = @{}
++$script:BypassClock = $null
++$script:BypassLogAt = 0.0
++$script:BypassCacheAt = 0.0
++$script:BypassCounters = @{ Added=0; Retired=0; Captured=0; Preloaded=0 }
++
++function Get-GephTunBypassNow {
++    if ($null -eq $script:BypassClock) { $script:BypassClock=[Diagnostics.Stopwatch]::StartNew() }
++    return [double]$script:BypassClock.Elapsed.TotalSeconds
++}
++
++function Get-GephTunBypassKey($Peer) { return ('{0}|{1}|{2}' -f $Peer.Prefix,$Peer.InterfaceIndex,$Peer.NextHop) }
++
++function Test-GephTunCacheAddress([string]$Text) {
++    $address=$null
++    if (-not [Net.IPAddress]::TryParse($Text,[ref]$address) -or [Net.IPAddress]::IsLoopback($address)) { return $false }
++    if ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) {
++        $b=$address.GetAddressBytes()
++        return ($b[0] -gt 0 -and $b[0] -lt 224 -and $b[0] -ne 127 -and
++            -not ($b[0] -eq 169 -and $b[1] -eq 254) -and -not ($b[0] -eq 198 -and $b[1] -in @(18,19)))
++    }
++    return ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6 -and -not $address.IsIPv6LinkLocal -and
++        -not $address.IsIPv6Multicast -and -not $address.IsIPv4MappedToIPv6 -and $address.ToString() -ne '::')
++}
++
++function Get-GephTunBypassCacheIdentity {
++    $path=[string]$script:Session.ProxyProcess.Path
++    $config=Get-GephTunProtectionConfiguration
++    $image=@($config.TrustedImages | Where-Object { [string]::Equals($_.Path,$path,[StringComparison]::OrdinalIgnoreCase) })
++    if ($image.Count -ne 1) { throw 'The bypass cache requires an explicitly approved Geph identity.' }
++    return ($path.ToLowerInvariant()+'|'+$image[0].Sha256.ToLowerInvariant())
++}
++
++function Save-GephTunBypassCache([switch]$Force) {
++    $now=Get-GephTunBypassNow
++    if (-not $Force -and $now-$script:BypassCacheAt -lt 60) { return }
++    $records=@($script:BypassCache.Values | Sort-Object LastSeenUtc -Descending | Select-Object -First 512)
++    $script:BypassCache=@{}
++    foreach ($record in $records) { $script:BypassCache[$record.Address]=$record }
++    Write-GephTunJson (Join-Path (Get-GephTunRoot) 'upstream-cache.json') ([ordered]@{
++        Schema=1; Identity=(Get-GephTunBypassCacheIdentity); Entries=$records
++    })
++    $script:BypassCacheAt=$now
++}
++
++function Initialize-GephTunBypassRegistry {
++    $script:BypassRegistry=@{}; $script:BypassCache=@{}; $script:BypassClock=[Diagnostics.Stopwatch]::StartNew()
++    $script:BypassLogAt=0.0; $script:BypassCacheAt=0.0
++    $script:BypassCounters=@{Added=0;Borrowed=0;Retired=0;Captured=0;Preloaded=0}
++    # Cache corruption is not permission to add routes. Skip the optimization.
++    try {
++        $cache=Read-GephTunJson (Join-Path (Get-GephTunRoot) 'upstream-cache.json')
++        if ($null -eq $cache) { return }
++        if ($cache.Schema -ne 1 -or $cache.Identity -cne (Get-GephTunBypassCacheIdentity) -or @($cache.Entries).Count -gt 512) { return }
++        foreach ($entry in @($cache.Entries)) {
++            if (-not (Test-GephTunCacheAddress ([string]$entry.Address))) { continue }
++            $time=[DateTimeOffset]::Parse([string]$entry.LastSeenUtc)
++            $age=([DateTimeOffset]::UtcNow-$time).TotalHours
++            if ($age -lt 0 -or $age -gt 24) { continue }
++            $ip=[Net.IPAddress]::Parse($entry.Address).ToString()
++            $script:BypassCache[$ip]=[pscustomobject]@{Address=$ip;LastSeenUtc=$time.UtcDateTime.ToString('o')}
++        }
++    } catch { $script:BypassCache=@{}; Write-GephTunLog ('Bypass cache ignored; live observations will be used: '+$_.Exception.Message) }
++}
++
++function Confirm-GephTunBypass($Peer, [switch]$Preloaded) {
++    $key=Get-GephTunBypassKey $Peer
++    $now=Get-GephTunBypassNow
++    $new=-not $script:BypassRegistry.ContainsKey($key)
++    if ($new -and $script:BypassRegistry.Count -ge 512) { throw 'The live Geph bypass registry reached its safety limit. Reconnect rather than accumulating unbounded routes.' }
++    $prefixEntries=@($script:Session.Routes | Where-Object { $_.Kind -eq 'Bypass' -and $_.DestinationPrefix -eq $Peer.Prefix })
++    if (@($prefixEntries | Where-Object { $_.InterfaceIndex -ne $Peer.InterfaceIndex -or $_.NextHop -ne $Peer.NextHop }).Count -gt 0) {
++        Throw-GephTunTransient 'NETWORK_CHANGED' 'A Geph endpoint needs a different physical route; starting a fresh session is safer than mutating the old routing snapshot.'
++    }
++    $adapterKey=[int]$Peer.InterfaceIndex
++    if (-not $script:BypassAdapters.ContainsKey($adapterKey)) {
++        $script:BypassAdapters[$adapterKey]=Get-NetAdapter -InterfaceIndex $Peer.InterfaceIndex -IncludeHidden -ErrorAction Stop
++    }
++    $adapter=$script:BypassAdapters[$adapterKey]
++    if (-not $adapter.HardwareInterface -or $adapter.Status -ne 'Up') { Throw-GephTunTransient 'NETWORK_UNAVAILABLE' 'The Geph bypass physical adapter is unavailable.' }
++    $expected=@($script:Session.OriginalRoutes | Where-Object { $_.InterfaceIndex -eq $Peer.InterfaceIndex -and $_.InterfaceGuid -eq $adapter.InterfaceGuid.ToString() })
++    if ($expected.Count -eq 0) { Throw-GephTunTransient 'NETWORK_CHANGED' 'The Geph bypass adapter no longer matches this session.' }
++    if ($new) {
++        Add-GephTunOwnedRoute $Peer.Prefix $Peer.InterfaceIndex $Peer.NextHop 'Bypass'
++        if ($Preloaded) { $script:BypassCounters.Preloaded++ }
++    }
++    if ($new) { $script:BypassRoutesSnapshot=$null }
++    if ($null -eq $script:BypassRoutesSnapshot) { $script:BypassRoutesSnapshot=@(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop) }
++    $actual=@($script:BypassRoutesSnapshot | Where-Object {
++        $_.DestinationPrefix -eq $Peer.Prefix -and $_.InterfaceIndex -eq $Peer.InterfaceIndex -and $_.NextHop -eq $Peer.NextHop
++    })
++    if ($actual.Count -ne 1) { throw ('The Geph bypass route is missing or ambiguous: '+$Peer.Prefix) }
++    $owned=@($script:Session.Routes | Where-Object { $_.Kind -eq 'Bypass' -and $_.DestinationPrefix -eq $Peer.Prefix })
++    if ($owned.Count -gt 0 -and ([int]$actual[0].RouteMetric -ne [int]$owned[0].RouteMetric -or $owned[0].InterfaceGuid -ne $adapter.InterfaceGuid.ToString())) {
++        throw ('An owned Geph bypass was changed: '+$Peer.Prefix)
++    }
++    if ($new) {
++        if ($owned.Count -eq 1) { $script:BypassCounters.Added++ } else { $script:BypassCounters.Borrowed++ }
++        $script:BypassRegistry[$key]=[pscustomobject]@{Prefix=$Peer.Prefix;InterfaceIndex=[int]$Peer.InterfaceIndex;NextHop=$Peer.NextHop;LastSeen=$now;CapturedAt=-1.0;LastWarning=-60.0;Owned=($owned.Count -eq 1)}
++    }
++    $record=$script:BypassRegistry[$key]
++    if (-not $Preloaded) {
++        $record.LastSeen=$now
++        $ip=$Peer.Prefix.Split('/')[0]
++        if (Test-GephTunCacheAddress $ip) { $script:BypassCache[$ip]=[pscustomobject]@{Address=$ip;LastSeenUtc=[DateTime]::UtcNow.ToString('o')} }
++        if ($Peer.PSObject.Properties['Recovered'] -and $Peer.Recovered) {
++            if ($record.CapturedAt -lt 0) { $record.CapturedAt=$now; $script:BypassCounters.Captured++ }
++            elseif ($now-$record.CapturedAt -ge 15 -and $now-$record.LastWarning -ge 60) {
++                $record.LastWarning=$now
++                Write-GephTunLog ('BypassNeedsAttention: endpoint='+$Peer.Prefix+' remains on a captured socket despite a verified route. Geph must recreate that socket; the wrapper cannot rebind it.')
++            }
++        } else { $record.CapturedAt=-1.0 }
++    }
++}
++
++function Install-GephTunRememberedBypasses {
++    $script:BypassRoutesSnapshot=$null; $script:BypassAdapters=@{}
++    # Only validated IPs from the same approved executable, at most 24 hours old.
++    # Recompute the physical route from THIS session; never persist/reuse a gateway.
++    $remembered=@($script:BypassCache.Values | Sort-Object LastSeenUtc -Descending | Select-Object -First 128)
++    foreach ($entry in $remembered) {
++        Assert-GephTunConnectContinuing
++        $routes=@($script:Session.OriginalRoutes | Where-Object {
++            $_.InterfaceIndex -eq $script:Session.OriginalNetwork.InterfaceIndex -and (Test-GephTunPrefix $entry.Address $_.DestinationPrefix)
++        } | Sort-Object @{Expression={ [int]$_.DestinationPrefix.Split('/')[1] };Descending=$true},Cost)
++        if ($routes.Count -eq 0) { continue }
++        $ip=[Net.IPAddress]::Parse($entry.Address); $bits=128
++        if ($ip.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) { $bits=32 }
++        Confirm-GephTunBypass ([pscustomobject]@{Prefix=$ip.ToString()+'/'+$bits;InterfaceIndex=$routes[0].InterfaceIndex;NextHop=$routes[0].NextHop}) -Preloaded
++    }
++}
++
++function Invoke-GephTunBypassRefresh {
++    $script:BypassRoutesSnapshot=$null; $script:BypassAdapters=@{}
++    $peers=@(Get-GephTunPeerRoutes $script:Session.ProxyProcess)
++    if ($peers.Count -eq 0) { Throw-GephTunTransient 'PEER_MISSING' 'Geph has no observable physical TCP server connection. Waiting within the reconnect budget.' }
++    foreach ($peer in $peers) { Confirm-GephTunBypass $peer }
++    $now=Get-GephTunBypassNow
++    # Do not prune if a peer snapshot failed or was empty. All Geph non-loopback
++    # UDP sockets are rejected by Get-GephTunPeerRouteSnapshot, so untracked UDP
++    # is not silently used as a reason to delete a live transport route.
++    foreach ($key in @($script:BypassRegistry.Keys)) {
++        $record=$script:BypassRegistry[$key]
++        if ($now-$record.LastSeen -lt 300) { continue }
++        $owned=@($script:Session.Routes | Where-Object { $_.Kind -eq 'Bypass' -and $_.DestinationPrefix -eq $record.Prefix -and $_.InterfaceIndex -eq $record.InterfaceIndex -and $_.NextHop -eq $record.NextHop })
++        if ($owned.Count -eq 1) {
++            Remove-GephTunOwnedRoute $owned[0]
++            $script:Session.Routes=@($script:Session.Routes | Where-Object { -not ($_.Kind -eq 'Bypass' -and $_.DestinationPrefix -eq $record.Prefix -and $_.InterfaceIndex -eq $record.InterfaceIndex -and $_.NextHop -eq $record.NextHop) })
++            Save-GephTunSession
++            $script:BypassCounters.Retired++
++        }
++        $script:BypassRegistry.Remove($key) # Never delete a borrowed route.
++    }
++    $allPeers=@($script:BypassRegistry.Values | ForEach-Object { [pscustomobject]@{Prefix=$_.Prefix;InterfaceIndex=$_.InterfaceIndex;NextHop=$_.NextHop} })
++    if ($script:Session.PSObject.Properties['PeerBypasses']) { $script:Session.PeerBypasses=$allPeers }
++    else { $script:Session | Add-Member -NotePropertyName PeerBypasses -NotePropertyValue $allPeers }
++    Save-GephTunBypassCache
++    if ($now-$script:BypassLogAt -ge 30 -and ($script:BypassCounters.Added+$script:BypassCounters.Borrowed+$script:BypassCounters.Retired+$script:BypassCounters.Captured) -gt 0) {
++        Write-GephTunLog ('Geph bypass update: added={0}; preloaded={1}; retired={2}; captured endpoints={3}; tracked={4}; borrowed={5}. Destination routes do not grant other applications direct WFP permission.' -f $script:BypassCounters.Added,$script:BypassCounters.Preloaded,$script:BypassCounters.Retired,$script:BypassCounters.Captured,$script:BypassRegistry.Count,$script:BypassCounters.Borrowed)
++        $script:BypassCounters=@{Added=0;Borrowed=0;Retired=0;Captured=0;Preloaded=0};$script:BypassLogAt=$now
++    }
++}
+--- a/GephTun.Core.psm1
++++ b/GephTun.Core.psm1
+@@ -1,4 +1,4 @@
+-# GephTun 1.4.0 - Windows PowerShell 5.1
++# GephTun 1.5.0 - Windows PowerShell 5.1
+ Set-StrictMode -Version 2.0
+ $ErrorActionPreference = 'Stop'
+ $script:PackageRoot = $PSScriptRoot
+@@ -7,6 +7,8 @@
+ $script:ConnectContext = $null
+ $script:ContainmentSecurityBaseline = $null
+ . (Join-Path $PSScriptRoot 'GephTun.Resilience.ps1')
++. (Join-Path $PSScriptRoot 'GephTun.Protection.ps1')
++. (Join-Path $PSScriptRoot 'GephTun.Bypasses.ps1')
+ 
+ function Assert-GephTunConnectContinuing {
+     Assert-GephTunIntentContinuing
+@@ -351,9 +353,11 @@
+ }
+ 
+ function Set-GephTunStatus([string]$Status, [string]$Message) {
++    if ($Status -eq 'Disconnected' -and $script:ProtectionObserved -eq 'Enabled') { $Message += ' WFP protection remains enabled; direct application internet stays blocked.' }
+     $s = $script:Session
+     $worker = Get-GephTunProcessIdentity $PID
+     $value = [ordered]@{
++        ProtectionState = $script:ProtectionObserved; ProtectionCheckedUtc = $script:ProtectionCheckedUtc
+         Status = $Status; Message = $Message; UpdatedUtc = [DateTime]::UtcNow.ToString('o')
+         ProxyPort = 0; StartedUtc = $null; WorkerPid = $PID
+         WorkerStartUtc = $worker.StartUtc
+@@ -400,7 +404,7 @@
+     return $false
+ }
+ 
+-function Get-GephTunStatus {
++function Get-GephTunSessionStatus {
+     $state = Read-GephTunJson (Join-Path (Get-GephTunRoot) 'status.json')
+     $session = Read-GephTunJson (Join-Path (Get-GephTunRoot) 'session.json')
+     $intent = Get-GephTunConnectionIntent
+@@ -408,7 +412,7 @@
+         if (-not (Test-GephTunProcessIdentity $intent.Worker)) {
+             return [pscustomobject]@{ Status = 'RecoveryRequired'; Message = 'A previous reconnect controller stopped. Choose Disconnect / Recover before reconnecting.'; ProxyPort = 0; WorkerPid = 0; WorkerStartUtc = ''; LogPath = (Join-Path (Get-GephTunRoot) 'logs\GephTun.log') }
+         }
+-        return [pscustomobject]@{ Status = 'Reconnecting'; Message = 'The connection controller is active. Direct internet may be active between sessions. Disconnect cancels retries.'; ProxyPort = $intent.Port; WorkerPid = $intent.Worker.Id; WorkerStartUtc = $intent.Worker.StartUtc; LogPath = (Join-Path (Get-GephTunRoot) 'logs\GephTun.log') }
++        return [pscustomobject]@{ Status = 'Reconnecting'; Message = 'The connection controller is active. WFP protection remains enabled between sessions. Disconnect cancels retries without unlocking.'; ProxyPort = $intent.Port; WorkerPid = $intent.Worker.Id; WorkerStartUtc = $intent.Worker.StartUtc; LogPath = (Join-Path (Get-GephTunRoot) 'logs\GephTun.log') }
+     }
+     if ($null -ne $session -and -not (Test-GephTunProcessIdentity $session.Worker)) {
+         return [pscustomobject]@{ Status = 'RecoveryRequired'; Message = 'A previous session ended unexpectedly. Choose Disconnect / Recover.'; ProxyPort = $session.ProxyPort; WorkerPid = 0; WorkerStartUtc = ''; LogPath = (Join-Path (Get-GephTunRoot) 'logs\GephTun.log') }
+@@ -421,6 +425,15 @@
+     }
+     if ($null -ne $state) { return $state }
+     [pscustomobject]@{ Status = 'Disconnected'; Message = 'Connect Geph in local-proxy mode, then choose Check.'; ProxyPort = 0; WorkerPid = 0; WorkerStartUtc = ''; LogPath = (Join-Path (Get-GephTunRoot) 'logs\GephTun.log') }
++}
++
++function Get-GephTunStatus {
++    $state=Get-GephTunSessionStatus
++    $protection=Get-GephTunProtectionStatus
++    $state | Add-Member -NotePropertyName ProtectionState -NotePropertyValue ([string]$protection.State) -Force
++    $state | Add-Member -NotePropertyName ProtectionCheckedUtc -NotePropertyValue $script:ProtectionCheckedUtc -Force
++    $state | Add-Member -NotePropertyName ProtectionDetail -NotePropertyValue ([string]$protection.Detail) -Force
++    return $state
+ }
+ 
+ function Initialize-GephTunNetworkTypes {
+@@ -477,6 +490,7 @@
+             try {
+                 $identity = Get-GephTunProcessIdentity ([int]$listener.OwningProcess)
+                 $name = [IO.Path]::GetFileNameWithoutExtension($identity.Path)
++                if ($null -ne $script:ProtectionLease) { Assert-GephTunApprovedProxy $identity }
+                 if ($name -notmatch '^geph(?:[-_0-9a-z.]*)$') { throw "Port $candidate belongs to $name, not an identifiable Geph process." }
+                 $details = [GephTun.ProxyProbe]::Test([int]$candidate)
+                 Assert-GephTunConnectContinuing
+@@ -1032,6 +1046,7 @@
+         throw 'The recovery record is invalid. No network changes were attempted.'
+     }
+     Assert-GephTunRecoveryRecord $script:Session
++    Remove-GephTunTunnelPermission
+     try { Set-GephTunStatus 'Disconnecting' "Restoring this session's network changes..." } catch { }
+     $errors = New-Object Collections.Generic.List[string]
+     # Restore ordinary DNS first, while the relay is still alive.
+@@ -1065,7 +1080,8 @@
+         try { Set-GephTunStatus 'RecoveryRequired' $message } catch { }
+         throw $message
+     }
+-    # 1.3.8 (D-009): every owned persistent mutation is gone, so the startup
++    # Session-scoped cleanup only: WFP protection has a separate persistent lifetime.
++    # 1.3.8 (D-009): every session-owned persistent mutation is gone, so the startup
+     # recovery guard must not outlive the session. It is removed only after
+     # all other surfaces succeeded - while any owned rule can still remain,
+     # the guard must stay armed for a restart - and before the journal is
+@@ -1078,10 +1094,12 @@
+     }
+     $journalPath = Join-Path (Get-GephTunRoot) 'session.json'
+     Assert-GephTunPlainPath $journalPath
+-    # All owned effects are gone. File.Delete is idempotent if another recovery
++    # All session diversion effects are gone, but the WFP blocker remains.
++    # File.Delete is idempotent if another recovery
+     # observer already removed the record, but still throws on real I/O denial.
+     [IO.File]::Delete($journalPath)
+     $script:Session = $null
++    Close-GephTunProtectionLease
+     try { Set-GephTunStatus 'Disconnected' 'Disconnected. The network changes made by this session have been removed.' } catch { }
+ }
+ 
+@@ -1156,19 +1174,16 @@
+ 
+ $script:RecoveredBypasses = $null
+ 
+-function Register-GephTunRecoveredBypass([string]$Prefix) {
+-    # Monitoring repeats every second; report each recovered destination once.
+-    if ($null -eq $script:RecoveredBypasses) { $script:RecoveredBypasses = New-Object 'Collections.Generic.HashSet[string]' }
+-    if ($script:RecoveredBypasses.Add($Prefix)) {
+-        try { Write-GephTunLog ('Verified a direct bypass for a Geph server connection captured by the tunnel: ' + $Prefix + '. Waiting for Geph to retry; the next connectivity check will verify traffic.') } catch { }
+-    }
+-}
+-
+ function Get-GephTunPeerRouteSnapshot($ProxyIdentity) {
+     if (-not (Test-GephTunProcessIdentity $ProxyIdentity)) { Throw-GephTunTransient 'PROXY_UNAVAILABLE' 'The Geph process has stopped or restarted. Waiting for the same Geph installation.' }
+     $install = [IO.Path]::GetDirectoryName($ProxyIdentity.Path)
+     $related = @(Get-CimInstance Win32_Process -Filter "Name LIKE 'geph%'" -ErrorAction Stop |
+         Where-Object { $_.ExecutablePath -and [IO.Path]::GetDirectoryName($_.ExecutablePath) -eq $install })
++    if ($null -ne $script:ProtectionLease) {
++        Assert-GephTunApprovedProxy $ProxyIdentity
++        $approved=Get-GephTunProtectionConfiguration
++        $related=@($related | Where-Object { $_.ExecutablePath -in @($approved.TrustedImages | ForEach-Object { $_.Path }) })
++    }
+     $processIds = @([int]$ProxyIdentity.Id) + @($related | ForEach-Object { [int]$_.ProcessId })
+     $udp = @(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {
+         $_.OwningProcess -in $processIds -and -not [Net.IPAddress]::IsLoopback([Net.IPAddress]::Parse($_.LocalAddress))
+@@ -1267,46 +1282,7 @@
+     @($result | Sort-Object Prefix, InterfaceIndex, NextHop -Unique)
+ }
+ 
+-function Update-GephTunBypasses {
+-    $peers = @(Get-GephTunPeerRoutes $script:Session.ProxyProcess)
+-    if ($peers.Count -eq 0) { Throw-GephTunTransient 'PEER_MISSING' 'No established Geph server connection was found. Waiting for Geph to reconnect.' }
+-    # Share read snapshots only within this pass. A busy Geph connection can
+-    # have many peers on one physical adapter; enumerating the entire route
+-    # table and reading that adapter for each peer repeats expensive CIM work.
+-    $activeRoutes = $null
+-    $adapters = @{}
+-    foreach ($peer in $peers) {
+-        $owned = @($script:Session.Routes | Where-Object { $_.DestinationPrefix -eq $peer.Prefix -and $_.InterfaceIndex -eq $peer.InterfaceIndex -and $_.NextHop -eq $peer.NextHop })
+-        if ($owned.Count -eq 0) {
+-            Add-GephTunOwnedRoute $peer.Prefix $peer.InterfaceIndex $peer.NextHop 'Bypass'
+-            # Route creation retains its fresh pre-mutation read and journal.
+-            # Any later verification must observe the result of this mutation.
+-            $activeRoutes = $null
+-            $adapters.Clear()
+-        } else {
+-            $index = [int]$peer.InterfaceIndex
+-            if (-not $adapters.ContainsKey($index)) { $adapters[$index] = Get-NetAdapter -InterfaceIndex $index -ErrorAction Stop }
+-            $adapter = $adapters[$index]
+-            if ($null -eq $activeRoutes) { $activeRoutes = @(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop) }
+-            $actual = @($activeRoutes | Where-Object {
+-                $_.DestinationPrefix -eq $peer.Prefix -and $_.InterfaceIndex -eq $peer.InterfaceIndex -and $_.NextHop -eq $peer.NextHop -and [int]$_.RouteMetric -eq [int]$owned[0].RouteMetric
+-            })
+-            if ($actual.Count -ne 1 -or $adapter.InterfaceGuid.ToString() -ne $owned[0].InterfaceGuid) { throw 'A Geph server bypass route changed. Disconnecting to avoid a routing loop.' }
+-        }
+-        if ($peer.PSObject.Properties['Recovered'] -and $peer.Recovered) {
+-            if ($null -eq $activeRoutes) { $activeRoutes = @(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop) }
+-            $actual = @($activeRoutes | Where-Object {
+-                $_.DestinationPrefix -eq $peer.Prefix -and $_.InterfaceIndex -eq $peer.InterfaceIndex -and $_.NextHop -eq $peer.NextHop
+-            })
+-            if ($actual.Count -ne 1) { throw 'The new Geph server bypass could not be verified.' }
+-            Register-GephTunRecoveredBypass $peer.Prefix
+-        }
+-    }
+-    # Record current verified peers separately from route ownership. A borrowed
+-    # host route is usable without granting permission to remove it on recovery.
+-    if ($script:Session.PSObject.Properties['PeerBypasses']) { $script:Session.PeerBypasses = @($peers) }
+-    else { $script:Session | Add-Member -NotePropertyName PeerBypasses -NotePropertyValue @($peers) }
+-}
++function Update-GephTunBypasses { Invoke-GephTunBypassRefresh }
+ 
+ function Test-GephTunInstalledRoutes {
+     $activeRoutes = @(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop)
+@@ -1427,6 +1403,8 @@
+     $script:ConnectContext = [pscustomobject]@{ Token = $OperationToken; CancelPath = $cancelPath; Owner = $owner; DeadlineUtc = [DateTime]::UtcNow.AddSeconds(120) }
+     try {
+     Assert-GephTunConnectContinuing
++    if ($null -eq $script:ProtectionLease) { Open-GephTunProtectionLease }
++    Assert-GephTunProtection
+     $preflight = Test-GephTunPreflight $Port
+     Assert-GephTunConnectContinuing
+     if ($null -ne $script:ConnectionIntent) {
+@@ -1449,6 +1427,7 @@
+         Routes = @(); DnsTag = 'GephTun:' + $token; DnsPlanned = $false; Containment = $null
+     }
+     $script:RecoveredBypasses = $null
++    Initialize-GephTunBypassRegistry
+     Save-GephTunSession
+     try {
+         Assert-GephTunConnectContinuing
+@@ -1456,7 +1435,9 @@
+         Set-GephTunStatus 'Connecting' 'Checking DNS forwarding and creating the network adapter...'
+         # Bind before changing any routes or DNS policies. A busy port fails cleanly.
+         $script:Relay = [GephTun.SocksDnsRelay]::Start([int]$script:Session.ProxyPort)
++        Install-GephTunRememberedBypasses
+         Update-GephTunBypasses
++        Save-GephTunBypassCache -Force
+         # Contain native IPv6 egress before any traffic is diverted. Geph's local
+         # SOCKS proxy cannot transport IPv6, so IPv6 must never be tunneled or it
+         # could silently bypass Geph once the tunnel routes are installed.
+@@ -1551,6 +1532,7 @@
+             }
+         }
+         Assert-GephTunConnectContinuing
++        Add-GephTunTunnelPermission
+         foreach ($prefix in @('0.0.0.0/1', '128.0.0.0/1')) { Assert-GephTunConnectContinuing; Add-GephTunOwnedRoute $prefix $index '0.0.0.0' 'Tunnel' }
+         Assert-GephTunConnectContinuing
+         $script:Session.DnsPlanned = $true
+@@ -1599,9 +1581,10 @@
+         Test-GephTunDnsPolicy
+         Test-GephTunInstalledRoutes
+         Test-GephTunContainment
++        Assert-GephTunProtection
+         Assert-GephTunConnectContinuing
+         Set-GephTunStatus 'Connected' 'Connected. TCP traffic is routed through Geph; DNS forwarding is active; IPv6 internet egress is contained.'
+-        return [pscustomobject]@{ Success = $true; Message = 'Connected. The tunnel keeps running in the background; Disconnect restores normal networking.'; Details = @{ ProxyPort = $script:Session.ProxyPort; Adapter = $name; Network = $preflight.Network.Alias; Coverage = 'IPv4 TCP and DNS are tunneled through Geph. IPv6 is not tunneled: nonlocal IPv6 unicast, including NAT64 and private/site-local destinations, is blocked by an owned firewall rule except current Geph relay addresses. Loopback, link-local, and multicast remain available. Relay-address exceptions apply to every application. The DNS relay also suppresses AAAA answers. General UDP compatibility is not verified.' } }
++        return [pscustomobject]@{ Success = $true; Message = 'Connected. The tunnel keeps running in the background; Disconnect stops the tunnel but retains WFP protection.'; Details = @{ ProxyPort = $script:Session.ProxyPort; Adapter = $name; Network = $preflight.Network.Alias; Coverage = 'IPv4 TCP and DNS are tunneled through Geph. IPv6 is not tunneled: nonlocal IPv6 unicast, including NAT64 and private/site-local destinations, is blocked by an owned firewall rule except current Geph relay addresses. Loopback and narrowly scoped link-maintenance exceptions remain; ordinary LAN and native IPv6 application traffic are blocked by WFP. WFP physical egress permissions are restricted to approved Geph executables; route exceptions alone do not authorize other applications. The DNS relay also suppresses AAAA answers. General UDP compatibility is not verified.' } }
+     } catch {
+         $reason = $_.Exception.Message
+         $startFailure = $_.Exception
+@@ -1624,6 +1607,7 @@
+ 
+ function Watch-GephTunCurrentSession {
+     $lastProbe = (Get-GephTunHealthClock)
++    $lastProtection = $lastProbe.AddSeconds(-20)
+     $outage = $null
+     $request = Join-Path (Get-GephTunRoot) 'disconnect.json'
+     while ($null -ne $script:Session) {
+@@ -1652,6 +1636,10 @@
+         Test-GephTunContainment
+         Test-GephTunInstalledRoutes
+         Test-GephTunDnsPolicy
++        if (((Get-GephTunHealthClock) - $lastProtection).TotalSeconds -ge 20) {
++            Assert-GephTunProtection
++            $lastProtection=Get-GephTunHealthClock
++        }
+         if ($null -ne $peerFailure) {
+             if ($null -eq $outage) { $outage = (New-GephTunOutageClock) }
+             if ($outage.Elapsed.TotalSeconds -ge 45) { throw $peerFailure }
+@@ -1685,6 +1673,7 @@
+             Test-GephTunDnsPolicy
+             Test-GephTunInstalledRoutes
+             Test-GephTunContainment
++            Assert-GephTunProtection
+             if (-not $probeVerified) {
+                 $relayError = ''
+                 if ($script:Relay.PSObject.Properties['LastError']) { $relayError = [string]$script:Relay.LastError }
+@@ -1787,4 +1776,6 @@
+ Export-ModuleMember -Function Initialize-GephTunStorage, Get-GephTunStatus, Test-GephTunPreflight,
+     Start-GephTunSession, Watch-GephTunSession, Request-GephTunDisconnect, Restore-GephTunSession,
+     Initialize-GephTunConnectionIntent, Clear-GephTunConnectionIntent,
+-    Wait-GephTunRecovery, Get-GephTunLock, Release-GephTunLock, Set-GephTunStatus, Write-GephTunLog, Write-GephTunJson, Get-GephTunRoot, Initialize-GephTunRequestDirectory
++    Wait-GephTunRecovery, Get-GephTunLock, Release-GephTunLock, Set-GephTunStatus, Write-GephTunLog, Write-GephTunJson, Get-GephTunRoot, Initialize-GephTunRequestDirectory,
++    Get-GephTunProtectionStatus, Get-GephTunTransportCandidates, Enable-GephTunProtection, Disable-GephTunProtection,
++    Open-GephTunProtectionLease, Close-GephTunProtectionLease
+--- /dev/null
++++ b/GephTun.Protection.ps1
+@@ -0,0 +1,164 @@
++# GephTun 1.5.0. Dot-sourced by Core. No automatic recovery service.
++$script:ProtectionLease = $null
++$script:ProtectionObserved = 'Unknown'
++$script:ProtectionCheckedUtc = $null
++
++function Initialize-GephTunWfpTypes {
++    if (-not ('GephTun.Security.WfpController' -as [type])) {
++        Add-Type -Path (Join-Path $script:PackageRoot 'GephTun.Wfp.cs') -ErrorAction Stop
++    }
++    [GephTun.Security.WfpController]::AssertLayout()
++}
++
++function Get-GephTunProtectionStatus {
++    try {
++        Initialize-GephTunWfpTypes
++        $result = [GephTun.Security.WfpController]::Inspect()
++        $script:ProtectionObserved = [string]$result.State
++        $script:ProtectionCheckedUtc = [DateTime]::UtcNow.ToString('o')
++        return $result
++    }
++    catch {
++        $script:ProtectionObserved = 'Unknown'
++        $script:ProtectionCheckedUtc = [DateTime]::UtcNow.ToString('o')
++        return [pscustomobject]@{ State='Unknown'; Detail=$_.Exception.Message; PersistentFilters=0; TemporaryFilters=0 }
++    }
++}
++
++function Get-GephTunTransportCandidates {
++    # Discovery only, NOT approval. The GUI shows these exact paths for consent.
++    $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalAddress -in @('127.0.0.1','0.0.0.0') })
++    $processes = @(Get-CimInstance Win32_Process -Filter "Name LIKE 'geph%'" -ErrorAction Stop | Where-Object {
++        $_.ExecutablePath -and ([IO.Path]::GetFileNameWithoutExtension($_.ExecutablePath) -match '^geph(?:[-_0-9a-z.]*)$')
++    })
++    $owners = @($processes | Where-Object { [int]$_.ProcessId -in @($listeners | ForEach-Object { [int]$_.OwningProcess }) })
++    $directories = @($owners | ForEach-Object { [IO.Path]::GetDirectoryName($_.ExecutablePath) } | Sort-Object -Unique)
++    if ($directories.Count -ne 1) { throw 'Start one Geph installation in local-proxy mode first. Its exact executables must be reviewed before enabling protection.' }
++    $paths = @($processes | Where-Object { [IO.Path]::GetDirectoryName($_.ExecutablePath) -eq $directories[0] } | ForEach-Object { [string]$_.ExecutablePath } | Sort-Object -Unique)
++    if ($paths.Count -lt 1 -or $paths.Count -gt 8) { throw 'A bounded Geph executable list could not be identified.' }
++    return $paths
++}
++
++function Get-GephTunProtectionConfiguration {
++    $config = Read-GephTunJson (Join-Path (Get-GephTunRoot) 'protection.json')
++    if ($null -eq $config -or $config.Schema -ne 1 -or @($config.TrustedImages).Count -lt 1 -or @($config.TrustedImages).Count -gt 8) {
++        throw 'Configure the WFP kill switch first using Protection-GephTun.cmd or the tray Enable protection command.'
++    }
++    foreach ($image in @($config.TrustedImages)) {
++        if ($image.Path -isnot [string] -or -not [IO.Path]::IsPathRooted($image.Path) -or $image.Sha256 -cnotmatch '^[a-fA-F0-9]{64}$' -or
++            [IO.Path]::GetFileNameWithoutExtension($image.Path) -notmatch '^geph(?:[-_0-9a-z.]*)$') { throw 'Invalid approved Geph executable record.' }
++    }
++    return $config
++}
++
++function Enable-GephTunProtection([string[]]$GephExecutable, [switch]$AllowBlocking) {
++    if (-not $AllowBlocking) { throw 'Enabling persistent blocking requires explicit confirmation.' }
++    $mutex = Get-GephTunLock
++    try {
++        if (Test-Path -LiteralPath (Join-Path (Get-GephTunRoot) 'session.json')) { throw 'Finish Disconnect / Recover before changing protection.' }
++        $images = @()
++        foreach ($path in @($GephExecutable | Sort-Object -Unique)) {
++            $full = [IO.Path]::GetFullPath($path)
++            Assert-GephTunPlainPath $full
++            if ([IO.Path]::GetFileNameWithoutExtension($full) -notmatch '^geph(?:[-_0-9a-z.]*)$' -or [IO.Path]::GetExtension($full) -ne '.exe') {
++                throw 'Only explicitly reviewed Geph executables may receive transport permissions.'
++            }
++            if (-not [IO.File]::Exists($full)) { throw ('Geph executable is missing: ' + $full) }
++            $images += [pscustomobject]@{ Path=$full; Sha256=(Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToLowerInvariant() }
++        }
++        if ($images.Count -lt 1 -or $images.Count -gt 8) { throw 'Review between one and eight exact Geph executables.' }
++        Initialize-GephTunWfpTypes
++        # Save durable intent before installing filters. A failed install never claims protection.
++        $config = [ordered]@{ Schema=1; Requested='Enabled'; TrustedImages=$images; ApprovedUtc=[DateTime]::UtcNow.ToString('o'); Version='1.5.0' }
++        Write-GephTunJson (Join-Path (Get-GephTunRoot) 'protection.json') $config
++        [GephTun.Security.WfpController]::Enable()
++        $status = Get-GephTunProtectionStatus
++        if ($status.State -ne 'Enabled') { throw ('WFP policy could not be verified: ' + $status.Detail) }
++        Write-GephTunLog 'WFP protection enabled. Disconnect, tray Exit, controller failure and reboot do NOT unlock it. Use Disable protection explicitly for direct internet.'
++        Set-GephTunStatus 'Disconnected' 'Disconnected; WFP protection is enabled. Choose Connect for a protected session, or explicitly Disable protection for direct internet.'
++        return $status
++    } finally { Release-GephTunLock $mutex }
++}
++
++function Disable-GephTunProtection([switch]$AllowDirectInternet) {
++    if (-not $AllowDirectInternet) { throw 'Explicit confirmation to allow direct internet is required.' }
++    # Normal unlock requires completed recovery. No force-kill or blanket firewall reset.
++    Request-GephTunDisconnect
++    $mutex = Get-GephTunLock
++    try {
++        if (Test-Path -LiteralPath (Join-Path (Get-GephTunRoot) 'session.json')) { throw 'Recovery is incomplete; protection was retained.' }
++        Initialize-GephTunWfpTypes
++        [GephTun.Security.WfpController]::Disable($true)
++        $configPath = Join-Path (Get-GephTunRoot) 'protection.json'
++        $config = Read-GephTunJson $configPath
++        if ($null -ne $config) { $config.Requested='Disabled'; Write-GephTunJson $configPath $config }
++        $status = Get-GephTunProtectionStatus
++        if ($status.State -ne 'Disabled') { throw 'The explicit unlock could not be verified.' }
++        Write-GephTunLog 'WFP protection explicitly disabled by the user. Ordinary direct internet is permitted by GephTun.'
++        Set-GephTunStatus 'Disconnected' 'Disconnected; protection explicitly disabled. Ordinary direct internet is allowed.'
++        return $status
++    } finally { Release-GephTunLock $mutex }
++}
++
++function Open-GephTunProtectionLease {
++    if ($null -ne $script:ProtectionLease) { throw 'A WFP permission lease is already active.' }
++    $config = Get-GephTunProtectionConfiguration
++    if ($config.Requested -ne 'Enabled') { throw 'Enable protection before connecting. This version refuses an unprotected tunnel session.' }
++    $status = Get-GephTunProtectionStatus
++    if ($status.State -ne 'Enabled') { throw ('The persistent WFP policy is not verified: ' + $status.Detail) }
++    $images = @($config.TrustedImages | ForEach-Object {
++        Assert-GephTunPlainPath $_.Path
++        $item = New-Object GephTun.Security.TrustedImage
++        $item.Path=[string]$_.Path; $item.Sha256=[string]$_.Sha256; $item
++    })
++    $adapters = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object { $_.HardwareInterface -and $_.Status -eq 'Up' })
++    if ($adapters.Count -eq 0) { Throw-GephTunTransient 'NETWORK_UNAVAILABLE' 'No active physical adapter is available for Geph bootstrap.' }
++    [ulong[]]$luids = @($adapters | ForEach-Object { [GephTun.Security.WfpController]::InterfaceLuid($_.InterfaceGuid.ToString()) })
++    $script:ProtectionLease = [GephTun.Security.WfpController]::OpenLease([GephTun.Security.TrustedImage[]]$images, $luids)
++    $script:ProtectionObserved='Enabled'
++    Write-GephTunLog 'Temporary exact-image Geph TCP permissions opened on verified physical interfaces. The persistent blocker remains installed.'
++}
++
++function Close-GephTunProtectionLease {
++    if ($null -ne $script:ProtectionLease) {
++        $script:ProtectionLease.Dispose()
++        $script:ProtectionLease=$null
++    }
++}
++
++function Remove-GephTunTunnelPermission {
++    if ($null -ne $script:ProtectionLease) {
++        try { $script:ProtectionLease.RevokeTunnel() }
++        catch {
++            $failure=$_.Exception.Message
++            # Losing all temporary permissions is safer than retaining an obsolete tunnel permit.
++            Close-GephTunProtectionLease
++            throw ('Tunnel permission could not be revoked individually; the temporary session was closed. '+$failure)
++        }
++    }
++}
++
++function Add-GephTunTunnelPermission {
++    if ($null -eq $script:ProtectionLease) { throw 'No live WFP permission lease owns the session.' }
++    $adapter=Get-NetAdapter -InterfaceIndex $script:Session.TunnelInterfaceIndex -IncludeHidden -ErrorAction Stop
++    if ($adapter.InterfaceGuid.ToString() -ne $script:Session.TunnelInterfaceGuid) { throw 'The tunnel adapter identity changed before WFP authorization.' }
++    $luid=[GephTun.Security.WfpController]::InterfaceLuid($adapter.InterfaceGuid.ToString())
++    $script:ProtectionLease.AuthorizeTunnel($luid)
++}
++
++function Assert-GephTunProtection {
++    if ($null -eq $script:ProtectionLease) { throw 'WFP permission ownership is missing; the session must stop.' }
++    try { $script:ProtectionLease.Verify(); $script:ProtectionObserved='Enabled'; $script:ProtectionCheckedUtc=[DateTime]::UtcNow.ToString('o') }
++    catch {
++        $script:ProtectionObserved='Unknown'
++        Close-GephTunProtectionLease
++        throw ('WFP protection could not be verified. Temporary permissions were closed; manual attention is required. ' + $_.Exception.Message)
++    }
++}
++
++function Assert-GephTunApprovedProxy($Identity) {
++    $config=Get-GephTunProtectionConfiguration
++    if (@($config.TrustedImages | Where-Object { [string]::Equals($_.Path,$Identity.Path,[StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) {
++        throw 'This Geph proxy executable was not explicitly approved for WFP bootstrap. Review protection configuration before connecting.'
++    }
++}
+--- a/GephTun.Resilience.ps1
++++ b/GephTun.Resilience.ps1
+@@ -1,5 +1,5 @@
+ #Requires -Version 5.1
+-# GephTun 1.4.0. Dot-sourced only by the controller module.
++# GephTun 1.5.0. Dot-sourced only by the controller module.
+ # An intent lives for one Connect worker; it never authorizes unattended boot startup.
+ $script:ConnectionIntent = $null
+ $script:ReconnectBudget = $null
+@@ -164,16 +164,18 @@
+     try {
+         while ($script:ReconnectBudget.Elapsed.TotalSeconds -lt 180 -and $attempts -lt 3) {
+             Assert-GephTunIntentContinuing
+-            Set-GephTunReconnectStatus 'Waiting for a stable physical network and Geph. The previous session is removed; direct internet may be active. Disconnect cancels retries.'
++            Set-GephTunReconnectStatus 'Waiting for a stable physical network and Geph. The previous session is removed; WFP protection remains enabled. Disconnect cancels retries.'
+             try {
+                 $network = Get-GephTunDefaultRoutes
+                 $next = Get-GephTunNetworkFingerprint $network
+                 if ($next -cne $fingerprint) {
++                    Close-GephTunProtectionLease
+                     $fingerprint = $next
+                     Wait-GephTunReconnectDelay 3000
+                     continue
+                 }
+                 # Verify the original Geph installation, not simply any similarly named process.
++                if ($null -eq $script:ProtectionLease) { Open-GephTunProtectionLease }
+                 $proxy = Get-GephTunProxy ([int]$script:ConnectionIntent.Port)
+                 if ($script:ConnectionIntent.ProxyPath -and -not [string]::Equals(
+                     [string]$proxy.Process.Path, [string]$script:ConnectionIntent.ProxyPath, [StringComparison]::OrdinalIgnoreCase)) {
+@@ -182,9 +184,9 @@
+                 Assert-GephTunIntentContinuing
+                 # Geph's own lookup may have blocked while Wi-Fi changed again.
+                 $afterProbe = Get-GephTunNetworkFingerprint (Get-GephTunDefaultRoutes)
+-                if ($afterProbe -cne $fingerprint) { $fingerprint = ''; Wait-GephTunReconnectDelay 3000; continue }
++                if ($afterProbe -cne $fingerprint) { Close-GephTunProtectionLease; $fingerprint = ''; Wait-GephTunReconnectDelay 3000; continue }
+                 $attempts++
+-                Set-GephTunReconnectStatus ('Revalidating a fresh session (attempt {0}/3). Direct internet may be active until Connected is verified.' -f $attempts)
++                Set-GephTunReconnectStatus ('Revalidating a fresh session (attempt {0}/3). WFP continues blocking direct application traffic until the tunnel is verified.' -f $attempts)
+                 $ownerId = 0
+                 if ($null -ne $script:ConnectionIntent.Owner) { $ownerId = [int]$script:ConnectionIntent.Owner.Id }
+                 # Start performs ALL ordinary preflight, identity, hash/signature,
+@@ -201,6 +203,7 @@
+                 if (-not (Test-GephTunRetryableFailure $code)) { throw }
+                 if ($null -ne $script:Session -or (Test-Path -LiteralPath (Join-Path (Get-GephTunRoot) 'session.json'))) { throw }
+                 Write-GephTunLog ('Reconnect waiting [' + $code + ']: ' + $_.Exception.Message)
++                Close-GephTunProtectionLease
+                 $fingerprint = ''
+                 Wait-GephTunReconnectDelay 5000
+             }
+@@ -211,7 +214,10 @@
+         if ((Get-GephTunFailureCode $_) -eq 'CANCELLED') { return $false }
+         throw
+     }
+-    finally { $script:ReconnectBudget = $null }
++    finally {
++        $script:ReconnectBudget = $null
++        if ($null -eq $script:Session) { Close-GephTunProtectionLease }
++    }
+ }
+ 
+ function Get-GephTunPeerRoutes($ProxyIdentity) {
+--- a/GephTun.UI.ps1
++++ b/GephTun.UI.ps1
+@@ -479,6 +479,7 @@
+ $script:CheckButton = New-UiButton 'Chec&k' 'Check the local proxy'
+ $script:ConnectButton = New-UiButton '&Connect' 'Connect GephTun' $true
+ $script:DisconnectButton = New-UiButton '&Disconnect / Recover' 'Disconnect and recover network settings'
++$script:ProtectionButton = New-UiButton '&Protection...' 'Manage WFP protection and explicit direct-internet unlock'
+ $script:LogsButton = New-UiButton 'Open &logs' 'Open the GephTun log folder'
+ $script:LogsButton.Margin = [System.Windows.Forms.Padding]::new(0, 5, 0, 5)
+ $script:CheckButton.TabIndex = 3
+@@ -488,6 +489,7 @@
+ $actions.Controls.Add($script:CheckButton)
+ $actions.Controls.Add($script:ConnectButton)
+ $actions.Controls.Add($script:DisconnectButton)
++$actions.Controls.Add($script:ProtectionButton)
+ $actions.Controls.Add($script:LogsButton)
+ $body.Controls.Add($actions, 0, 3)
+ 
+@@ -511,7 +513,7 @@
+ $script:Activity.AccessibleName = 'GephTun activity log, read only'
+ $script:Activity.TabIndex = 7
+ $body.Controls.Add($script:Activity, 0, 5)
+-$footer = New-UiLabel "IPv4 TCP + DNS; IPv6 internet egress is blocked except for Geph relay paths. UDP varies; no kill switch.`r`nNetwork changes can trigger automatic reconnect; direct internet may be active between sessions. Closing hides to tray; Disconnect or tray Exit cancels retries." 9
++$footer = New-UiLabel "IPv4 TCP + DNS with explicit WFP protection. Test candidate: live Windows leak/reboot validation is still required.`r`nDisconnect and Exit KEEP blocking. Use Protection to explicitly allow direct internet. Automatic crash recovery is not installed." 9
+ $script:FooterLabel = $footer
+ $footer.Margin = [System.Windows.Forms.Padding]::new(0, 12, 0, 0)
+ $footer.ForeColor = $script:Palette.Muted
+@@ -522,8 +524,8 @@
+ $script:Form.Controls.Add($header)
+ $script:toolTips = [System.Windows.Forms.ToolTip]::new()
+ $toolTips.SetToolTip($script:CheckButton, 'Verify that a local SOCKS5 proxy is reachable before connecting.')
+-$toolTips.SetToolTip($script:ConnectButton, 'Start the tunnel using the selected local proxy port.')
+-$toolTips.SetToolTip($script:DisconnectButton, 'Stop the tunnel and restore the network settings saved by GephTun.')
++$toolTips.SetToolTip($script:ConnectButton, 'Start a protected tunnel. Enable WFP protection first using Protection...')
++$toolTips.SetToolTip($script:DisconnectButton, 'Stop the tunnel and restore session settings. WFP blocking stays enabled until explicitly disabled.')
+ $toolTips.SetToolTip($script:LogsButton, $script:LogDirectory)
+ 
+ # Font and all controls now exist; resume one consistent DPI layout.
+@@ -604,7 +606,7 @@
+         $proxyWidth = Get-UiWrapWidth $bodyWidth $script:ProxyCard.Padding.Horizontal
+         foreach ($control in @($script:ProxyTitle, $script:ProxyHint, $script:ProxyOptions)) { Set-UiWrapWidth $control $proxyWidth }
+         Set-UiWrapWidth $script:ActionsPanel $bodyWidth
+-        foreach ($button in @($script:CheckButton, $script:ConnectButton, $script:DisconnectButton, $script:LogsButton)) {
++        foreach ($button in @($script:CheckButton, $script:ConnectButton, $script:DisconnectButton, $script:ProtectionButton, $script:LogsButton)) {
+             Set-UiWrapWidth $button (Get-UiWrapWidth $bodyWidth $button.Margin.Horizontal)
+         }
+         # A text-only font change must still leave room for a five-digit port
+@@ -677,7 +679,8 @@
+ $script:TrayConnectItem = [System.Windows.Forms.ToolStripMenuItem]::new('&Connect')
+ $script:TrayDisconnectItem = [System.Windows.Forms.ToolStripMenuItem]::new('&Disconnect / Recover')
+ $script:TrayLogsItem = [System.Windows.Forms.ToolStripMenuItem]::new('Open &logs')
+-$script:TrayExitItem = [System.Windows.Forms.ToolStripMenuItem]::new('E&xit')
++$script:TrayExitItem = [System.Windows.Forms.ToolStripMenuItem]::new('E&xit (keep protection)')
++$script:TrayProtectionItem = [System.Windows.Forms.ToolStripMenuItem]::new('&Protection / explicit unlock...')
+ $script:TrayMenu = [System.Windows.Forms.ContextMenuStrip]::new()
+ [void]$script:TrayMenu.Items.Add($script:TrayOpenItem)
+ [void]$script:TrayMenu.Items.Add([System.Windows.Forms.ToolStripSeparator]::new())
+@@ -685,6 +688,7 @@
+ [void]$script:TrayMenu.Items.Add($script:TrayDisconnectItem)
+ [void]$script:TrayMenu.Items.Add([System.Windows.Forms.ToolStripSeparator]::new())
+ [void]$script:TrayMenu.Items.Add($script:TrayLogsItem)
++[void]$script:TrayMenu.Items.Add($script:TrayProtectionItem)
+ [void]$script:TrayMenu.Items.Add([System.Windows.Forms.ToolStripSeparator]::new())
+ [void]$script:TrayMenu.Items.Add($script:TrayExitItem)
+ $script:TrayIcon = [System.Windows.Forms.NotifyIcon]::new()
+@@ -840,7 +844,8 @@
+     $script:StatusTitle.Text = $titleText
+     $script:StatusTitle.ForeColor = $color
+     $script:StatusDot.ForeColor = $color
+-    $script:StatusMessage.Text = $Message
++    $protectionLabel=[string](Get-StateProperty $State 'ProtectionState' 'Unknown')
++    $script:StatusMessage.Text = $Message + ' [WFP policy: ' + $protectionLabel + '; see Protection for a fresh check.]'
+     $toolTips.SetToolTip($script:StatusMessage, $Message)
+     $port = Get-StateProperty $State 'ProxyPort' 0
+     $detail = 'Local SOCKS5 proxy on 127.0.0.1'
+@@ -971,7 +976,7 @@
+         }
+         if ($status -eq 'Disconnected' -and [IO.File]::Exists($script:IntentPath)) {
+             $status = 'Reconnecting'
+-            $message = 'The connection controller is still active. Direct internet may be active between sessions. Disconnect cancels retries.'
++            $message = 'The connection controller is still active. WFP blocking remains installed between sessions. Disconnect cancels retries.'
+         }
+         if ($status -in @('Connected', 'Connecting', 'Reconnecting', 'Disconnecting') -and -not (Test-WorkerIdentity $state)) {
+             $status = 'RecoveryRequired'
+@@ -1021,6 +1026,15 @@
+             Add-Activity ('State read error: ' + $errorMessage) 'Error'
+         }
+     }
++}
++
++function Open-ProtectionWindow {
++    try {
++        $scriptPath=Join-Path $script:InstallDirectory 'Protection-GephTun.ps1'
++        $arguments=@('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-Sta','-File',(ConvertTo-ProcessArgument $scriptPath),'-Action','Show')
++        $child=Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -PassThru
++        $child.Dispose()
++    } catch { Add-Activity ('Could not open protection controls: '+$_.Exception.Message) 'Error' }
+ }
+ 
+ function Get-SelectedProxyPort {
+@@ -1393,6 +1407,7 @@
+     $script:CheckButton.Add_Click({ Start-WorkerAction 'Check' })
+     $script:ConnectButton.Add_Click({ Start-WorkerAction 'Connect' })
+     $script:DisconnectButton.Add_Click({ Start-WorkerAction 'Disconnect' })
++    $script:ProtectionButton.Add_Click({ Open-ProtectionWindow })
+     $script:LogsButton.Add_Click({ Open-LogFolder })
+ }
+ 
+@@ -1420,6 +1435,7 @@
+     $script:TrayConnectItem.Add_Click({ Start-WorkerAction 'Connect' })
+     $script:TrayDisconnectItem.Add_Click({ Start-WorkerAction 'Disconnect' })
+     $script:TrayLogsItem.Add_Click({ Open-LogFolder })
++    $script:TrayProtectionItem.Add_Click({ Open-ProtectionWindow })
+     $script:TrayExitItem.Add_Click({ Request-AppExit })
+ }
+ 
+--- /dev/null
++++ b/GephTun.Wfp.cs
+@@ -0,0 +1,466 @@
++// GephTun 1.5.0. Windows x64 / .NET Framework 4.x. No service or callout driver.
++// Persistent deny policy is independent of this process. Temporary permissions
++// use a DYNAMIC WFP session: process death removes permissions, NOT protection.
++// SDK references and threat/scope limits: docs/WFP-DESIGN.md.
++using System;
++using System.Collections.Generic;
++using System.ComponentModel;
++using System.IO;
++using System.Linq;
++using System.Net;
++using System.Runtime.InteropServices;
++using System.Security.Cryptography;
++using System.Text;
++
++namespace GephTun.Security
++{
++    public sealed class WfpStatus
++    {
++        public string State { get; set; }
++        public int PersistentFilters { get; set; }
++        public int TemporaryFilters { get; set; }
++        public string Detail { get; set; }
++    }
++    public sealed class TrustedImage
++    {
++        public string Path { get; set; }
++        public string Sha256 { get; set; }
++    }
++    public sealed class PolicyCondition
++    {
++        public Guid Field;
++        public uint Match; // FWP_MATCH_EQUAL=0; FLAGS_ALL_SET=6; FLAGS_NONE_SET=8.
++        public uint Type;
++        public ulong Number;
++        public byte[] Bytes;
++        public string Image;
++        internal PolicyCondition Copy() { return (PolicyCondition)MemberwiseClone(); }
++    }
++    public sealed class PolicyRule
++    {
++        public string Name;
++        public Guid Key, Layer;
++        public bool Permit;
++        public bool Boot;
++        public bool Temporary;
++        public byte Weight;
++        public PolicyCondition[] Conditions;
++    }
++    public static class WfpPolicy
++    {
++        // Private, stable namespace. Used only for GephTun-owned objects.
++        // Providerless filters avoid the documented disabled-on-boot behavior of a
++        // named provider with no auto-start Windows service. Ownership is a private
++        // persistent sublayer + deterministic keys + schema marker; no service is installed.
++        public static readonly Guid Sublayer = new Guid("0c195e67-f506-4f48-b06a-fb056243caaf");
++        public const string Schema = "GephTun.WFP.v1";
++        public static readonly Guid Connect4 = new Guid("c38d57d1-05a7-4c33-904f-7fbceee60e82");
++        public static readonly Guid Connect6 = new Guid("4a72393b-319f-44bc-84c3-ba54dcb3b6b4");
++        public static readonly Guid Accept4 = new Guid("e1cd9fe7-f4b5-4273-96c0-592e487b8650");
++        public static readonly Guid Accept6 = new Guid("a3b42c97-9f04-4672-b87e-cee9c483257f");
++        public static readonly Guid Forward4 = new Guid("a82acc24-4ee1-4ee1-b465-fd1d25cb10a4");
++        public static readonly Guid Forward6 = new Guid("7b964818-19c7-493a-b71f-832c3684d28c");
++        public static readonly Guid OutPacket4 = new Guid("1e5c9fae-8a84-4135-a331-950b54229ecd");
++        public static readonly Guid OutPacket6 = new Guid("a3b3ab6b-3564-488c-9117-f34e82142763");
++        public static readonly Guid InPacket4 = new Guid("c86fd1bf-21cd-497e-a0bb-17425c885c58");
++        public static readonly Guid InPacket6 = new Guid("f52032cb-991c-46e7-971d-2601459a91ca");
++        public static readonly Guid App = new Guid("d78e1e87-8644-4ea5-9437-d809ecefc971");
++        public static readonly Guid Flags = new Guid("632ce23b-5167-435c-86d7-e903684aa80c");
++        public static readonly Guid Protocol = new Guid("3971ef2b-623e-4f9a-8cb1-6e79b806b9a7");
++        public static readonly Guid LocalPort = new Guid("0c1ba1af-5765-453f-af22-a8f791ac775b");
++        public static readonly Guid RemotePort = new Guid("c35a604d-d22b-4e1a-91b4-68f674ee674b");
++        public static readonly Guid RemoteAddress = new Guid("b235ae9a-1d64-49b8-a44c-5ff3d9095045");
++        public static readonly Guid LocalInterface = new Guid("4cd62a49-59c3-4969-b7f3-bda5d32890a4");
++        public static readonly Guid NextHop = new Guid("93ae8f5b-7f6f-4719-98c8-14e97429ef04");
++        public static readonly Guid Arrival = new Guid("618a9b6d-386b-4136-ad6e-b51587cfb1cd");
++        public static PolicyCondition Num(Guid field, uint type, ulong number, uint match)
++        { return new PolicyCondition { Field=field, Type=type, Number=number, Match=match }; }
++        public static PolicyCondition Image(string path)
++        { return new PolicyCondition { Field=App, Type=12, Image=path }; }
++        public static PolicyCondition V6Prefix(string ip, byte prefix)
++        {
++            byte[] address=IPAddress.Parse(ip).GetAddressBytes();
++            if(address.Length!=16 || prefix>128) throw new ArgumentException("Invalid IPv6 prefix.");
++            byte[] bytes=new byte[17]; Buffer.BlockCopy(address,0,bytes,0,16); bytes[16]=prefix;
++            return new PolicyCondition { Field=RemoteAddress, Type=257, Bytes=bytes };
++        }
++        internal static Guid Key(string name)
++        {
++            using(SHA256 sha=SHA256.Create()) {
++                byte[] all=sha.ComputeHash(Encoding.UTF8.GetBytes(Schema+"/"+name));
++                byte[] b=new byte[16]; Buffer.BlockCopy(all,0,b,0,16); return new Guid(b);
++            }
++        }
++        private static PolicyRule Rule(string name, Guid layer, bool permit, byte weight, bool boot, bool temporary, params PolicyCondition[] conditions)
++        { return new PolicyRule {Name=name,Key=Key(name),Layer=layer,Permit=permit,Weight=weight,Boot=boot,Temporary=temporary,Conditions=conditions}; }
++        public static PolicyRule[] Baseline(string systemHost)
++        {
++            if(String.IsNullOrWhiteSpace(systemHost)) throw new ArgumentException("System host path is required.");
++            var rules=new List<PolicyRule>();
++            Guid[] layers={Connect4,Accept4,Connect6,Accept6};
++            for(int i=0;i<layers.Length;i++) {
++                string n="base/"+i;
++                rules.Add(Rule(n+"/deny",layers[i],false,1,false,false));
++                rules.Add(Rule(n+"/loopback",layers[i],true,12,false,false,Num(Flags,3,1,6)));
++                // DHCP is a narrowly scoped maintenance exception, not general svchost internet.
++                ushort local=(ushort)(i<2?68:546), remote=(ushort)(i<2?67:547);
++                var dhcp=new List<PolicyCondition> {Image(systemHost),Num(Protocol,1,17,0),Num(LocalPort,2,local,0),Num(RemotePort,2,remote,0)};
++                if(i<2) rules.Add(Rule(n+"/dhcp4",layers[i],true,10,false,false,dhcp.ToArray()));
++                else {
++                    foreach(string destination in new[]{"fe80::/10","ff02::1:2/128"}) {
++                        string[] parts=destination.Split('/'); var c=new List<PolicyCondition>(dhcp);
++                        c.Add(V6Prefix(parts[0],Byte.Parse(parts[1])));
++                        rules.Add(Rule(n+"/dhcp6/"+destination,layers[i],true,10,false,false,c.ToArray()));
++                    }
++                    // Only link-local neighbor/router discovery. No global ICMPv6 permit.
++                    for(ushort type=133;type<=136;type++) foreach(string destination in new[]{"fe80::/10","ff02::/16"}) {
++                        string[] parts=destination.Split('/');
++                        rules.Add(Rule(n+"/ndp/"+type+"/"+destination,layers[i],true,10,false,false,
++                            Num(Protocol,1,58,0),Num(LocalPort,2,type,0),Num(RemotePort,2,0,0),V6Prefix(parts[0],Byte.Parse(parts[1]))));
++                    }
++                }
++            }
++            rules.Add(Rule("base/forward4",Forward4,false,1,false,false));
++            rules.Add(Rule("base/forward6",Forward6,false,1,false,false));
++            // Boot policy is intentionally stricter: non-loopback IP is blocked until BFE
++            // atomically loads persistent runtime policy. No boot-time transport exceptions.
++            Guid[] boot={OutPacket4,OutPacket6,InPacket4,InPacket6};
++            for(int i=0;i<boot.Length;i++) rules.Add(Rule("boot/"+i,boot[i],false,1,true,false,Num(Flags,3,1,8)));
++            return rules.ToArray();
++        }
++        public static PolicyRule[] Transport(string[] images, ulong[] physicalLuids)
++        {
++            if(images==null || images.Length<1 || images.Length>8 || physicalLuids==null || physicalLuids.Length<1 || physicalLuids.Length>32)
++                throw new ArgumentException("A bounded explicit transport allow-list and physical interface list are required.");
++            var rules=new List<PolicyRule>();
++            for(int p=0;p<images.Length;p++) foreach(ulong luid in physicalLuids.Distinct()) {
++                if(luid==0) throw new ArgumentException("Zero physical interface LUID.");
++                for(int family=0;family<2;family++) {
++                    Guid layer=family==0?Connect4:Connect6; string n="lease/geph/"+p+"/"+luid+"/"+family;
++                    // The supported wrapper already refuses Geph's non-loopback UDP sockets.
++                    // No generic PowerShell, browser, UDP or destination-only internet permits.
++                    rules.Add(Rule(n+"/out",layer,true,12,false,true,Image(images[p]),Num(Protocol,1,6,0),Num(NextHop,4,luid,0)));
++                    // Next-hop is empty on inbound-triggered ALE reauthorization; restrict the
++                    // alternate to reauthorization AND the actual physical arrival interface.
++                    rules.Add(Rule(n+"/reply",layer,true,12,false,true,Image(images[p]),Num(Protocol,1,6,0),Num(Flags,3,4,6),Num(Arrival,4,luid,0)));
++                }
++            }
++            return rules.ToArray();
++        }
++        public static PolicyRule[] Tunnel(ulong luid)
++        {
++            if(luid==0) throw new ArgumentException("Zero tunnel LUID.");
++            return new[] {
++                Rule("lease/tunnel/out",Connect4,true,8,false,true,Num(Protocol,1,6,0),Num(LocalInterface,4,luid,0),Num(NextHop,4,luid,0)),
++                Rule("lease/tunnel/reply",Connect4,true,8,false,true,Num(Protocol,1,6,0),Num(LocalInterface,4,luid,0),Num(Flags,3,4,6),Num(Arrival,4,luid,0))
++            };
++        }
++    }
++
++    // All native structures are x64 SDK layouts. Guarded by AssertLayout before API use.
++    [StructLayout(LayoutKind.Sequential)] internal struct Display { public IntPtr Name,Description; }
++    [StructLayout(LayoutKind.Sequential)] internal struct Blob { public uint Size; public IntPtr Data; }
++    [StructLayout(LayoutKind.Explicit,Size=16)] internal struct Value {
++        [FieldOffset(0)] public uint Type;
++        [FieldOffset(8)] public byte U8;
++        [FieldOffset(8)] public ushort U16;
++        [FieldOffset(8)] public uint U32;
++        [FieldOffset(8)] public IntPtr Pointer;
++    }
++    [StructLayout(LayoutKind.Sequential)] internal struct Condition { public Guid Field; public uint Match; public Value Value; }
++    [StructLayout(LayoutKind.Sequential)] internal struct ActionData { public uint Type; public Guid FilterType; }
++    [StructLayout(LayoutKind.Explicit,Size=16)] internal struct Context { [FieldOffset(0)] public ulong Raw; [FieldOffset(0)] public Guid Key; }
++    [StructLayout(LayoutKind.Sequential)] internal struct Filter {
++        public Guid Key; public Display Display; public uint Flags; public IntPtr Provider; public Blob Data;
++        public Guid Layer,Sublayer; public Value Weight; public uint Count; public IntPtr Conditions;
++        public ActionData Action; public Context Context; public IntPtr Reserved; public ulong Id; public Value EffectiveWeight;
++    }
++    [StructLayout(LayoutKind.Sequential)] internal struct SublayerData { public Guid Key; public Display Display; public uint Flags; public IntPtr Provider; public Blob Data; public ushort Weight; }
++    [StructLayout(LayoutKind.Sequential)] internal struct SessionData { public Guid Key; public Display Display; public uint Flags,Timeout,ProcessId; public IntPtr Sid,UserName; public int KernelMode; }
++    [StructLayout(LayoutKind.Sequential)] internal struct EnumTemplate { public IntPtr Provider; public Guid Layer; public uint EnumType,Flags; public IntPtr Context; public uint Count; public IntPtr Conditions; public uint ActionMask; public IntPtr Callout; }
++    internal sealed class Arena : IDisposable {
++        private readonly List<IntPtr> blocks=new List<IntPtr>();
++        public IntPtr Alloc(int size) { IntPtr p=Marshal.AllocHGlobal(size); blocks.Add(p); for(int i=0;i<size;i++) Marshal.WriteByte(p,i,0); return p; }
++        public IntPtr Bytes(byte[] value) { IntPtr p=Alloc(Math.Max(1,value.Length)); Marshal.Copy(value,0,p,value.Length); return p; }
++        public IntPtr Text(string value) { if(value==null)return IntPtr.Zero; return Bytes(Encoding.Unicode.GetBytes(value+"\0")); }
++        public IntPtr Struct<T>(T value) where T:struct { IntPtr p=Alloc(Marshal.SizeOf(typeof(T))); Marshal.StructureToPtr(value,p,false); return p; }
++        public void Dispose() { for(int i=blocks.Count-1;i>=0;i--) Marshal.FreeHGlobal(blocks[i]); blocks.Clear(); }
++    }
++    internal static class Native {
++        [DllImport("fwpuclnt.dll",CharSet=CharSet.Unicode)] internal static extern uint FwpmEngineOpen0(string server,uint auth,IntPtr identity,IntPtr session,out IntPtr engine);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmEngineClose0(IntPtr engine);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmTransactionBegin0(IntPtr engine,uint flags);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmTransactionCommit0(IntPtr engine);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmTransactionAbort0(IntPtr engine);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmSubLayerAdd0(IntPtr engine,ref SublayerData layer,IntPtr sd);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmSubLayerGetByKey0(IntPtr engine,ref Guid key,out IntPtr layer);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmSubLayerDeleteByKey0(IntPtr engine,ref Guid key);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmFilterAdd0(IntPtr engine,ref Filter filter,IntPtr sd,out ulong id);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmFilterDeleteByKey0(IntPtr engine,ref Guid key);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmFilterCreateEnumHandle0(IntPtr engine,IntPtr template,out IntPtr handle);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmFilterEnum0(IntPtr engine,IntPtr handle,uint requested,out IntPtr entries,out uint count);
++        [DllImport("fwpuclnt.dll")] internal static extern uint FwpmFilterDestroyEnumHandle0(IntPtr engine,IntPtr handle);
++        [DllImport("fwpuclnt.dll")] internal static extern void FwpmFreeMemory0(ref IntPtr memory);
++        [DllImport("fwpuclnt.dll",CharSet=CharSet.Unicode)] internal static extern uint FwpmGetAppIdFromFileName0(string file,out IntPtr blob);
++        [DllImport("iphlpapi.dll")] internal static extern uint ConvertInterfaceGuidToLuid(ref Guid guid,out ulong luid);
++        [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string value,uint revision,out IntPtr sd,out uint size);
++        [DllImport("kernel32.dll")] internal static extern IntPtr LocalFree(IntPtr memory);
++    }
++    internal sealed class Observed {
++        internal Filter Filter;
++        internal string Name,Signature;
++    }
++    internal sealed class Engine : IDisposable {
++        internal IntPtr Handle;
++        internal Engine(bool dynamic) {
++            WfpController.AssertLayout();
++            if(Environment.OSVersion.Platform!=PlatformID.Win32NT) throw new PlatformNotSupportedException("WFP requires Windows x64.");
++            using(var a=new Arena()) {
++                SessionData s=new SessionData { Key=Guid.NewGuid(),Display=new Display {Name=a.Text("GephTun WFP "+(dynamic?"temporary permissions":"policy management"))},Flags=dynamic?1U:0U,Timeout=5000 };
++                Check(Native.FwpmEngineOpen0(null,10,IntPtr.Zero,a.Struct(s),out Handle),"open WFP");
++            }
++        }
++        internal static void Check(uint code,string operation) { if(code!=0)throw new InvalidOperationException(operation+" failed: 0x"+code.ToString("X8")+". Protection was not deliberately disabled."); }
++        internal void Transaction(System.Action action) {
++            Check(Native.FwpmTransactionBegin0(Handle,0),"begin WFP transaction"); bool committed=false;
++            try { action(); Check(Native.FwpmTransactionCommit0(Handle),"commit WFP transaction"); committed=true; }
++            finally { if(!committed) Native.FwpmTransactionAbort0(Handle); }
++        }
++        internal void ReadTransaction(System.Action action) {
++            Check(Native.FwpmTransactionBegin0(Handle,1),"begin WFP read transaction");
++            try { action(); } finally { Native.FwpmTransactionAbort0(Handle); }
++        }
++        public void Dispose() { if(Handle!=IntPtr.Zero) { Check(Native.FwpmEngineClose0(Handle),"close WFP session"); Handle=IntPtr.Zero; } }
++        internal static byte[] AppId(string path) {
++            IntPtr p=IntPtr.Zero;
++            Check(Native.FwpmGetAppIdFromFileName0(path,out p),"resolve WFP application identity");
++            try { Blob b=(Blob)Marshal.PtrToStructure(p,typeof(Blob)); return ReadBytes(b); }
++            finally { if(p!=IntPtr.Zero)Native.FwpmFreeMemory0(ref p); }
++        }
++        internal static byte[] ReadBytes(Blob b) {
++            if(b.Size>65536 || (b.Size>0 && b.Data==IntPtr.Zero))throw new InvalidOperationException("Invalid WFP blob.");
++            byte[] bytes=new byte[b.Size]; if(bytes.Length>0)Marshal.Copy(b.Data,bytes,0,bytes.Length); return bytes;
++        }
++        internal static string Signature(Filter f) {
++            var head=new StringBuilder();
++            head.Append(f.Layer).Append('|').Append(f.Sublayer).Append('|').Append(f.Action.Type).Append('|').Append(f.Flags).Append('|').Append(f.Weight.Type).Append(':').Append(f.Weight.U8);
++            if(f.Count>64 || (f.Count>0 && f.Conditions==IntPtr.Zero))throw new InvalidOperationException("Unexpected WFP condition array.");
++            var terms=new List<string>();
++            for(int i=0;i<f.Count;i++) {
++                Condition c=(Condition)Marshal.PtrToStructure(IntPtr.Add(f.Conditions,i*Marshal.SizeOf(typeof(Condition))),typeof(Condition));
++                var s=new StringBuilder();
++                s.Append(c.Field).Append(':').Append(c.Match).Append(':').Append(c.Value.Type).Append(':');
++                if((c.Value.Type==4 || c.Value.Type==12 || c.Value.Type==257) && c.Value.Pointer==IntPtr.Zero)
++                    throw new InvalidOperationException("Missing indirect WFP condition value.");
++                switch(c.Value.Type) {
++                    case 1:s.Append(c.Value.U8);break; case 2:s.Append(c.Value.U16);break; case 3:s.Append(c.Value.U32);break;
++                    case 4:s.Append(unchecked((ulong)Marshal.ReadInt64(c.Value.Pointer)));break;
++                    case 12:s.Append(Convert.ToBase64String(ReadBytes((Blob)Marshal.PtrToStructure(c.Value.Pointer,typeof(Blob)))));break;
++                    case 257:byte[] prefix=new byte[17];Marshal.Copy(c.Value.Pointer,prefix,0,17);s.Append(Convert.ToBase64String(prefix));break;
++                    default:throw new InvalidOperationException("Unknown condition type in owned WFP policy.");
++                }
++                terms.Add(s.ToString());
++            }
++            // The conjunction is order-independent on the supported Windows versions.
++            // Readback may normalize order; retain every term (including duplicates).
++            terms.Sort(StringComparer.Ordinal);
++            foreach(string term in terms)head.Append('|').Append(term);
++            return head.ToString();
++        }
++        internal static Filter Compile(PolicyRule rule,Arena a) {
++            var conditions=new List<Condition>();
++            foreach(PolicyCondition p in rule.Conditions) {
++                Value v=new Value {Type=p.Type};
++                switch(p.Type) {
++                    case 1:v.U8=checked((byte)p.Number);break;
++                    case 2:v.U16=checked((ushort)p.Number);break;
++                    case 3:v.U32=checked((uint)p.Number);break;
++                    case 4:v.Pointer=a.Struct(p.Number);break; // UINT64 is indirect in FWP_VALUE0.
++                    case 12:byte[] app=AppId(p.Image);v.Pointer=a.Struct(new Blob {Size=(uint)app.Length,Data=a.Bytes(app)});break;
++                    case 257:v.Pointer=a.Bytes(p.Bytes);break;
++                    default:throw new ArgumentException("Unsupported native condition type.");
++                }
++                conditions.Add(new Condition {Field=p.Field,Match=p.Match,Value=v});
++            }
++            IntPtr array=IntPtr.Zero; int stride=Marshal.SizeOf(typeof(Condition));
++            if(conditions.Count>0) { array=a.Alloc(stride*conditions.Count); for(int i=0;i<conditions.Count;i++)Marshal.StructureToPtr(conditions[i],IntPtr.Add(array,i*stride),false); }
++            byte[] marker=Encoding.ASCII.GetBytes(WfpPolicy.Schema);
++            return new Filter {Key=rule.Key,Display=new Display {Name=a.Text("GephTun/"+rule.Name),Description=a.Text("GephTun 1.5.0. Explicit Disable protection removes this owned policy.")},
++                Flags=rule.Temporary?0U:rule.Boot?2U:1U,Provider=IntPtr.Zero,Data=new Blob {Size=(uint)marker.Length,Data=a.Bytes(marker)},
++                Layer=rule.Layer,Sublayer=WfpPolicy.Sublayer,Weight=new Value {Type=1,U8=rule.Weight},Count=(uint)conditions.Count,Conditions=array,
++                Action=new ActionData {Type=rule.Permit?0x1002U:0x1001U}};
++        }
++        internal void Add(PolicyRule rule,IntPtr sd) { using(var a=new Arena()) {Filter f=Compile(rule,a); ulong id;Check(Native.FwpmFilterAdd0(Handle,ref f,sd,out id),"install "+rule.Name);} }
++        internal List<Observed> Enumerate() {
++            var result=new List<Observed>();
++            // Layer keys are explicit; boot and disabled filters MUST be included.
++            Guid[] layers={WfpPolicy.Connect4,WfpPolicy.Connect6,WfpPolicy.Accept4,WfpPolicy.Accept6,
++                WfpPolicy.Forward4,WfpPolicy.Forward6,WfpPolicy.OutPacket4,WfpPolicy.OutPacket6,WfpPolicy.InPacket4,WfpPolicy.InPacket6};
++            foreach(Guid layer in layers)using(var a=new Arena()) {
++                IntPtr handle=IntPtr.Zero;
++                EnumTemplate t=new EnumTemplate {Provider=IntPtr.Zero,Layer=layer,EnumType=1,Flags=0x18,ActionMask=0xffffffff};
++                Check(Native.FwpmFilterCreateEnumHandle0(Handle,a.Struct(t),out handle),"enumerate owned WFP policy");
++                try {
++                    bool complete=false;
++                    for(int page=0;page<128;page++) {
++                        IntPtr entries=IntPtr.Zero;uint count=0;
++                        try {
++                            Check(Native.FwpmFilterEnum0(Handle,handle,128,out entries,out count),"read owned WFP policy");
++                            for(int i=0;i<count;i++) {
++                                Filter f=(Filter)Marshal.PtrToStructure(Marshal.ReadIntPtr(entries,i*IntPtr.Size),typeof(Filter));
++                                if(f.Sublayer!=WfpPolicy.Sublayer)continue;
++                                if(f.Provider!=IntPtr.Zero || Encoding.ASCII.GetString(ReadBytes(f.Data))!=WfpPolicy.Schema)throw new InvalidOperationException("Unexpected object in GephTun WFP namespace; not modified.");
++                                result.Add(new Observed {Filter=f,Name=Marshal.PtrToStringUni(f.Display.Name),Signature=Signature(f)});
++                            }
++                            if(count==0){complete=true;break;}
++                        } finally {if(entries!=IntPtr.Zero)Native.FwpmFreeMemory0(ref entries);}
++                    }
++                    if(!complete)throw new InvalidOperationException("Owned WFP policy exceeds enumeration limit.");
++                } finally {if(handle!=IntPtr.Zero)Native.FwpmFilterDestroyEnumHandle0(Handle,handle);}
++            }
++            return result;
++        }
++        internal bool CheckObjects(bool allowAbsent) {
++            Guid key=WfpPolicy.Sublayer;IntPtr pointer=IntPtr.Zero;
++            uint code=Native.FwpmSubLayerGetByKey0(Handle,ref key,out pointer);
++            try {
++                if(code==0x80320007 && allowAbsent)return false;
++                Check(code,"read GephTun WFP sublayer");
++                SublayerData s=(SublayerData)Marshal.PtrToStructure(pointer,typeof(SublayerData));
++                if(s.Flags!=1 || s.Weight!=0x7000 || s.Provider!=IntPtr.Zero || Encoding.ASCII.GetString(ReadBytes(s.Data))!=WfpPolicy.Schema)
++                    throw new InvalidOperationException("GephTun WFP sublayer has unexpected identity or settings.");
++                return true;
++            } finally {if(pointer!=IntPtr.Zero)Native.FwpmFreeMemory0(ref pointer);}
++        }
++        internal void CreateObjects(IntPtr sd) {
++            using(var a=new Arena()) {
++                byte[] marker=Encoding.ASCII.GetBytes(WfpPolicy.Schema);Blob b=new Blob {Size=(uint)marker.Length,Data=a.Bytes(marker)};
++                SublayerData s=new SublayerData {Key=WfpPolicy.Sublayer,Display=new Display {Name=a.Text("GephTun kill switch v1")},Flags=1,Provider=IntPtr.Zero,Data=b,Weight=0x7000};
++                Check(Native.FwpmSubLayerAdd0(Handle,ref s,sd),"create persistent WFP sublayer");
++            }
++        }
++        internal void VerifyRules(PolicyRule[] expected,bool persistentOnly) {
++            CheckObjects(false); var found=Enumerate();
++            if(persistentOnly)found=found.Where(x=>(x.Filter.Flags&3)!=0).ToList();
++            var expectedKeys=new HashSet<Guid>(expected.Select(r=>r.Key));
++            if(found.Count!=expected.Length || found.Any(x=>!expectedKeys.Contains(x.Filter.Key)))throw new InvalidOperationException("Owned WFP policy count/keys do not match. Protection cannot be verified.");
++            foreach(PolicyRule r in expected)using(var a=new Arena()) {
++                var actual=found.Single(x=>x.Filter.Key==r.Key); var f=Compile(r,a);
++                if(actual.Signature!=Signature(f))throw new InvalidOperationException("Owned WFP policy differs: "+r.Name);
++            }
++        }
++    }
++    internal sealed class AdminSecurity : IDisposable {
++        internal IntPtr Pointer;
++        internal AdminSecurity() {
++            uint length;
++            if(!Native.ConvertStringSecurityDescriptorToSecurityDescriptorW("D:P(A;;GA;;;SY)(A;;GA;;;BA)",1,out Pointer,out length))throw new Win32Exception(Marshal.GetLastWin32Error());
++        }
++        public void Dispose() { if(Pointer!=IntPtr.Zero){Native.LocalFree(Pointer);Pointer=IntPtr.Zero;} }
++    }
++    public static class WfpController
++    {
++        private static string SystemHost { get {return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"svchost.exe");} }
++        public static void AssertLayout() {
++            if(IntPtr.Size!=8)throw new PlatformNotSupportedException("Only x64 WFP layout is supported.");
++            var checks=new Dictionary<Type,int>{{typeof(Value),16},{typeof(Condition),40},{typeof(Filter),200},{typeof(SessionData),72},{typeof(SublayerData),72},{typeof(EnumTemplate),72}};
++            foreach(var p in checks)if(Marshal.SizeOf(p.Key)!=p.Value)throw new InvalidOperationException("Native ABI layout mismatch: "+p.Key.Name);
++            if(Marshal.OffsetOf(typeof(Filter),"Conditions").ToInt32()!=120 || Marshal.OffsetOf(typeof(Filter),"Context").ToInt32()!=152 || Marshal.OffsetOf(typeof(Filter),"Id").ToInt32()!=176)throw new InvalidOperationException("Native filter field offset mismatch.");
++        }
++        public static ulong InterfaceLuid(string guid) {
++            Guid g=new Guid(guid);ulong luid;Engine.Check(Native.ConvertInterfaceGuidToLuid(ref g,out luid),"resolve interface LUID");
++            if(luid==0)throw new InvalidOperationException("Invalid zero interface LUID.");return luid;
++        }
++        public static WfpStatus Inspect() {
++            using(var e=new Engine(false)) {
++                WfpStatus status=null;
++                e.ReadTransaction(delegate {
++                    if(!e.CheckObjects(true)){status=new WfpStatus {State="Disabled",Detail="No GephTun WFP policy is installed."};return;}
++                    e.VerifyRules(WfpPolicy.Baseline(SystemHost),true);var filters=e.Enumerate();
++                    status=new WfpStatus {State="Enabled",PersistentFilters=filters.Count(x=>(x.Filter.Flags&3)!=0),TemporaryFilters=filters.Count(x=>(x.Filter.Flags&3)==0),Detail="Persistent baseline verified. Temporary transport permissions are possible while a controller is running. This is policy verification, not a packet-leak test."};
++                });return status;
++            }
++        }
++        public static void Enable() {
++            using(var e=new Engine(false))using(var security=new AdminSecurity()) {
++                e.Transaction(delegate {
++                    if(e.CheckObjects(true)) {e.VerifyRules(WfpPolicy.Baseline(SystemHost),true);return;}
++                    e.CreateObjects(security.Pointer);
++                    foreach(var r in WfpPolicy.Baseline(SystemHost))e.Add(r,security.Pointer);
++                    e.VerifyRules(WfpPolicy.Baseline(SystemHost),true);
++                });
++            }
++        }
++        public static void Disable(bool explicitConsent) {
++            if(!explicitConsent)throw new InvalidOperationException("Explicit consent to allow direct internet is required.");
++            using(var e=new Engine(false)) {
++                e.Transaction(delegate {
++                    if(!e.CheckObjects(true))return;
++                    var filters=e.Enumerate();
++                    if(filters.Any(f=>(f.Filter.Flags&3)==0))throw new InvalidOperationException("Temporary controller permissions remain. Disconnect / Recover, then disable protection. No filters were removed.");
++                    foreach(var f in filters) {Guid k=f.Filter.Key;Engine.Check(Native.FwpmFilterDeleteByKey0(e.Handle,ref k),"remove owned persistent filter");}
++                    Guid sk=WfpPolicy.Sublayer;
++                    Engine.Check(Native.FwpmSubLayerDeleteByKey0(e.Handle,ref sk),"remove owned sublayer");
++                });
++                if(Inspect().State!="Disabled")throw new InvalidOperationException("Unlock could not be verified.");
++            }
++        }
++        public static WfpLease OpenLease(TrustedImage[] images,ulong[] interfaces) {return new WfpLease(images,interfaces);}
++    }
++    public sealed class WfpLease : IDisposable
++    {
++        private Engine engine;
++        private readonly List<FileStream> heldImages=new List<FileStream>();
++        private readonly List<PolicyRule> rules=new List<PolicyRule>();
++        private bool tunnel;
++        internal WfpLease(TrustedImage[] images,ulong[] interfaces) {
++            if(images==null || images.Length<1 || images.Length>8)throw new ArgumentException("Explicit trusted Geph paths required.");
++            try {
++                if(WfpController.Inspect().State!="Enabled")throw new InvalidOperationException("Enable the kill switch before opening a connection.");
++                var paths=new List<string>();
++                foreach(var image in images) {
++                    string path=Path.GetFullPath(image.Path);
++                    if(!String.Equals(Path.GetExtension(path),".exe",StringComparison.OrdinalIgnoreCase) || image.Sha256==null || image.Sha256.Length!=64)throw new ArgumentException("Invalid trusted image record.");
++                    // Keep the exact image open without write/delete sharing for the lease.
++                    var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);heldImages.Add(stream);
++                    string hash;using(var sha=SHA256.Create())hash=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","");
++                    if(!String.Equals(hash,image.Sha256,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Approved Geph executable changed. Disable/re-enable protection after reviewing the new installation: "+path);
++                    paths.Add(path);
++                }
++                engine=new Engine(true);rules.AddRange(WfpPolicy.Transport(paths.ToArray(),interfaces));
++                using(var sd=new AdminSecurity())engine.Transaction(delegate {foreach(var r in rules)engine.Add(r,sd.Pointer);});
++                Verify();
++            } catch {Dispose();throw;}
++        }
++        public void AuthorizeTunnel(ulong luid) {
++            if(engine==null)throw new ObjectDisposedException("WfpLease");
++            if(tunnel)throw new InvalidOperationException("Tunnel permission is already installed.");
++            var add=WfpPolicy.Tunnel(luid);
++            using(var sd=new AdminSecurity())engine.Transaction(delegate {foreach(var r in add)engine.Add(r,sd.Pointer);});
++            rules.AddRange(add);tunnel=true;Verify();
++        }
++        public void RevokeTunnel() {
++            if(engine==null || !tunnel)return;
++            var remove=rules.Where(r=>r.Name.StartsWith("lease/tunnel/",StringComparison.Ordinal)).ToArray();
++            engine.Transaction(delegate {foreach(var r in remove){Guid k=r.Key;Engine.Check(Native.FwpmFilterDeleteByKey0(engine.Handle,ref k),"revoke tunnel permission");}});
++            rules.RemoveAll(r=>r.Name.StartsWith("lease/tunnel/",StringComparison.Ordinal));tunnel=false;
++        }
++        public void Verify() {
++            if(engine==null)throw new ObjectDisposedException("WfpLease");
++            using(var reader=new Engine(false))reader.ReadTransaction(delegate {
++                reader.VerifyRules(WfpPolicy.Baseline(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"svchost.exe")),true);
++                // Validate EVERY owned temporary filter, including condition values and flags.
++                var all=reader.Enumerate();var observed=all.Where(x=>(x.Filter.Flags&3)==0).ToList();
++                if(observed.Count!=rules.Count)throw new InvalidOperationException("Unexpected temporary WFP policy.");
++                foreach(var r in rules)using(var a=new Arena()) {
++                    var f=observed.SingleOrDefault(x=>x.Filter.Key==r.Key);
++                    if(f==null || f.Signature!=Engine.Signature(Engine.Compile(r,a)))throw new InvalidOperationException("Temporary WFP permission changed: "+r.Name);
++                }
++            });
++        }
++        public void Dispose() {
++            if(engine!=null){engine.Dispose();engine=null;}
++            foreach(var stream in heldImages)stream.Dispose();heldImages.Clear();rules.Clear();tunnel=false;
++        }
++    }
++}
+--- a/GephTun.Worker.ps1
++++ b/GephTun.Worker.ps1
+@@ -49,11 +49,12 @@
+     switch ($Action) {
+         'Status' {
+             $current = Get-GephTunStatus
+-            if ($current.Status -eq 'RecoveryRequired') { Write-GephTunJson (Join-Path (Get-GephTunRoot) 'status.json') $current }
++            # Status is read-only; never publish an independently derived warning over live setup state.
+             Complete-WorkerResult @{ Success = $true; Message = 'Status loaded.'; Details = $current }
+         }
+         'Check' {
+             $lock = Get-GephTunLock
++            if ((Get-GephTunProtectionStatus).State -eq 'Enabled') { Open-GephTunProtectionLease }
+             $check = Test-GephTunPreflight $Port
+             Complete-WorkerResult @{ Success = $true; Message = $check.Message; Details = @{ ProxyPort = $check.Proxy.Port; Network = $check.Network.Alias; ProxyPath = $check.Proxy.Process.Path } }
+         }
+@@ -117,7 +118,11 @@
+             try { Set-GephTunStatus 'RecoveryRequired' ('Connection-intent cleanup needs attention: ' + $_.Exception.Message) } catch { }
+             Write-Error $_ -ErrorAction Continue
+         }
+-        finally { if ($null -ne $lock) { Release-GephTunLock $lock } }
++        finally {
++            try { Close-GephTunProtectionLease }
++            catch { $exitCode=1; Write-Error ('Temporary WFP permission close needs attention: '+$_.Exception.Message) -ErrorAction Continue }
++            finally { if ($null -ne $lock) { Release-GephTunLock $lock } }
++        }
+     }
+ }
+ exit $exitCode
+--- /dev/null
++++ b/Protection-GephTun.cmd
+@@ -0,0 +1,7 @@
++@echo off
++setlocal
++set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
++if exist "%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe" set "PS=%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
++"%PS%" -NoProfile -ExecutionPolicy Bypass -Sta -File "%~dp0Protection-GephTun.ps1" -Action Show
++if errorlevel 1 pause
++endlocal
+--- /dev/null
++++ b/Protection-GephTun.ps1
+@@ -0,0 +1,90 @@
++#Requires -Version 5.1
++[CmdletBinding()]
++param(
++    [ValidateSet('Show','Enable','Disable','Status')][string]$Action='Show',
++    [string[]]$GephExecutable,
++    [switch]$AllowBlocking,
++    [switch]$AllowDirectInternet
++)
++Set-StrictMode -Version 2.0
++$ErrorActionPreference='Stop'
++try {
++    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or -not [Environment]::Is64BitProcess) { throw 'Use 64-bit Windows PowerShell on Windows.' }
++    $id=[Security.Principal.WindowsIdentity]::GetCurrent()
++    try { $admin=([Security.Principal.WindowsPrincipal]::new($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
++    finally { $id.Dispose() }
++    if (-not $admin) {
++        if ($Action -ne 'Show') { throw 'Open Windows PowerShell as administrator for command-line protection changes.' }
++        $child=Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -PassThru -ArgumentList @(
++            '-NoProfile','-ExecutionPolicy','Bypass','-Sta','-File',('"'+$PSCommandPath+'"'),'-Action','Show')
++        $child.Dispose();return
++    }
++    Import-Module (Join-Path $PSScriptRoot 'GephTun.Core.psm1') -Force
++    Initialize-GephTunStorage
++    switch ($Action) {
++        'Status' { Get-GephTunProtectionStatus | ConvertTo-Json -Depth 6; return }
++        'Enable' {
++            if (-not $AllowBlocking) { throw 'Specify -AllowBlocking after reading README.md and retaining Emergency-Unlock-GephTun.ps1 locally.' }
++            if (-not $GephExecutable) { throw 'Supply the exact reviewed executable path(s) with -GephExecutable. The GUI can show running Geph candidates.' }
++            Enable-GephTunProtection -GephExecutable $GephExecutable -AllowBlocking | ConvertTo-Json -Depth 6;return
++        }
++        'Disable' {
++            Disable-GephTunProtection -AllowDirectInternet:$AllowDirectInternet | ConvertTo-Json -Depth 6;return
++        }
++    }
++    Add-Type -AssemblyName System.Windows.Forms
++    Add-Type -AssemblyName System.Drawing
++    [Windows.Forms.Application]::EnableVisualStyles()
++    $form=New-Object Windows.Forms.Form
++    $form.Text='GephTun 1.5.0 - WFP protection (test candidate)'
++    $form.ClientSize=New-Object Drawing.Size(630,360)
++    $form.StartPosition='CenterScreen'
++    $form.AutoScaleMode='Dpi'
++    $text=New-Object Windows.Forms.TextBox
++    $text.Multiline=$true;$text.ReadOnly=$true;$text.ScrollBars='Vertical';$text.Dock='Fill'
++    $text.Font=New-Object Drawing.Font('Segoe UI',10)
++    $panel=New-Object Windows.Forms.FlowLayoutPanel
++    $panel.Dock='Bottom';$panel.Height=88;$panel.Padding=New-Object Windows.Forms.Padding(10);$panel.WrapContents=$true
++    $enable=New-Object Windows.Forms.Button;$enable.Text='Enable protection';$enable.AutoSize=$true
++    $disable=New-Object Windows.Forms.Button;$disable.Text='Disable protection / allow direct internet';$disable.AutoSize=$true
++    $refresh=New-Object Windows.Forms.Button;$refresh.Text='Refresh status';$refresh.AutoSize=$true
++    $close=New-Object Windows.Forms.Button;$close.Text='Close';$close.AutoSize=$true
++    foreach ($button in @($enable,$disable,$refresh,$close)) { [void]$panel.Controls.Add($button) }
++    $form.Controls.Add($text);$form.Controls.Add($panel)
++    $refreshState={
++        $status=Get-GephTunProtectionStatus
++        $text.Text=('WFP policy: '+$status.State+"`r`n"+$status.Detail+"`r`n`r`n"+
++            'Enabling protection blocks ordinary direct internet, LAN access and unsupported traffic. Disconnect and tray Exit do not disable it. Blocking persists across crashes and reboot; automatic crash recovery is NOT installed.'+"`r`n`r`n"+
++            'Connect temporarily permits only the reviewed Geph executables and the verified tunnel path. Outside a live Connect/Check worker, even Geph bootstrap is blocked. Keep this folder and the emergency unlock script.'+"`r`n`r`n"+
++            'This Windows test candidate has not passed live leak/reboot acceptance. Use a disposable VM with local console access first.')
++    }
++    $refresh.Add_Click($refreshState)
++    $close.Add_Click({$form.Close()})
++    $enable.Add_Click({
++        try {
++            $paths=@(Get-GephTunTransportCandidates)
++            $message="The following exact executable paths will be trusted for Geph TCP transport while a controller runs:`r`n`r`n"+($paths -join "`r`n")+
++                "`r`n`r`nEnable persistent blocking? Other internet traffic will stop until GephTun connects. Disconnect, Exit and reboot WILL NOT unlock it. This is an unqualified test candidate."
++            $answer=[Windows.Forms.MessageBox]::Show($form,$message,'Enable WFP protection?',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Warning,[Windows.Forms.MessageBoxDefaultButton]::Button2)
++            if ($answer -ne [Windows.Forms.DialogResult]::Yes) { return }
++            $enable.Enabled=$false;$disable.Enabled=$false
++            Enable-GephTunProtection -GephExecutable $paths -AllowBlocking | Out-Null
++            & $refreshState
++        } catch { [void][Windows.Forms.MessageBox]::Show($form,$_.Exception.Message,'Protection was not confirmed',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) }
++        finally { $enable.Enabled=$true;$disable.Enabled=$true }
++    })
++    $disable.Add_Click({
++        $answer=[Windows.Forms.MessageBox]::Show($form,'Disconnect / Recover, then REMOVE GephTun blocking and allow direct internet? This exposes your ordinary connection.','Explicitly disable protection?',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Warning,[Windows.Forms.MessageBoxDefaultButton]::Button2)
++        if ($answer -ne [Windows.Forms.DialogResult]::Yes) { return }
++        try { $enable.Enabled=$false;$disable.Enabled=$false;Disable-GephTunProtection -AllowDirectInternet | Out-Null;& $refreshState }
++        catch { [void][Windows.Forms.MessageBox]::Show($form,$_.Exception.Message,'Unlock needs attention',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) }
++        finally { $enable.Enabled=$true;$disable.Enabled=$true }
++    })
++    & $refreshState
++    [void]$form.ShowDialog()
++    $form.Dispose()
++} catch {
++    Write-Error $_ -ErrorAction Continue
++    if ($Action -eq 'Show') { try { Add-Type -AssemblyName System.Windows.Forms;[void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'GephTun protection') } catch {} }
++    exit 1
++}
+--- a/Verify-GephTun.ps1
++++ b/Verify-GephTun.ps1
+@@ -22,6 +22,9 @@
+ }
+ if($files.Count -ne $seen.Count+1){throw 'Unlisted files found. Keep logs, outputs and personal files outside the installation.'}
+ foreach($name in @('RELEASE.json','DEPENDENCIES.json','QUALIFICATION.json','tests/current-validation.json','tests/static-results.json',
++    'GephTun.Wfp.cs','GephTun.Protection.ps1','GephTun.Bypasses.ps1',
++    'Protection-GephTun.ps1','Protection-GephTun.cmd','Emergency-Unlock-GephTun.ps1',
++    'tests/WfpPolicy.Tests.ps1','tests/Bypasses.Tests.ps1','tests/Protection.Tests.ps1','tests/Wfp-NativeSmoke.ps1',
+     'GephTun.Core.psm1','GephTun.Resilience.ps1','GephTun.Network.cs','GephTun.Worker.ps1','GephTun.WorkerHost.ps1',
+     'GephTun-BootReconcile.ps1','GephTun.UI.ps1','Launch-GephTun.cmd','Launch-GephTun.ps1','Start-GephTun.cmd','Stop-GephTun.cmd',
+     'Verify-GephTun.ps1','tests/Run-UpdateValidation.ps1','tests/Resilience.Tests.ps1','tests/DnsMandatory.Tests.ps1','tests/BootRecovery.Tests.ps1',
+--- a/tests/BootRecovery.Tests.ps1
++++ b/tests/BootRecovery.Tests.ps1
+@@ -225,7 +225,7 @@
+     $output=Get-GephPackageFullPath $ResultJson
+     Assert-GephPackageOutput $output (Get-GephPackageFullPath (Split-Path -Parent $PSScriptRoot))
+     $failedCount=@($results|Where-Object Result -eq 'FAIL').Count
+-    Write-GephPackageNewJson $output ([ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.4.0';Scope='Actual boot script with isolated filesystem and Windows command doubles; no real boot.';Total=$results.Count;Passed=$results.Count-$failedCount;Failed=$failedCount;Skipped=0;Tests=$results.ToArray()})
++    Write-GephPackageNewJson $output ([ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.5.0';Scope='Actual boot script with isolated filesystem and Windows command doubles; no real boot.';Total=$results.Count;Passed=$results.Count-$failedCount;Failed=$failedCount;Skipped=0;Tests=$results.ToArray()})
+ }
+ if($PassThru){$results.ToArray()}
+ else{
+--- /dev/null
++++ b/tests/Bypasses.Tests.ps1
+@@ -0,0 +1,127 @@
++#Requires -Version 5.1
++# Actual wrapper registry functions with isolated Windows/storage doubles. No OS network changes.
++[CmdletBinding()]
++param([string]$PackageDirectory,[string]$ResultJson)
++Set-StrictMode -Version 2.0
++$ErrorActionPreference='Stop'
++if(-not $PackageDirectory){$PackageDirectory=Split-Path -Parent $PSScriptRoot}
++. (Join-Path $PSScriptRoot 'Package.Common.ps1')
++$results=New-Object 'Collections.Generic.List[object]';$module=$null
++function Assert-True($Value,[string]$Message){if(-not $Value){throw $Message}}
++function New-Fixture {
++    if($null -ne $script:module){Remove-Module $script:module -Force}
++    $script:module=Import-Module (Join-Path $PackageDirectory 'GephTun.Core.psm1') -Force -PassThru -DisableNameChecking
++    & $script:module {
++        $script:F=[pscustomobject]@{Now=0.0;Live=@();Peers=@();Adds=0;Removes=0;Messages=(New-Object 'Collections.Generic.List[string]');Cache=$null;Saved=$null;ReadFail=$false;Guid='wifi';Up=$true;Hardware=$true}
++        $script:Session=[pscustomobject]@{ProxyProcess=[pscustomobject]@{Path='C:\Geph\geph.exe'};Routes=@();OriginalNetwork=[pscustomobject]@{InterfaceIndex=7};OriginalRoutes=@([pscustomobject]@{InterfaceIndex=7;InterfaceGuid='wifi';DestinationPrefix='0.0.0.0/0';NextHop='192.0.2.1';Cost=1})}
++        function script:Get-GephTunRoot {[IO.Path]::GetTempPath()}
++        function script:Get-GephTunBypassNow {$script:F.Now}
++        function script:Get-GephTunProtectionConfiguration {[pscustomobject]@{TrustedImages=@([pscustomobject]@{Path='C:\Geph\geph.exe';Sha256=('a'*64)})}}
++        function script:Read-GephTunJson($Path){$script:F.Cache}
++        function script:Write-GephTunJson($Path,$Object){$script:F.Saved=$Object}
++        function script:Write-GephTunLog($Message){$script:F.Messages.Add($Message)}
++        function script:Save-GephTunSession {}
++        function script:Assert-GephTunConnectContinuing {}
++        function script:Get-NetAdapter { [CmdletBinding()]param($InterfaceIndex,[switch]$IncludeHidden)
++            [pscustomobject]@{InterfaceGuid=$script:F.Guid;Status=$(if($script:F.Up){'Up'}else{'Down'});HardwareInterface=$script:F.Hardware}
++        }
++        function script:Get-NetRoute { [CmdletBinding()]param($PolicyStore)
++            if($script:F.ReadFail){throw 'Injected route read failure'}
++            $script:F.Live
++        }
++        function script:Get-GephTunPeerRoutes($Identity){$script:F.Peers}
++        function script:Add-GephTunOwnedRoute($Prefix,$Index,$Gateway,$Kind){
++            if(@($script:F.Live|Where-Object {$_.DestinationPrefix -eq $Prefix}).Count -eq 0){
++                $route=[pscustomobject]@{DestinationPrefix=$Prefix;InterfaceIndex=$Index;NextHop=$Gateway;Kind=$Kind;InterfaceGuid='wifi';RouteMetric=7}
++                $script:F.Live+= $route;$script:Session.Routes+= $route;$script:F.Adds++
++            }
++        }
++        function script:Remove-GephTunOwnedRoute($Route){
++            $script:F.Removes++
++            $script:F.Live=@($script:F.Live|Where-Object {$_.DestinationPrefix -ne $Route.DestinationPrefix})
++        }
++        function script:New-NetRoute {throw 'Unexpected real network mutation'}
++        function script:Remove-NetRoute {throw 'Unexpected real network mutation'}
++        function script:Set-NetFirewallProfile {throw 'Unexpected real firewall mutation'}
++        function script:Initialize-GephTunWfpTypes {throw 'Unexpected native WFP path'}
++        Initialize-GephTunBypassRegistry
++        $script:BypassAdapters=@{};$script:BypassRoutesSnapshot=$null
++    }
++}
++function Peer([string]$Address='192.0.2.20',[bool]$Captured=$false){[pscustomobject]@{Prefix=($Address+'/32');InterfaceIndex=7;NextHop='192.0.2.1';Recovered=$Captured}}
++function Test-Case($Name,[scriptblock]$Body){
++    New-Fixture
++    try{& $Body;$results.Add([pscustomobject]@{Name=$Name;Result='PASS';Detail=''})}catch{$results.Add([pscustomobject]@{Name=$Name;Result='FAIL';Detail=$_.Exception.Message})}
++}
++try {
++Test-Case 'Repeated snapshots reuse one verified bypass without adding routes or log floods' {
++    $peer=Peer
++    & $module {param($Peer) $script:F.Peers=@($Peer);1..20|ForEach-Object {Invoke-GephTunBypassRefresh}} $peer
++    Assert-True (& $module {$script:F.Adds -eq 1 -and $script:BypassRegistry.Count -eq 1 -and $script:F.Messages.Count -eq 0}) 'Duplicate work or messages.'
++}
++Test-Case 'New endpoints produce one periodic summary instead of per-IP normal warnings' {
++    & $module {param($A,$B)$script:F.Peers=@($A,$B);$script:F.Now=31;Invoke-GephTunBypassRefresh} (Peer) (Peer '192.0.2.21')
++    Assert-True (& $module {$script:F.Adds -eq 2 -and $script:F.Messages.Count -eq 1 -and $script:F.Messages[0] -like 'Geph bypass update:*'}) 'Summary was missing or duplicated.'
++}
++Test-Case 'Persistent captured socket is escalated but warning is rate-limited' {
++    & $module {param($Peer)$script:F.Peers=@($Peer);Invoke-GephTunBypassRefresh;$script:F.Now=16;Invoke-GephTunBypassRefresh;$script:F.Now=17;Invoke-GephTunBypassRefresh} (Peer '192.0.2.20' $true)
++    Assert-True (& $module {@($script:F.Messages|Where-Object {$_ -like 'BypassNeedsAttention:*'}).Count -eq 1}) 'Captured socket escalation incorrect.'
++}
++Test-Case 'Unused owned routes are retired after the quiet period' {
++    & $module {param($A,$B)$script:F.Peers=@($A);Invoke-GephTunBypassRefresh;$script:F.Now=301;$script:F.Peers=@($B);Invoke-GephTunBypassRefresh} (Peer) (Peer '192.0.2.21')
++    Assert-True (& $module {$script:F.Removes -eq 1 -and $script:BypassRegistry.Count -eq 1 -and @($script:Session.Routes).Count -eq 1}) 'Old owned route was not retired.'
++}
++Test-Case 'An empty peer snapshot cannot prune owned routes' {
++    $rejected=& $module {param($Peer)$script:F.Peers=@($Peer);Invoke-GephTunBypassRefresh;$script:F.Now=400;$script:F.Peers=@();try{Invoke-GephTunBypassRefresh;$false}catch{$true}} (Peer)
++    Assert-True $rejected 'Empty peer snapshot accepted.'
++    Assert-True (& $module {$script:F.Removes -eq 0}) 'An unreadable network deleted routes.'
++}
++Test-Case 'Borrowed routes are never removed by retirement' {
++    & $module {param($A,$B)
++        $script:F.Live=@([pscustomobject]@{DestinationPrefix=$A.Prefix;InterfaceIndex=7;NextHop='192.0.2.1';RouteMetric=9})
++        $script:F.Peers=@($A);Invoke-GephTunBypassRefresh;$script:F.Now=301;$script:F.Peers=@($B);Invoke-GephTunBypassRefresh
++    } (Peer) (Peer '192.0.2.21')
++    Assert-True (& $module {$script:F.Removes -eq 0 -and @($script:F.Live|Where-Object DestinationPrefix -eq '192.0.2.20/32').Count -eq 1}) 'Borrowed route was deleted.'
++}
++Test-Case 'Changed owned route metric is rejected, not overwritten' {
++    $rejected=& $module {param($Peer)$script:F.Peers=@($Peer);Invoke-GephTunBypassRefresh
++        $script:F.Live=@([pscustomobject]@{DestinationPrefix=$Peer.Prefix;InterfaceIndex=7;NextHop='192.0.2.1';RouteMetric=44})
++        try{Invoke-GephTunBypassRefresh;$false}catch{$true}
++    } (Peer)
++    Assert-True $rejected 'An altered owned route was accepted.'
++}
++Test-Case 'Adapter identity changes are rejected before adding a route' {
++    $rejected=& $module {param($Peer)$script:F.Peers=@($Peer);$script:F.Guid='replacement';try{Invoke-GephTunBypassRefresh;$false}catch{$true}} (Peer)
++    Assert-True $rejected 'A replacement interface was accepted.'
++    Assert-True (& $module {$script:F.Adds -eq 0}) 'Mutation happened before adapter validation.'
++}
++Test-Case 'Remembered endpoint is preinstalled on the fresh session gateway' {
++    & $module {
++        $script:F.Cache=[pscustomobject]@{Schema=1;Identity=('c:\geph\geph.exe|'+('a'*64));Entries=@([pscustomobject]@{Address='192.0.2.88';LastSeenUtc=[DateTime]::UtcNow.AddMinutes(-5).ToString('o')})}
++        Initialize-GephTunBypassRegistry;Install-GephTunRememberedBypasses
++    }
++    Assert-True (& $module {$script:F.Adds -eq 1 -and $script:F.Live[0].NextHop -eq '192.0.2.1'}) 'Current gateway was not used.'
++}
++Test-Case 'Wrong image identity cannot seed the endpoint cache' {
++    & $module {$script:F.Cache=[pscustomobject]@{Schema=1;Identity='wrong';Entries=@([pscustomobject]@{Address='192.0.2.88';LastSeenUtc=[DateTime]::UtcNow.ToString('o')})};Initialize-GephTunBypassRegistry;Install-GephTunRememberedBypasses}
++    Assert-True (& $module {$script:F.Adds -eq 0}) 'Wrong Geph image seeded routes.'
++}
++Test-Case 'Old and future endpoint records are ignored' {
++    & $module {$script:F.Cache=[pscustomobject]@{Schema=1;Identity=('c:\geph\geph.exe|'+('a'*64));Entries=@(
++        [pscustomobject]@{Address='192.0.2.88';LastSeenUtc=[DateTime]::UtcNow.AddHours(-25).ToString('o')},
++        [pscustomobject]@{Address='192.0.2.89';LastSeenUtc=[DateTime]::UtcNow.AddHours(1).ToString('o')})};Initialize-GephTunBypassRegistry;Install-GephTunRememberedBypasses}
++    Assert-True (& $module {$script:F.Adds -eq 0}) 'Expired or future cache seeded routes.'
++}
++Test-Case 'Unsafe cache address classes are excluded' {
++    Assert-True (& $module {foreach($ip in @('127.0.0.1','0.0.0.0','224.0.0.1','169.254.1.1','198.18.0.1','::','::1','fe80::1','ff02::1','::ffff:192.0.2.1')){if(Test-GephTunCacheAddress $ip){return $false}};return $true}) 'Unsafe cached address accepted.'
++}
++Test-Case 'Cache serialization drops old overflow entries rather than growing unbounded' {
++    & $module {1..600|ForEach-Object {$address='10.0.'+[int][Math]::Floor($_/250)+'.'+($_%250+1);$script:BypassCache[$address]=[pscustomobject]@{Address=$address;LastSeenUtc=[DateTime]::UtcNow.ToString('o')}};Save-GephTunBypassCache -Force}
++    Assert-True (& $module {$script:BypassCache.Count -eq 512 -and @($script:F.Saved.Entries).Count -eq 512}) 'Cache exceeded its cap.'
++}
++} finally {if($null -ne $module){Remove-Module $module -Force}}
++$failed=@($results|Where-Object Result -eq 'FAIL').Count
++$report=[ordered]@{Version='1.5.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');Scope='Actual bypass registry/cache functions with isolated OS/storage doubles. No live networking.';Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
++if($ResultJson){$output=Get-GephPackageFullPath $ResultJson;Assert-GephPackageOutput $output (Get-GephPackageFullPath $PackageDirectory);Write-GephPackageNewJson $output $report}
++$results|Format-Table -AutoSize -Wrap
++if($failed){exit 1}
+--- a/tests/Controller.Tests.ps1
++++ b/tests/Controller.Tests.ps1
+@@ -1,5 +1,5 @@
+ #Requires -Version 5.1
+-# Current 1.4.0 supervisor tests. All OS, storage, transport and clock operations
++# Current 1.5.0 supervisor tests. All OS, storage, transport and clock operations
+ # are module-scope doubles. This does not initialize protected storage or networking.
+ [CmdletBinding()]
+ param([string]$PackageDirectory,[string]$ResultJson)
+@@ -49,6 +49,7 @@
+             $code=$script:Fixture.PeerCodes[$index]
+             if($code){Throw-GephTunTransient $code 'peer unavailable'}
+         }
++        function script:Assert-GephTunProtection { $script:Fixture.Checks.Add('wfp');if($script:Fixture.HardCheck -eq 'wfp'){throw 'hard WFP failure'} }
+         function script:Sync-GephTunContainment { $script:Fixture.Checks.Add('sync') }
+         function script:Test-GephTunContainment { $script:Fixture.Checks.Add('firewall');if($script:Fixture.HardCheck -eq 'firewall'){throw 'hard firewall failure'} }
+         function script:Test-GephTunInstalledRoutes { $script:Fixture.Checks.Add('routes');if($script:Fixture.HardCheck -eq 'routes'){throw 'hard route failure'} }
+@@ -103,7 +104,7 @@
+         $run=Run-Monitor
+         Assert-True ($run.Code -eq 'PEER_MISSING') 'The grace period never expired or lost provenance.'
+     }
+-    foreach($check in @('firewall','routes','dns-policy')){
++    foreach($check in @('firewall','routes','dns-policy','wfp')){
+         Test-Case ('A '+$check+' failure is never waived during a peer gap') {
+             & $module {param($Check)$script:Fixture.PeerCodes=@('PEER_MISSING');$script:Fixture.HardCheck=$Check} $check
+             $run=Run-Monitor
+@@ -114,7 +115,7 @@
+     Test-Case 'All invariant checks still execute during the grace period' {
+         & $module {$script:Fixture.PeerCodes=@('PEER_MISSING');$script:Fixture.MaxLoops=1}
+         $null=Run-Monitor
+-        Assert-True (& $module {foreach($name in @('physical','sync','firewall','routes','dns-policy')){if(-not $script:Fixture.Checks.Contains($name)){return $false}};return $true}) 'A required check was bypassed.'
++        Assert-True (& $module {foreach($name in @('physical','sync','firewall','routes','dns-policy','wfp')){if(-not $script:Fixture.Checks.Contains($name)){return $false}};return $true}) 'A required check was bypassed.'
+     }
+     Test-Case 'A transient DNS failure is retried within the heartbeat' {
+         & $module {$script:Fixture.DnsFailures=1;$script:Fixture.MaxLoops=1}
+@@ -166,7 +167,7 @@
+     }
+ } finally {if($null -ne $module){Remove-Module $module -Force}}
+ $failed=@($results | Where-Object Result -eq 'FAIL').Count
+-$report=[ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.4.0';Scope='Actual session supervisor with deterministic clocks and complete OS/transport doubles; not Windows acceptance.';PowerShellVersion=$PSVersionTable.PSVersion.ToString();Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
++$report=[ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.5.0';Scope='Actual session supervisor with deterministic clocks and complete OS/transport doubles; not Windows acceptance.';PowerShellVersion=$PSVersionTable.PSVersion.ToString();Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
+ if($ResultJson){. (Join-Path $PSScriptRoot 'Package.Common.ps1');$output=Get-GephPackageFullPath $ResultJson;Assert-GephPackageOutput $output (Get-GephPackageFullPath $PackageDirectory);Write-GephPackageNewJson $output $report}
+ $results | Format-Table -AutoSize -Wrap
+ if($failed){exit 1}
+--- a/tests/DnsMandatory.Tests.ps1
++++ b/tests/DnsMandatory.Tests.ps1
+@@ -66,7 +66,7 @@
+     }catch{$results.Add([pscustomobject]@{Name=$case.Name;Result='FAIL';Detail=$_.Exception.Message})}
+ }
+ $failed=@($results | Where-Object Result -eq 'FAIL').Count
+-$report=[ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.4.0';Scope='Actual C#5 DNS filter; in-memory fixtures only; no Windows networking.';SourceSha256=(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash;PowerShellVersion=$PSVersionTable.PSVersion.ToString();Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
++$report=[ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.5.0';Scope='Actual C#5 DNS filter; in-memory fixtures only; no Windows networking.';SourceSha256=(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash;PowerShellVersion=$PSVersionTable.PSVersion.ToString();Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
+ if($ResultJson){
+     . (Join-Path $PSScriptRoot 'Package.Common.ps1')
+     $output=Get-GephPackageFullPath $ResultJson
+--- a/tests/Package.Tests.ps1
++++ b/tests/Package.Tests.ps1
+@@ -54,7 +54,7 @@
+     if([IO.Directory]::Exists($workspace)){Remove-Item -LiteralPath $workspace -Recurse -Force}
+ }
+ $failed=@($results|Where-Object Result -eq 'FAIL').Count
+-$report=[ordered]@{Version='1.4.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');Scope='Package integrity and temporary corruption fixtures; no runtime execution.';Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
++$report=[ordered]@{Version='1.5.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');Scope='Package integrity and temporary corruption fixtures; no runtime execution.';Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
+ if($ResultJson){$output=Get-GephPackageFullPath $ResultJson;Assert-GephPackageOutput $output $root;Write-GephPackageNewJson $output $report}
+ $results|Format-Table -AutoSize -Wrap
+ if($failed){exit 1}
+--- /dev/null
++++ b/tests/Protection.Tests.ps1
+@@ -0,0 +1,63 @@
++#Requires -Version 5.1
++# Module-level lease lifecycle checks. All native WFP behavior is a test double.
++[CmdletBinding()]
++param([string]$PackageDirectory,[string]$ResultJson)
++Set-StrictMode -Version 2.0
++$ErrorActionPreference='Stop'
++if(-not $PackageDirectory){$PackageDirectory=Split-Path -Parent $PSScriptRoot}
++. (Join-Path $PSScriptRoot 'Package.Common.ps1')
++$results=New-Object 'Collections.Generic.List[object]';$module=$null
++function Assert-True($Value,[string]$Message){if(-not $Value){throw $Message}}
++function New-Fixture {
++    if($null -ne $script:module){Remove-Module $script:module -Force}
++    $script:module=Import-Module (Join-Path $PackageDirectory 'GephTun.Core.psm1') -Force -PassThru -DisableNameChecking
++    & $script:module {
++        $script:ProtectionObserved='Enabled'
++        $lease=[pscustomobject]@{Closed=$false;Revoked=$false;VerifyFailure=$false;RevokeFailure=$false;Checks=0}
++        $lease|Add-Member ScriptMethod Verify { $this.Checks++;if($this.VerifyFailure){throw 'Injected missing WFP baseline'} }
++        $lease|Add-Member ScriptMethod RevokeTunnel {if($this.RevokeFailure){throw 'Injected revoke failure'};$this.Revoked=$true}
++        $lease|Add-Member ScriptMethod Dispose {$this.Closed=$true}
++        $script:FixtureLease=$lease;$script:ProtectionLease=$lease
++        function script:Initialize-GephTunWfpTypes {throw 'Unexpected real native WFP call'}
++        function script:Get-GephTunLock {throw 'Consent must be checked before any global state change'}
++        function script:Request-GephTunDisconnect {throw 'Consent must be checked before disconnecting'}
++    }
++}
++function Test-Case($Name,[scriptblock]$Body){New-Fixture;try{& $Body;$results.Add([pscustomobject]@{Name=$Name;Result='PASS';Detail=''})}catch{$results.Add([pscustomobject]@{Name=$Name;Result='FAIL';Detail=$_.Exception.Message})}}
++try {
++Test-Case 'Normal close disposes only the temporary lease' {
++    & $module {Close-GephTunProtectionLease;Close-GephTunProtectionLease}
++    Assert-True (& $module {$script:FixtureLease.Closed -and $null -eq $script:ProtectionLease -and $script:ProtectionObserved -eq 'Enabled'}) 'Close incorrectly unlocked persistent protection.'
++}
++Test-Case 'Policy verification failure closes permissions and reports Unknown' {
++    $failed=& $module {$script:FixtureLease.VerifyFailure=$true;try{Assert-GephTunProtection;$false}catch{$true}}
++    Assert-True $failed 'Missing policy was accepted.'
++    Assert-True (& $module {$script:FixtureLease.Closed -and $script:ProtectionObserved -eq 'Unknown'}) 'Missing policy was reported as protected.'
++}
++Test-Case 'No lease cannot count as a verified protected session' {
++    $failed=& $module {$script:ProtectionLease=$null;try{Assert-GephTunProtection;$false}catch{$true}}
++    Assert-True $failed 'A session without owned permissions was accepted.'
++}
++Test-Case 'Tunnel authorization is revoked before session resources are cleaned' {
++    & $module {Remove-GephTunTunnelPermission}
++    Assert-True (& $module {$script:FixtureLease.Revoked -and -not $script:FixtureLease.Closed}) 'Revocation did not target the tunnel permission.'
++}
++Test-Case 'A revoke error closes the full temporary lease instead of retaining obsolete access' {
++    $failed=& $module {$script:FixtureLease.RevokeFailure=$true;try{Remove-GephTunTunnelPermission;$false}catch{$true}}
++    Assert-True $failed 'Revoke failure was suppressed.'
++    Assert-True (& $module {$script:FixtureLease.Closed}) 'Obsolete temporary permission was retained.'
++}
++Test-Case 'Persistent blocking cannot be enabled without explicit consent' {
++    $message=& $module {try{Enable-GephTunProtection -GephExecutable @('C:\Geph\geph.exe');''}catch{$_.Exception.Message}}
++    Assert-True ($message -eq 'Enabling persistent blocking requires explicit confirmation.') 'Consent was not checked first.'
++}
++Test-Case 'Persistent protection cannot be removed without explicit consent' {
++    $message=& $module {try{Disable-GephTunProtection;''}catch{$_.Exception.Message}}
++    Assert-True ($message -eq 'Explicit confirmation to allow direct internet is required.') 'Unlock was attempted before consent.'
++}
++} finally {if($null -ne $module){Remove-Module $module -Force}}
++$failed=@($results|Where-Object Result -eq 'FAIL').Count
++$report=[ordered]@{Version='1.5.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');Scope='Actual PowerShell lease lifecycle with doubles. No native WFP calls or OS changes.';Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
++if($ResultJson){$output=Get-GephPackageFullPath $ResultJson;Assert-GephPackageOutput $output (Get-GephPackageFullPath $PackageDirectory);Write-GephPackageNewJson $output $report}
++$results|Format-Table -AutoSize -Wrap
++if($failed){exit 1}
+--- a/tests/Resilience.Tests.ps1
++++ b/tests/Resilience.Tests.ps1
+@@ -18,7 +18,7 @@
+         $script:Fixture = [pscustomobject]@{
+             Stop = $null; Cancel = $null; OwnerAlive = $true; Order = (New-Object 'Collections.Generic.List[string]')
+             RestoreFails = $false; Residue = $false; CancelAfterRestore = $false; CancelDuringWait = $false
+-            HardStartFailure = $false; TransientStarts = 0; Starts = 0; Snapshots = 0; SnapshotFailures = 0
++            LeaseOpens=0;LeaseCloses=0;HardStartFailure = $false; TransientStarts = 0; Starts = 0; Snapshots = 0; SnapshotFailures = 0
+             ProxyPath = 'C:\Geph\geph.exe'; Fingerprints = @('network-a','network-a','network-a'); FingerprintIndex = 0
+         }
+         $script:ConnectionIntent = [pscustomobject]@{
+@@ -58,6 +58,8 @@
+             $script:Fixture.FingerprintIndex++
+             return $script:Fixture.Fingerprints[$i]
+         }
++        function script:Open-GephTunProtectionLease { $script:Fixture.LeaseOpens++;$script:ProtectionLease=[pscustomobject]@{Fixture=$true} }
++        function script:Close-GephTunProtectionLease { if($null -ne $script:ProtectionLease){$script:Fixture.LeaseCloses++};$script:ProtectionLease=$null }
+         function script:Get-GephTunProxy([int]$Port) { return [pscustomobject]@{Port=$Port;Process=[pscustomobject]@{Path=$script:Fixture.ProxyPath}} }
+         function script:Start-GephTunSession([int]$Port,[int]$OwnerProcessId,[string]$OperationToken) {
+             $script:Fixture.Starts++; $script:Fixture.Order.Add('start')
+@@ -175,7 +177,7 @@
+         $value = & $module {
+             $script:Fixture.Fingerprints=@('a','a','b','b','b','b')
+             $ok=Invoke-GephTunReconnect 'network changed'
+-            $ok -and $script:Fixture.FingerprintIndex -ge 6 -and $script:Fixture.Starts -eq 1
++            $ok -and $script:Fixture.FingerprintIndex -ge 6 -and $script:Fixture.Starts -eq 1 -and $script:Fixture.LeaseOpens -eq 2 -and $script:Fixture.LeaseCloses -eq 1
+         }
+         Assert-True $value 'A stale pre-probe network snapshot was accepted.'
+     }
+@@ -255,7 +257,7 @@
+ }
+ finally { if ($null -ne $module) { Remove-Module $module -Force } }
+ $failed=@($results | Where-Object Result -eq 'FAIL').Count
+-$report=[ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.4.0';Scope='Actual PowerShell controller functions with isolated module-scope doubles; no live Windows/network acceptance.';PowerShellVersion=$PSVersionTable.PSVersion.ToString();Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
++$report=[ordered]@{CapturedUtc=[DateTime]::UtcNow.ToString('o');Version='1.5.0';Scope='Actual PowerShell controller functions with isolated module-scope doubles; no live Windows/network acceptance.';PowerShellVersion=$PSVersionTable.PSVersion.ToString();Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
+ if($ResultJson){
+     . (Join-Path $PSScriptRoot 'Package.Common.ps1')
+     $output=Get-GephPackageFullPath $ResultJson
+--- a/tests/Run-UpdateValidation.ps1
++++ b/tests/Run-UpdateValidation.ps1
+@@ -7,7 +7,7 @@
+ if(-not $PackageDirectory){$PackageDirectory=Split-Path -Parent $PSScriptRoot}
+ . (Join-Path $PSScriptRoot 'Package.Common.ps1')
+ $root=Get-GephPackageFullPath $PackageDirectory
+-if(-not $OutputDirectory){$OutputDirectory=Join-Path ([IO.Path]::GetTempPath()) ('GephTun-140-validation-'+[guid]::NewGuid().ToString('N'))}
++if(-not $OutputDirectory){$OutputDirectory=Join-Path ([IO.Path]::GetTempPath()) ('GephTun-150-validation-'+[guid]::NewGuid().ToString('N'))}
+ $output=Get-GephPackageFullPath $OutputDirectory
+ Assert-GephPackageOutput $output $root
+ if(Test-Path -LiteralPath $output){throw 'Use a new output directory so existing evidence is not overwritten.'}
+@@ -16,6 +16,9 @@
+ if([IO.Path]::GetFileNameWithoutExtension($engine) -notin @('powershell','pwsh')){throw 'Run this script with powershell.exe or pwsh, not an embedded host.'}
+ $suites=@(
+     [pscustomobject]@{Name='Source';File='Validate-Source.ps1';RootArgument='-PackageDirectory'},
++    [pscustomobject]@{Name='WfpPolicy';File='WfpPolicy.Tests.ps1';RootArgument='-PackageDirectory'},
++    [pscustomobject]@{Name='Bypasses';File='Bypasses.Tests.ps1';RootArgument='-PackageDirectory'},
++    [pscustomobject]@{Name='Protection';File='Protection.Tests.ps1';RootArgument='-PackageDirectory'},
+     [pscustomobject]@{Name='Resilience';File='Resilience.Tests.ps1';RootArgument='-PackageDirectory'},
+     [pscustomobject]@{Name='Controller';File='Controller.Tests.ps1';RootArgument='-PackageDirectory'},
+     [pscustomobject]@{Name='DnsMandatory';File='DnsMandatory.Tests.ps1';RootArgument='-PackageDirectory'},
+@@ -45,7 +48,7 @@
+     $results.Add([pscustomobject]@{Suite=$suite.Name;ExitCode=$code;Result=$(if($problem){'FAIL'}else{'PASS'});Detail=$problem;Receipt=$receipt;Log=$log})
+ }
+ $failed=@($results|Where-Object Result -eq 'FAIL').Count
+-$summary=[ordered]@{Version='1.4.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');HostPowerShell=$PSVersionTable.PSVersion.ToString();Platform=[Environment]::OSVersion.Platform.ToString();Scope='Parser/C# compilation, mocked controller/recovery, in-memory DNS, package-integrity tests. No live tunnel, reboot, TLS/network or UI acceptance.';NativeWindowsAcceptance='NOT_RUN';ProductionQualified=$false;Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Suites=$results.ToArray()}
++$summary=[ordered]@{Version='1.5.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');HostPowerShell=$PSVersionTable.PSVersion.ToString();Platform=[Environment]::OSVersion.Platform.ToString();Scope='Parser/C# compilation, managed WFP policy plan, mocked bypass/protection/controller/recovery, in-memory DNS, package-integrity tests. No live tunnel, reboot, TLS/network or UI acceptance.';NativeWindowsAcceptance='NOT_RUN';ProductionQualified=$false;Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Suites=$results.ToArray()}
+ Write-GephPackageNewJson (Join-Path $output 'summary.json') $summary
+ $results|Format-Table -AutoSize -Wrap
+ Write-Host ('Results: '+$output)
+--- /dev/null
++++ b/tests/Wfp-NativeSmoke.ps1
+@@ -0,0 +1,55 @@
++#Requires -Version 5.1
++#Requires -RunAsAdministrator
++<# DESTRUCTIVE NETWORK TEST. Not part of Run-UpdateValidation.ps1.
++   Requires a disposable Windows VM, snapshot and LOCAL console.
++   Temporarily installs persistent/boot blocking. No scheduled unlock or service.
++   A successful smoke test is NOT crash/reboot/leak qualification.
++#>
++[CmdletBinding()]
++param([switch]$AllowNetworkDisruption,[Parameter(Mandatory=$true)][string]$ResultJson)
++Set-StrictMode -Version 2.0
++$ErrorActionPreference='Stop'
++if(-not $AllowNetworkDisruption){throw 'Read WINDOWS-ACCEPTANCE.md, use a disposable VM/local console, then specify -AllowNetworkDisruption.'}
++if($env:SESSIONNAME -like 'RDP-*'){throw 'Do not run this test through Remote Desktop. Use the VM local console.'}
++$root=Split-Path -Parent $PSScriptRoot
++. (Join-Path $PSScriptRoot 'Package.Common.ps1')
++$output=Get-GephPackageFullPath $ResultJson
++Assert-GephPackageOutput $output (Get-GephPackageFullPath $root)
++if(Test-Path -LiteralPath $output){throw 'Result path already exists.'}
++if((Read-Host 'Snapshot ready, emergency unlock files retained locally? Type TEST BLOCKING') -cne 'TEST BLOCKING'){throw 'Cancelled before any WFP change.'}
++if('GephTun.Security.WfpController' -as [type]){throw 'Run in a fresh PowerShell process.'}
++Add-Type -Path (Join-Path $root 'GephTun.Wfp.cs')
++$guard=New-Object Threading.Mutex($false,'Global\GephTun-Session-v1')
++$owned=$false
++try {
++    try {$owned=$guard.WaitOne(0)} catch [Threading.AbandonedMutexException] {$owned=$true}
++    if(-not $owned){throw 'Another GephTun operation is active. No test policy was installed.'}
++$initial=[GephTun.Security.WfpController]::Inspect()
++if($initial.State -ne 'Disabled'){throw 'Existing protection must not be changed by a test. Disable it explicitly first or use a fresh VM.'}
++$installed=$false;$failure=$null;$cleanupError=$null;$observed=$null
++try {
++    $installed=$true;[GephTun.Security.WfpController]::Enable()
++    $observed=[GephTun.Security.WfpController]::Inspect()
++    if($observed.State -ne 'Enabled' -or $observed.PersistentFilters -le 0 -or $observed.TemporaryFilters -ne 0){throw 'Installed baseline was not verified.'}
++    # Verify that a literal public-IP TCP connection is rejected. No DNS lookup or
++    # credentials; an unavailable remote is not proof of blocking, so this remains
++    # a smoke observation only, NOT a packet-level leak assertion.
++    $client=New-Object Net.Sockets.TcpClient
++    try {
++        $pending=$client.BeginConnect('1.1.1.1',443,$null,$null)
++        if($pending.AsyncWaitHandle.WaitOne(3000)){
++            try{$client.EndConnect($pending)}catch{}
++        }
++        if($client.Connected){throw 'A direct TCP connection succeeded under the disconnected baseline.'}
++    } finally {$client.Close()}
++} catch {$failure=$_.Exception.Message}
++finally {
++    if($installed){try{[GephTun.Security.WfpController]::Disable($true)}catch{$cleanupError=$_.Exception.Message}}
++}
++$report=[ordered]@{Version='1.5.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');Scope='Opt-in actual native WFP install/enumerate/remove smoke only. No crash/reboot/packet capture qualification.';Initial=$initial;InstalledObservation=$observed;Failure=$failure;CleanupError=$cleanupError;Result=$(if($failure -or $cleanupError){'FAIL'}else{'PASS'})}
++Write-GephPackageNewJson $output $report
++$report|ConvertTo-Json -Depth 8
++if($cleanupError){Write-Warning 'NETWORK MAY STILL BE BLOCKED. Run Emergency-Unlock-GephTun.ps1 -AllowDirectInternet from the local console; retain the folder.'}
++if($failure -or $cleanupError){exit 1}
++
++} finally {if($owned){$guard.ReleaseMutex()};$guard.Dispose()}
+--- /dev/null
++++ b/tests/WfpPolicy.Tests.ps1
+@@ -0,0 +1,133 @@
++#Requires -Version 5.1
++# Pure policy-plan assertions and Marshal layout checks. Does NOT call WFP or alter networking.
++[CmdletBinding()]
++param([string]$PackageDirectory,[string]$ResultJson)
++Set-StrictMode -Version 2.0
++$ErrorActionPreference='Stop'
++if(-not $PackageDirectory){$PackageDirectory=Split-Path -Parent $PSScriptRoot}
++. (Join-Path $PSScriptRoot 'Package.Common.ps1')
++if('GephTun.Security.WfpPolicy' -as [type]){throw 'Run this suite in a fresh process.'}
++$source=Join-Path $PackageDirectory 'GephTun.Wfp.cs'
++$options=@{Path=$source;ErrorAction='Stop'}
++if($PSVersionTable.PSVersion.Major -ge 6){$options.CompilerOptions='/langversion:5'}
++Add-Type @options
++$results=New-Object 'Collections.Generic.List[object]'
++function Assert-True($Value,[string]$Message){if(-not $Value){throw $Message}}
++function Test-Case($Name,[scriptblock]$Body){try{& $Body;$results.Add([pscustomobject]@{Name=$Name;Result='PASS';Detail=''})}catch{$results.Add([pscustomobject]@{Name=$Name;Result='FAIL';Detail=$_.Exception.Message})}}
++$policy=[GephTun.Security.WfpPolicy]
++$base=@($policy::Baseline('C:\Windows\System32\svchost.exe'))
++$transport=@($policy::Transport([string[]]@('C:\Geph\geph5-client.exe'),[ulong[]]@(111)))
++$tunnel=@($policy::Tunnel(222))
++function Evaluate($Rules,[guid]$Layer,[hashtable]$Packet){
++    $matches=@(foreach($rule in $Rules){
++        if($rule.Boot -or $rule.Layer -ne $Layer){continue}
++        $ok=$true
++        foreach($c in $rule.Conditions){
++            $key=$c.Field.ToString()
++            if(-not $Packet.ContainsKey($key)){$ok=$false;break}
++            $value=$Packet[$key]
++            if($c.Type -eq 12){if($value -cne $c.Image){$ok=$false;break}}
++            elseif($c.Type -eq 257){
++                $bytes=[Net.IPAddress]::Parse([string]$value).GetAddressBytes();$bits=[int]$c.Bytes[16]
++                if($bytes.Length -ne 16){$ok=$false;break}
++                for($i=0;$i -lt 16 -and $bits -gt 0;$i++){
++                    $n=[Math]::Min(8,$bits);$mask=(255 -shl (8-$n)) -band 255
++                    if(($bytes[$i] -band $mask) -ne ($c.Bytes[$i] -band $mask)){$ok=$false;break};$bits-=$n
++                }
++            }
++            elseif($c.Match -eq 6){if(([ulong]$value -band $c.Number) -ne $c.Number){$ok=$false;break}}
++            elseif($c.Match -eq 8){if(([ulong]$value -band $c.Number) -ne 0){$ok=$false;break}}
++            elseif([ulong]$value -ne $c.Number){$ok=$false;break}
++        }
++        if($ok){$rule}
++    })
++    $matches=@($matches | Sort-Object Weight -Descending)
++    if($matches.Count -eq 0){return 'NO_POLICY'}
++    if($matches[0].Permit){return 'PERMIT'};return 'BLOCK'
++}
++function Packet([string]$Image='C:\Other\browser.exe',[int]$Protocol=6,[ulong]$Local=111,[ulong]$Next=111,[int]$Flags=0){
++    $packet=@{}
++    $packet[$policy::App.ToString()]=$Image
++    $packet[$policy::Protocol.ToString()]=$Protocol
++    $packet[$policy::LocalInterface.ToString()]=$Local
++    $packet[$policy::NextHop.ToString()]=$Next
++    $packet[$policy::Arrival.ToString()]=$Next
++    $packet[$policy::Flags.ToString()]=$Flags
++    $packet[$policy::LocalPort.ToString()]=51000
++    $packet[$policy::RemotePort.ToString()]=443
++    $packet[$policy::RemoteAddress.ToString()]='2001:db8::1'
++    return $packet
++}
++Test-Case 'x64 native layouts match the declared SDK offsets' {[GephTun.Security.WfpController]::AssertLayout()}
++Test-Case 'All rule keys are unique and weights are legal range indexes' {
++    $all=@($base+$transport+$tunnel)
++    Assert-True (@($all.Key|Sort-Object -Unique).Count -eq $all.Count) 'Duplicate rule key.'
++    Assert-True (@($all|Where-Object {$_.Weight -gt 15}).Count -eq 0) 'Illegal FWP_UINT8 weight.'
++}
++Test-Case 'Boot plan has four non-loopback IP blocking rules and no permits' {
++    $boot=@($base|Where-Object Boot)
++    Assert-True ($boot.Count -eq 4 -and @($boot|Where-Object Permit).Count -eq 0) 'Boot policy is not closed.'
++    foreach($r in $boot){Assert-True ($r.Conditions.Count -eq 1 -and $r.Conditions[0].Match -eq 8 -and $r.Conditions[0].Number -eq 1) 'Unexpected boot exception.'}
++}
++foreach($family in @('Connect4','Connect6','Accept4','Accept6','Forward4','Forward6')){
++    Test-Case ('Disconnected '+$family+' has a deny fallback'){
++        $layer=[GephTun.Security.WfpPolicy].GetField($family).GetValue($null)
++        Assert-True ((Evaluate $base $layer (Packet)) -eq 'BLOCK') 'Direct traffic was permitted.'
++    }
++}
++foreach($protocol in @(6,17,1,58)){
++    Test-Case ('Ordinary physical protocol '+$protocol+' remains blocked with a live Geph lease'){
++        Assert-True ((Evaluate ($base+$transport+$tunnel) $policy::Connect4 (Packet -Protocol $protocol)) -eq 'BLOCK') 'Ordinary direct traffic escaped.'
++    }
++}
++Test-Case 'Geph TCP is permitted only on its approved physical path' {
++    Assert-True ((Evaluate ($base+$transport) $policy::Connect4 (Packet -Image 'C:\Geph\geph5-client.exe')) -eq 'PERMIT') 'Expected transport permit absent.'
++    Assert-True ((Evaluate ($base+$transport) $policy::Connect4 (Packet -Image 'C:\Geph\geph5-client.exe' -Next 333)) -eq 'BLOCK') 'New unapproved interface inherited permission.'
++}
++Test-Case 'The same remote IP does not grant a browser or PowerShell transport permission' {
++    foreach($image in @('C:\Other\browser.exe','C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')){
++        Assert-True ((Evaluate ($base+$transport) $policy::Connect4 (Packet -Image $image)) -eq 'BLOCK') 'Destination route became a global permit.'
++    }
++}
++Test-Case 'Geph UDP is not silently enabled' {Assert-True ((Evaluate ($base+$transport) $policy::Connect4 (Packet -Image 'C:\Geph\geph5-client.exe' -Protocol 17)) -eq 'BLOCK') 'Unsupported UDP allowed.'}
++Test-Case 'Tunnel TCP requires both current local and next-hop LUID' {
++    Assert-True ((Evaluate ($base+$transport+$tunnel) $policy::Connect4 (Packet -Local 222 -Next 222)) -eq 'PERMIT') 'Tunnel TCP not permitted.'
++    Assert-True ((Evaluate ($base+$transport+$tunnel) $policy::Connect4 (Packet -Local 222 -Next 111)) -eq 'BLOCK') 'A tunnel-sourced direct fallback was allowed.'
++    Assert-True ((Evaluate ($base+$transport+$tunnel) $policy::Connect4 (Packet -Local 444 -Next 444)) -eq 'BLOCK') 'A stale or unrelated tunnel was allowed.'
++}
++Test-Case 'Removing the temporary tunnel plan restores blocking' {Assert-True ((Evaluate ($base+$transport) $policy::Connect4 (Packet -Local 222 -Next 222)) -eq 'BLOCK') 'Persistent fallback missing.'}
++Test-Case 'Removing every temporary permission also blocks Geph internet' {Assert-True ((Evaluate $base $policy::Connect4 (Packet -Image 'C:\Geph\geph5-client.exe')) -eq 'BLOCK') 'Worker death would retain Geph permission.'}
++Test-Case 'Arrival-interface alternative requires reauthorization' {
++    $p=Packet -Local 222 -Next 0;$p[$policy::Arrival.ToString()]=222
++    Assert-True ((Evaluate ($base+$tunnel) $policy::Connect4 $p) -eq 'BLOCK') 'Arrival condition alone permitted a new connection.'
++    $p[$policy::Flags.ToString()]=4
++    Assert-True ((Evaluate ($base+$tunnel) $policy::Connect4 $p) -eq 'PERMIT') 'Expected inbound reauthorization alternative missing.'
++}
++Test-Case 'Application IPv6 remains blocked even with a live IPv4 tunnel' {Assert-True ((Evaluate ($base+$transport+$tunnel) $policy::Connect6 (Packet -Local 222 -Next 222)) -eq 'BLOCK') 'Application IPv6 was allowed.'}
++Test-Case 'DHCP permit is restricted to system host, UDP and client/server ports' {
++    $p=Packet -Image 'C:\Windows\System32\svchost.exe' -Protocol 17
++    $p[$policy::LocalPort.ToString()]=68;$p[$policy::RemotePort.ToString()]=67
++    Assert-True ((Evaluate $base $policy::Connect4 $p) -eq 'PERMIT') 'DHCP maintenance missing.'
++    $p[$policy::RemotePort.ToString()]=53
++    Assert-True ((Evaluate $base $policy::Connect4 $p) -eq 'BLOCK') 'DHCP exception became direct DNS permission.'
++}
++Test-Case 'IPv6 neighbor maintenance does not permit global ICMPv6' {
++    $p=Packet -Protocol 58;$p[$policy::LocalPort.ToString()]=135;$p[$policy::RemotePort.ToString()]=0
++    $p[$policy::RemoteAddress.ToString()]='ff02::1:ff00:1'
++    Assert-True ((Evaluate $base $policy::Connect6 $p) -eq 'PERMIT') 'Neighbor discovery permit missing.'
++    $p[$policy::RemoteAddress.ToString()]='2001:db8::1'
++    Assert-True ((Evaluate $base $policy::Connect6 $p) -eq 'BLOCK') 'Global ICMPv6 was permitted.'
++}
++Test-Case 'Loopback remains available while disconnected' {Assert-True ((Evaluate $base $policy::Connect4 (Packet -Flags 1)) -eq 'PERMIT') 'Loopback missing.'}
++Test-Case 'Zero interface and empty transport lists are rejected' {
++    $rejected=0
++    try{$null=$policy::Tunnel(0)}catch{$rejected++}
++    try{$null=$policy::Transport([string[]]@(),[ulong[]]@(111))}catch{$rejected++}
++    try{$null=$policy::Transport([string[]]@('C:\Geph\geph.exe'),[ulong[]]@(0))}catch{$rejected++}
++    Assert-True ($rejected -eq 3) 'Unsafe inputs were accepted.'
++}
++$failed=@($results|Where-Object Result -eq 'FAIL').Count
++$report=[ordered]@{Version='1.5.0';CapturedUtc=[DateTime]::UtcNow.ToString('o');Scope='Actual managed WFP policy compiler inputs and Marshal layouts. NO native WFP API, installed filters, or leak test.';SourceSha256=(Get-FileHash $source -Algorithm SHA256).Hash;Total=$results.Count;Passed=$results.Count-$failed;Failed=$failed;Skipped=0;Tests=$results.ToArray()}
++if($ResultJson){$output=Get-GephPackageFullPath $ResultJson;Assert-GephPackageOutput $output (Get-GephPackageFullPath $PackageDirectory);Write-GephPackageNewJson $output $report}
++$results|Format-Table -AutoSize -Wrap
++if($failed){exit 1}
+--- a/tools/release_tool.py
++++ b/tools/release_tool.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""GephTun 1.4.0 read-only checks, candidate sealing, ZIP build and verification.
++"""GephTun 1.5.0 read-only checks, candidate sealing, ZIP build and verification.
+ Python 3.10+, standard library. Does not execute PowerShell/C#, binaries or networking.
+ Static checks are not parser/compiler/runtime tests. Build never grants qualification.
+ """
+@@ -18,8 +18,8 @@
+ import sys
+ import zipfile
+ 
+-VERSION = '1.4.0'
+-INPUT_SHA256 = 'e5a1c373d8bc2893c8dcbde21274003862681919e262d5d1d8fcad49ec2695a4'
++VERSION = '1.5.0'
++INPUT_SHA256 = '625f5465acc0f1b061f12d46c51c5e231d0626bb4845fe0af1095aae2412ebb1'
+ BINARY_PINS = {
+     'tun2socks-windows-amd64.exe': '6435bf99650b47551b46ca1a7b5ac44ff64fdbdf1b13d3ccb0b8c329a5734e8e',
+     'wintun.dll': 'e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce',
+@@ -202,7 +202,7 @@
+             tests.append({'Name': name, 'Result': 'FAIL', 'Detail': str(exc)})
+     def text(name: str) -> str:
+         return files[name].decode('utf-8-sig')
+-    check('Release identity is this unqualified 1.4.0 candidate', lambda:
++    check('Release identity is this unqualified 1.5.0 candidate', lambda:
+           decode_json(files['RELEASE.json'])['Version'] == VERSION and
+           decode_json(files['RELEASE.json'])['ProductionQualified'] is False and
+           decode_json(files['RELEASE.json'])['InputArchiveSha256'] == INPUT_SHA256)
+@@ -255,13 +255,89 @@
+         'Legacy boot profile residue prevents task deletion': boot.index('A legacy session changed global firewall profiles') < boot.index('try { Unregister-ScheduledTask'),
+         'Boot cleanup verifies remaining owned rules before disarming': 'remainingNrpt.Count -ne 0' in boot and 'remainingFirewall.Count -ne 0' in boot and 'tasks.Count -ne 0' in boot,
+         'UI gates configuration and exit on live intent': ui.count('[IO.File]::Exists($script:IntentPath)') >= 5 and "'Reconnecting'" in ui,
+-        'UI displays candidate status and direct-network warning': '(test candidate)' in ui and 'direct internet may be active between sessions' in ui,
++        'UI displays candidate status and persistent-blocking warning': '(test candidate)' in ui and 'Disconnect and Exit KEEP blocking' in ui,
+         'DNS incompatible mandatory IPv6 hints are discarded': 'if (required == Ipv6HintSvcParamKey) return false;' in dns,
+         'DNS mandatory references and ordering are validated': all(n in dns for n in ('!keys.Contains(required)','required <= previousMandatory','key <= previousKey','valueLength == 0 || (valueLength & 1) != 0')),
+         'DNS relay maximum concurrency is not increased': 'private const int MaximumWorkers = 16;' in dns,
+-        'Runtime claims no general kill switch': 'no general kill switch' in text('README.md').lower(),
++        'Runtime documents unqualified WFP and no automatic crash recovery': 'NOT production-qualified' in text('README.md') and 'Automatic crash recovery is explicitly a future recommendation' in text('README.md'),
+         'Current test runner uses fresh processes and external results': '-NoProfile' in text('tests/Run-UpdateValidation.ps1') and 'Assert-GephPackageOutput' in text('tests/Run-UpdateValidation.ps1'),
+     }
++    wfp, protection, bypass = (text(n) for n in ('GephTun.Wfp.cs','GephTun.Protection.ps1','GephTun.Bypasses.ps1'))
++    recovery=function(core,'Restore-GephTunSession')
++    native_unlock=wfp[wfp.index('public static void Disable(bool'):wfp.index('public static WfpLease OpenLease')]
++    permission_close=function(protection,'Close-GephTunProtectionLease')
++    registered_names=re.findall(r'(?m)^function ([\w-]+)',core+'\n'+helper+'\n'+protection+'\n'+bypass)
++    checks.update({
++        'All four controller source units have unique function names':len(registered_names)==len(set(x.lower() for x in registered_names)),
++        'Core loads protection and bypass modules':all(". (Join-Path $PSScriptRoot '"+n+"')" in core for n in ('GephTun.Protection.ps1','GephTun.Bypasses.ps1')),
++        'Real native WFP filter API is implemented':all(n in wfp for n in ('FwpmEngineOpen0','FwpmFilterAdd0','FwpmFilterDeleteByKey0','FwpmFilterEnum0','FwpmSubLayerAdd0')),
++        'Transactions abort on incomplete commit':'if(!committed) Native.FwpmTransactionAbort0' in wfp,
++        'Persistent and boot filter flags are mutually exclusive':'rule.Temporary?0U:rule.Boot?2U:1U' in wfp,
++        'Temporary permission session is dynamic':'Flags=dynamic?1U:0U' in wfp and 'engine=new Engine(true)' in wfp,
++        'Persistent baseline is installed using a nondynamic engine':'public static void Enable()' in wfp and 'using(var e=new Engine(false))using(var security' in wfp,
++        'Providerless private namespace avoids a fabricated startup service':'Provider=IntPtr.Zero' in wfp and 'FwpmProviderAdd0' not in wfp,
++        'Private namespace is stable':'0c195e67-f506-4f48-b06a-fb056243caaf' in wfp and 'GephTun.WFP.v1' in wfp,
++        'Private policy has explicit administrator ACL':'D:P(A;;GA;;;SY)(A;;GA;;;BA)' in wfp,
++        'Readback enumerates boot AND disabled filters':'Flags=0x18' in wfp,
++        'Enumeration is bounded and checks schema ownership':'page<128' in wfp and 'Unexpected object in GephTun WFP namespace' in wfp,
++        'Policy readback compares condition values':'actual.Signature!=Signature(f)' in wfp and 'terms.Sort(StringComparer.Ordinal)' in wfp,
++        'Readback rejects missing indirect condition values':'Missing indirect WFP condition value' in wfp,
++        'Filter ABI is guarded before native use':'Marshal.SizeOf(p.Key)!=p.Value' in wfp and 'Native filter field offset mismatch' in wfp,
++        'FWP UINT64 union is stored indirectly':'case 4:v.Pointer=a.Struct(p.Number)' in wfp,
++        'WFP enum template and dynamic session have explicit SDK layouts':'typeof(EnumTemplate),72' in wfp and 'typeof(SessionData),72' in wfp,
++        'WFP provider pointers are not compared after native free':'Signature=Signature(f)' in wfp and 'f.Provider!=IntPtr.Zero' in wfp,
++        'Connection layers are covered in both address families':all(x in wfp for x in ('Connect4,Accept4,Connect6,Accept6','base/forward4','base/forward6')),
++        'Separate boot packet layers deny rather than permit':'Guid[] boot={OutPacket4,OutPacket6,InPacket4,InPacket6}' in wfp and 'boot[i],false,1,true,false' in wfp,
++        'Geph permits are app-and-interface scoped':'Image(images[p]),Num(Protocol,1,6,0),Num(NextHop,4,luid,0)' in wfp,
++        'No generic UDP transport permission is created':'public static PolicyRule[] Transport' in wfp and 'Num(Protocol,1,17,0)' not in wfp.split('public static PolicyRule[] Transport',1)[1].split('public static PolicyRule[] Tunnel',1)[0],
++        'Tunnel permits require local AND next-hop LUID':'Num(LocalInterface,4,luid,0),Num(NextHop,4,luid,0)' in wfp,
++        'Inbound reauthorization alternatives are explicitly gated':'Num(Flags,3,4,6),Num(Arrival,4,luid,0)' in wfp,
++        'Runtime IPv6 application tunnel allowance is absent':'Connect6' not in wfp.split('public static PolicyRule[] Tunnel',1)[1].split('// All native structures',1)[0],
++        'Narrow maintenance uses both client/server ports':'Num(LocalPort,2,local,0),Num(RemotePort,2,remote,0)' in wfp,
++        'No persistent hard-permit override flag':'rule.Temporary?0U:rule.Boot?2U:1U' in wfp and '0x1002U:0x1001U' in wfp,
++        'Exact trusted executable files are pinned for permission lifetime':'FileShare.Read' in wfp and 'sha.ComputeHash(stream)' in wfp,
++        'Changed executable identities are refused':'Approved Geph executable changed' in wfp,
++        'Normal unlock requires explicit consent':'if(!explicitConsent)' in native_unlock,
++        'Normal native unlock refuses active temporary permissions':'filters.Any(f=>(f.Filter.Flags&3)==0)' in native_unlock,
++        'Only owned filters and private sublayer are removed':'e.CheckObjects(true)' in native_unlock and 'e.Enumerate()' in native_unlock and 'WfpPolicy.Sublayer' in native_unlock,
++        'Controller cleanup never disables persistent protection':'WfpController]::Disable' not in recovery and 'Disable-GephTunProtection' not in recovery,
++        'Tunnel permission revoked before DNS/route cleanup':recovery.index('Remove-GephTunTunnelPermission')<recovery.index('Remove-GephTunDnsPolicy'),
++        'Successful cleanup closes transport lease':'Close-GephTunProtectionLease' in recovery,
++        'Permission close never calls persistent unlock':'Dispose()' in permission_close and 'Disable' not in permission_close,
++        'Failed tunnel-permit revocation closes all temporary permissions':'Close-GephTunProtectionLease' in function(protection,'Remove-GephTunTunnelPermission'),
++        'WFP ownership check runs before peer-grace continuation':monitor.index('Assert-GephTunProtection')<monitor.index('if ($null -ne $peerFailure)'),
++        'WFP ownership check runs again after blocking DNS':monitor.count('Assert-GephTunProtection')>=2,
++        'Fresh setup opens protection before proxy preflight':setup.index('Open-GephTunProtectionLease')<setup.index('Test-GephTunPreflight'),
++        'Remembered bypasses are installed before tunnel authorization':setup.index('Install-GephTunRememberedBypasses')<setup.index('Add-GephTunTunnelPermission'),
++        'Reconnect reopens a fresh physical permission lease':'Open-GephTunProtectionLease' in reconnect and 'Close-GephTunProtectionLease' in reconnect,
++        'Network changes after a proxy probe retire the old physical lease': 'if ($afterProbe -cne $fingerprint) { Close-GephTunProtectionLease;' in reconnect,
++        'An unsuccessful reconnect closes its temporary lease in finally': 'if ($null -eq $script:Session) { Close-GephTunProtectionLease }' in reconnect,
++        'Enable is explicitly consent-gated before mutation':function(protection,'Enable-GephTunProtection').index('if (-not $AllowBlocking)')<function(protection,'Enable-GephTunProtection').index('Get-GephTunLock'),
++        'Disable is explicitly consent-gated before disconnect':function(protection,'Disable-GephTunProtection').index('if (-not $AllowDirectInternet)')<function(protection,'Disable-GephTunProtection').index('Request-GephTunDisconnect'),
++        'Emergency unlock does not depend on ProgramData or Core':'GephTun.Core.psm1' not in text('Emergency-Unlock-GephTun.ps1') and 'WfpController]::Disable' in text('Emergency-Unlock-GephTun.ps1'),
++        'Read-only Status worker cannot publish a competing warning':"Set-GephTunStatus" not in worker.split("'Status' {",1)[1].split("'Check' {",1)[0],
++        'UI exposes an explicit protection dialog':'Protection...' in ui and 'Open-ProtectionWindow' in ui,
++        'Old direct-network reconnect text removed from runtime':'direct internet may be active between sessions' not in (ui+helper).lower(),
++        'Cache is bound to approved exact executable identity':'Sha256.ToLowerInvariant()' in bypass and 'Get-GephTunBypassCacheIdentity' in bypass,
++        'Cache does not accept future or older-than-24-hour entries':'$age -lt 0 -or $age -gt 24' in bypass,
++        'Cache preloading is capped to 128 endpoints':'Select-Object -First 128' in bypass,
++        'Cache and live registry are capped to 512':'Select-Object -First 512' in bypass and 'BypassRegistry.Count -ge 512' in bypass,
++        'Warmup obtains gateways only from current session snapshot':'Session.OriginalRoutes' in function(bypass,'Install-GephTunRememberedBypasses') and 'Session.OriginalNetwork.InterfaceIndex' in function(bypass,'Install-GephTunRememberedBypasses'),
++        'Adapter identity checked before adding bypass':function(bypass,'Confirm-GephTunBypass').index('$expected.Count -eq 0')<function(bypass,'Confirm-GephTunBypass').index('Add-GephTunOwnedRoute'),
++        'Changed owned bypass metrics are refused':'An owned Geph bypass was changed' in bypass,
++        'No retirement occurs on an empty peer snapshot':function(bypass,'Invoke-GephTunBypassRefresh').index('$peers.Count -eq 0')<function(bypass,'Invoke-GephTunBypassRefresh').index('Remove-GephTunOwnedRoute'),
++        'Retirement has a five-minute grace period':'$now-$record.LastSeen -lt 300' in bypass,
++        'Borrowed routes are not deleted':'if ($owned.Count -eq 1)' in bypass and 'Never delete a borrowed route' in bypass,
++        'Normal bypass logs are aggregated':'$now-$script:BypassLogAt -ge 30' in bypass and 'Geph bypass update:' in bypass,
++        'Captured-socket diagnostics are rate-limited':'$now-$record.CapturedAt -ge 15' in bypass and '$now-$record.LastWarning -ge 60' in bypass,
++        'Wrapper limitation is explicit in docs':'does not guarantee their complete elimination' in text('README.md'),
++        'No new service installation is present':not re.search(r'(?i)New-Service|ServiceBase\s*[:(]|sc\.exe\s+create',core+helper+protection+ui+wfp),
++        'Automatic crash recovery explicitly deferred':'NOT implemented in 1.5.0' in text('docs/RECOMMENDATIONS.md') and 'Automatic crash recovery (explicitly deferred' in text('docs/RECOMMENDATIONS.md'),
++        'Default runner includes three new isolated suites':all(n in text('tests/Run-UpdateValidation.ps1') for n in ('WfpPolicy.Tests.ps1','Bypasses.Tests.ps1','Protection.Tests.ps1')),
++        'Default runner never calls native smoke':'Wfp-NativeSmoke.ps1' not in text('tests/Run-UpdateValidation.ps1'),
++        'Native smoke is opt-in and locally confirmed':'AllowNetworkDisruption' in text('tests/Wfp-NativeSmoke.ps1') and 'TEST BLOCKING' in text('tests/Wfp-NativeSmoke.ps1'),
++        'Windows/native qualification is explicitly pending':'NativeWindowsAcceptance: NOT_RUN' in text('VALIDATION.md'),
++    })
+     expected = {'NETWORK_UNAVAILABLE','NETWORK_CHANGED','PEER_SNAPSHOT','PEER_MISSING','PROXY_UNAVAILABLE','DNS_UNAVAILABLE'}
+     values = set(re.findall(r"'([A-Z_]+)'", function(helper,'Test-GephTunRetryableFailure')))
+     checks['Automatic reconnect uses only the six documented transient codes'] = values == expected
+@@ -297,7 +373,7 @@
+                   'PowerShellExecution':'NOT_RUN','CSharpCompilation':'NOT_RUN','NativeWindowsAcceptance':'NOT_RUN',
+                   'ProductionQualified':False,'Sources':current,'Evidence':[static_ref],
+                   'StaticChecks':{'Total':report['Total'],'Passed':report['Passed'],'Failed':0},
+-                  'PreparedSuitesNotExecuted':['Source','Resilience','Controller','DnsMandatory','BootRecovery','Package']}
++                  'PreparedSuitesNotExecuted':['Source','WfpPolicy','Bypasses','Protection','Resilience','Controller','DnsMandatory','BootRecovery','Package']}
+     write_json(root/'tests/current-validation.json', validation)
+     qualification = {'Schema':3,'Version':VERSION,'ProductionQualified':False,'NativeWindowsAcceptance':'NOT_RUN',
+                      'PowerShellExecution':'NOT_RUN','CSharpCompilation':'NOT_RUN','CoverageComplete':False,
+@@ -396,12 +472,12 @@
+ 
+ def main() -> int:
+     parser=argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument('action',choices=('check','seal','build','verify'))
++    parser.add_argument('action',choices=('static','check','seal','build','verify','verify-zip'))
+     parser.add_argument('path',type=Path)
+     parser.add_argument('--output',type=Path)
+     args=parser.parse_args()
+     try:
+-        if args.action == 'check':
++        if args.action == 'static':
+             result=static_checks(args.path)
+         elif args.action == 'seal':
+             result=seal(args.path)

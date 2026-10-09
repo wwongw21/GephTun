@@ -1,0 +1,522 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][ValidateSet('Baseline','Connected','Recovered')][string]$Stage,
+    [Parameter(Mandatory=$true)][string]$OutputDirectory,
+    [string]$BaselineReport,
+    [string]$PackageDirectory
+)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+if (-not $PackageDirectory) { $PackageDirectory = Split-Path -Parent $PSScriptRoot }
+. (Join-Path $PSScriptRoot 'Package.Common.ps1')
+$root = Get-GephPackageFullPath $PackageDirectory
+$output = Get-GephPackageFullPath $OutputDirectory
+Assert-GephPackageOutput $output $root -Directory
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    throw 'BLOCKED_BY_HOST: this read-only collector requires Windows. No networking changes were attempted.'
+}
+
+# This collector never imports the controller, launches a worker, changes
+# networking, kills a process, or issues a remote traffic probe. Stage is a label
+# supplied by the operator; a snapshot is not proof of successful acceptance.
+$captureStartedUtc = [DateTime]::UtcNow.ToString('o')
+$checks = New-Object 'Collections.Generic.List[object]'
+$captures = [ordered]@{}
+function Add-AcceptanceCheck([string]$Name, [string]$Result, [string]$Detail) {
+    $checks.Add([pscustomobject]@{ Name=$Name; Result=$Result; Detail=$Detail })
+}
+function Read-AcceptanceCapture([string]$Name, [scriptblock]$Query) {
+    try {
+        $captures[$Name] = @(& $Query)
+        Add-AcceptanceCheck ('Read ' + $Name) 'PASS' 'Read-only provider query completed.'
+    } catch {
+        $captures[$Name] = $null
+        Add-AcceptanceCheck ('Read ' + $Name) 'FAIL' $_.Exception.Message
+    }
+}
+function Read-AcceptanceJson([string]$Path) {
+    $raw = $null
+    for ($attempt=0; $attempt -lt 3; $attempt++) {
+        try {
+            Assert-GephPackageNoRedirect $Path
+            $attributes = Get-GephPackageAttributes $Path -AllowMissing
+            if ($null -eq $attributes) { return $null }
+            if (($attributes -band ([IO.FileAttributes]::Directory -bor [IO.FileAttributes]::ReparsePoint)) -ne 0) { throw 'State path must be a regular file.' }
+            $stream = [IO.FileStream]::new($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            try {
+                # Recheck ancestors after opening. FileShare.Delete keeps this
+                # handle on one complete version during an atomic replacement.
+                Assert-GephPackageNoRedirect $Path
+                if ($stream.Length -gt 2097152) { throw 'State file is unexpectedly large.' }
+                $reader = [IO.StreamReader]::new($stream,[Text.Encoding]::UTF8)
+                try {
+                    $builder = New-Object Text.StringBuilder
+                    $buffer = New-Object char[] 4096
+                    while (($count=$reader.Read($buffer,0,$buffer.Length)) -gt 0) {
+                        if ($builder.Length + $count -gt 2097152) { throw 'State file is unexpectedly large.' }
+                        $null=$builder.Append($buffer,0,$count)
+                    }
+                    $raw=$builder.ToString()
+                } finally { $reader.Dispose() }
+            } finally { $stream.Dispose() }
+            break
+        } catch [IO.IOException] {
+            if ($attempt -eq 2) { throw }
+            [Threading.Thread]::Sleep(120)
+        }
+    }
+    # A present null/array/scalar document must not impersonate a missing
+    # journal or an empty successful provider capture.
+    if ([string]::IsNullOrWhiteSpace($raw) -or -not $raw.TrimStart().StartsWith('{')) { throw 'State/report JSON must contain one object.' }
+    if ($PSVersionTable.PSVersion -ge [version]'7.5') { return ConvertFrom-Json -InputObject $raw -DateKind String }
+    return ConvertFrom-Json -InputObject $raw
+}
+
+function Get-AcceptanceProperty($Object, [string]$Name) {
+    if ($null -eq $Object) { return $null }
+    if ($Object -is [Collections.IDictionary]) { return $Object[$Name] }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -ne $property) { return $property.Value }
+    return $null
+}
+function Test-AcceptanceProperty($Object, [string]$Name) {
+    if ($null -eq $Object) { return $false }
+    if ($Object -is [Collections.IDictionary]) { return $Object.Contains($Name) }
+    return $null -ne $Object.PSObject.Properties[$Name]
+}
+function Get-AcceptanceFieldObservation($Object, [string]$Name) {
+    # Keep missing, present-null, empty-string and empty-array values distinct.
+    # String joining would erase the exact provider distinction that previously
+    # made an unrestricted AppContainer Package fail containment verification.
+    $present=Test-AcceptanceProperty $Object $Name
+    $value=$null;$kind='MISSING';$type=$null
+    if ($present) {
+        if ($Object -is [Collections.IDictionary]) { $value=$Object[$Name] }
+        else { $value=$Object.PSObject.Properties[$Name].Value }
+        if ($null -eq $value) { $kind='NULL' }
+        else {
+            $type=$value.GetType().FullName
+            if ($value -is [string] -and $value.Length -eq 0) { $kind='EMPTY_STRING' }
+            elseif ($value -is [Array] -and $value.Length -eq 0) { $kind='EMPTY_ARRAY' }
+            elseif ($value -is [Array]) { $kind='ARRAY' }
+            elseif ($value -is [Enum]) { $kind='ENUM' }
+            else { $kind='VALUE' }
+        }
+    }
+    # Display aids reading enum values; Value retains the actual supplied value.
+    [pscustomobject]@{Present=[bool]$present;Kind=$kind;Type=$type;Value=$value;Display=[string]$value}
+}
+function Get-AcceptanceFirewallRuleShape($Rule, [string]$Role) {
+    $ruleFields=[ordered]@{}
+    foreach ($field in @('Name','DisplayName','Enabled','Direction','Action','Profile','PolicyStoreSourceType','PolicyStoreSource','EnforcementStatus','Status','PrimaryStatus','Owner','EdgeTraversalPolicy','LooseSourceMapping','LocalOnlyMapping')) {
+        $ruleFields[$field]=Get-AcceptanceFieldObservation $Rule $field
+    }
+    $filters=New-Object 'Collections.Generic.List[object]'
+    $complete=$true
+    $specifications=@(
+        @{Command='Get-NetFirewallAddressFilter';Fields=@('LocalAddress','RemoteAddress')},
+        @{Command='Get-NetFirewallApplicationFilter';Fields=@('Program','Package')},
+        @{Command='Get-NetFirewallServiceFilter';Fields=@('Service')},
+        @{Command='Get-NetFirewallPortFilter';Fields=@('Protocol','LocalPort','RemotePort','IcmpType','DynamicTransport')},
+        @{Command='Get-NetFirewallInterfaceFilter';Fields=@('InterfaceAlias')},
+        @{Command='Get-NetFirewallInterfaceTypeFilter';Fields=@('InterfaceType')},
+        @{Command='Get-NetFirewallSecurityFilter';Fields=@('Authentication','Encryption','OverrideBlockRules','LocalUser','RemoteUser','RemoteMachine')}
+    )
+    foreach ($specification in $specifications) {
+        $record=[ordered]@{Command=$specification.Command;Result='PASS';Error='';ObjectCount=0;Objects=@()}
+        try {
+            $objects=@(& $specification.Command -AssociatedNetFirewallRule $Rule -ErrorAction Stop)
+            $record.ObjectCount=$objects.Count
+            $record.Objects=@(foreach ($item in $objects) {
+                $fields=[ordered]@{}
+                foreach ($field in $specification.Fields) { $fields[$field]=Get-AcceptanceFieldObservation $item $field }
+                [pscustomobject]@{Fields=$fields}
+            })
+            if ($objects.Count -ne 1) { throw 'Expected one associated filter object; retained the observed count and objects.' }
+        } catch { $record.Result='FAIL';$record.Error=$_.Exception.Message;$complete=$false }
+        $filters.Add([pscustomobject]$record)
+    }
+    [pscustomobject]@{Name=[string](Get-AcceptanceProperty $Rule 'Name');Role=$Role;Complete=$complete;Fields=$ruleFields;Filters=$filters.ToArray()}
+}
+function Get-AcceptanceFirewallProviderShapes {
+    # Read all owned rules up to a documented bound, plus one existing outbound
+    # block-rule sample per store. A sample is not labeled unrestricted and is
+    # never changed. It makes native shapes observable before a Connect attempt.
+    foreach ($policyStore in @('ActiveStore','PersistentStore')) {
+        $result=[ordered]@{PolicyStore=$policyStore;Result='PASS';Error='';OwnedRulesObserved=0;OwnedRulesCaptured=0;SampleRulesCaptured=0;OwnedRuleLimit=16;Truncated=$false;Rules=@()}
+        try {
+            $rules=@(Get-NetFirewallRule -PolicyStore $policyStore -ErrorAction Stop)
+            $owned=@($rules | Where-Object {$_.Name -like 'GephTun-IPv6-Contain-*'} | Sort-Object Name)
+            $result.OwnedRulesObserved=$owned.Count
+            $selected=@($owned | Select-Object -First $result.OwnedRuleLimit)
+            $result.OwnedRulesCaptured=$selected.Count
+            $result.Truncated=$owned.Count -gt $result.OwnedRuleLimit
+            $shapes=New-Object 'Collections.Generic.List[object]'
+            foreach ($rule in $selected) { $shapes.Add((Get-AcceptanceFirewallRuleShape $rule 'OwnedContainment')) }
+            $sample=@($rules | Where-Object {$_.Name -notlike 'GephTun-IPv6-Contain-*' -and [string]$_.Direction -eq 'Outbound' -and [string]$_.Action -eq 'Block'} | Sort-Object Name | Select-Object -First 1)
+            foreach ($rule in $sample) { $shapes.Add((Get-AcceptanceFirewallRuleShape $rule 'ExistingRuleSample'));$result.SampleRulesCaptured++ }
+            $result.Rules=$shapes.ToArray()
+            if ($result.Truncated) { throw 'More than 16 owned rules were found in this store; the diagnostic capture is explicitly truncated.' }
+            if (@($shapes | Where-Object {-not $_.Complete}).Count -gt 0) { throw 'One or more associated filter queries failed; inspect the retained per-filter errors and partial objects.' }
+        } catch { $result.Result='FAIL';$result.Error=$_.Exception.Message }
+        [pscustomobject]$result
+    }
+}
+function Get-AcceptanceCommandSpecifications {
+    # Selected native commands whose parameter contracts are used by the current
+    # controller or this collector. Metadata is read; none is invoked here.
+    [ordered]@{
+        'Disable-NetAdapterBinding'=@('Name','ComponentID','Confirm')
+        'Get-NetFirewallRule'=@('PolicyStore')
+        'Get-NetFirewallProfile'=@('PolicyStore')
+        'Get-NetFirewallAddressFilter'=@('AssociatedNetFirewallRule')
+        'Get-NetFirewallApplicationFilter'=@('AssociatedNetFirewallRule')
+        'Get-NetFirewallServiceFilter'=@('AssociatedNetFirewallRule')
+        'Get-NetFirewallPortFilter'=@('AssociatedNetFirewallRule')
+        'Get-NetFirewallInterfaceFilter'=@('AssociatedNetFirewallRule')
+        'Get-NetFirewallInterfaceTypeFilter'=@('AssociatedNetFirewallRule')
+        'Get-NetFirewallSecurityFilter'=@('AssociatedNetFirewallRule')
+        'New-NetFirewallRule'=@('Name','DisplayName','Description','Direction','Action','Enabled','Profile','RemoteAddress','PolicyStore','Authentication','Encryption','OverrideBlockRules')
+        'Set-NetFirewallRule'=@('Name','RemoteAddress','PolicyStore')
+        'Remove-NetFirewallRule'=@('Name','PolicyStore')
+        'Set-NetFirewallProfile'=@('Name','Enabled','PolicyStore')
+        'Set-NetIPInterface'=@('InterfaceIndex','AddressFamily','Dhcp','AutomaticMetric','InterfaceMetric','DadTransmits')
+        'New-NetIPAddress'=@('InterfaceIndex','AddressFamily','IPAddress','PrefixLength','PolicyStore')
+        'Add-DnsClientNrptRule'=@('Namespace','NameServers','Comment')
+        'Get-DnsClientNrptPolicy'=@('Effective')
+    }
+}
+function Get-AcceptanceCommandContract([string]$Name, [string[]]$RequiredParameters) {
+    $parameters=New-Object 'Collections.Generic.List[object]'
+    foreach ($parameterName in $RequiredParameters) {
+        $parameters.Add([pscustomobject]@{Name=$parameterName;Observation='NOT_READ';Present=$null;Result='NOT_READ';Error='';Type=$null;EnumType=$null;EnumNames=@()})
+    }
+    $record=[ordered]@{Name=$Name;Result='PASS';Error='';CommandCount=0;CommandType=$null;ModuleName=$null;Parameters=@()}
+    try {
+        $commands=@(Get-Command $Name -ErrorAction Stop)
+        $record.CommandCount=$commands.Count
+        if ($commands.Count -ne 1) { throw 'Expected one native command metadata result.' }
+        $command=$commands[0]
+        $record.CommandType=[string]$command.CommandType
+        $record.ModuleName=[string]$command.ModuleName
+        foreach ($parameter in $parameters) {
+            try {
+                if (-not $command.Parameters.ContainsKey($parameter.Name)) {
+                    $parameter.Observation='MISSING';$parameter.Present=$false
+                    throw ('Missing required parameter: '+$parameter.Name)
+                }
+                $parameter.Observation='PRESENT';$parameter.Present=$true
+                $type=$command.Parameters[$parameter.Name].ParameterType
+                if ($null -eq $type -or $type -isnot [Type] -or [string]::IsNullOrWhiteSpace($type.FullName)) {
+                    throw ('Declared parameter type is unavailable: '+$parameter.Name)
+                }
+                $parameter.Type=$type.FullName
+                $enumType=$type
+                if ($type.IsArray) { $enumType=$type.GetElementType() }
+                $nullableType=[Nullable]::GetUnderlyingType($enumType)
+                if ($null -ne $nullableType) { $enumType=$nullableType }
+                if ($enumType.IsEnum) {
+                    $parameter.EnumType=$enumType.FullName
+                    $parameter.EnumNames=@([Enum]::GetNames($enumType))
+                }
+                $parameter.Result='PASS'
+            } catch { $parameter.Result='FAIL';$parameter.Error=$_.Exception.Message;$record.Result='FAIL' }
+        }
+        if ($record.Result -eq 'FAIL') { $record.Error='One or more required parameter metadata observations failed; inspect each retained result.' }
+    } catch { $record.Result='FAIL';$record.Error=$_.Exception.Message }
+    $record.Parameters=$parameters.ToArray()
+    [pscustomobject]$record
+}
+function Assert-AcceptancePassedCheck($Snapshot, [string]$Name) {
+    $matching = @(Get-AcceptanceProperty $Snapshot 'Checks' | Where-Object { (Get-AcceptanceProperty $_ 'Name') -ceq $Name })
+    if ($matching.Count -ne 1 -or (Get-AcceptanceProperty $matching[0] 'Result') -cne 'PASS') {
+        throw ('Missing, duplicate, or unsuccessful baseline prerequisite: ' + $Name)
+    }
+}
+function Get-AcceptancePhysicalAdapters($Adapters) {
+    # Interface indices can change or be reused. Identity is the adapter GUID;
+    # an index only connects a DNS row to its adapter in this one snapshot.
+    if ($null -eq $Adapters) { throw 'The physical adapter capture is missing.' }
+    $physical = New-Object 'Collections.Generic.Dictionary[string,object]' ([StringComparer]::OrdinalIgnoreCase)
+    $indices = New-Object 'Collections.Generic.HashSet[int]'
+    foreach ($adapter in @($Adapters)) {
+        $hardware = Get-AcceptanceProperty $adapter 'HardwareInterface'
+        if ($hardware -isnot [bool]) { throw 'Adapter hardware identity must be a boolean.' }
+        if (-not $hardware) { continue }
+        $guid = [guid]::Empty; $index = 0
+        if (-not [guid]::TryParse([string](Get-AcceptanceProperty $adapter 'InterfaceGuid'), [ref]$guid) -or $guid -eq [guid]::Empty -or
+            -not [int]::TryParse([string](Get-AcceptanceProperty $adapter 'InterfaceIndex'), [ref]$index) -or $index -le 0) {
+            throw 'A physical adapter has an invalid GUID or interface index.'
+        }
+        if ($physical.ContainsKey($guid.ToString('D')) -or -not $indices.Add($index)) { throw 'Physical adapter identities or interface indices are duplicated.' }
+        $physical.Add($guid.ToString('D'), [pscustomobject]@{ Guid=$guid.ToString('D'); Index=$index })
+    }
+    if ($physical.Count -eq 0) { throw 'No physical adapter identities were captured.' }
+    return ,$physical
+}
+function Get-AcceptancePhysicalDns($Dns, $PhysicalAdapters) {
+    if ($null -eq $Dns) { throw 'The physical DNS capture is missing.' }
+    $byIndex = @{}
+    foreach ($adapter in $PhysicalAdapters.Values) { $byIndex[[int]$adapter.Index] = $adapter.Guid }
+    $rows = New-Object 'Collections.Generic.List[string]'
+    $seen = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $covered = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($row in @($Dns)) {
+        $index = 0
+        if (-not [int]::TryParse([string](Get-AcceptanceProperty $row 'InterfaceIndex'), [ref]$index)) { throw 'A DNS row has an invalid interface index.' }
+        if (-not $byIndex.ContainsKey($index)) { continue }
+        $family = [string](Get-AcceptanceProperty $row 'AddressFamily')
+        if ($family -in @('2','IPv4')) { $family = 'IPv4' }
+        elseif ($family -in @('23','IPv6')) { $family = 'IPv6' }
+        else { throw 'A physical DNS row has an invalid address family.' }
+        $key = $byIndex[$index] + '/' + $family
+        if (-not $seen.Add($key)) { throw 'A physical DNS row is duplicated.' }
+        if (-not (Test-AcceptanceProperty $row 'ServerAddresses')) { throw 'A physical DNS row is missing its server address field.' }
+        $servers = Get-AcceptanceProperty $row 'ServerAddresses'
+        if ($null -eq $servers) { $servers = @() }
+        $normalized = @(foreach ($server in @($servers)) {
+            $address = $null
+            if (-not [Net.IPAddress]::TryParse([string]$server, [ref]$address)) { throw 'A physical DNS server address is invalid.' }
+            $address.ToString().ToLowerInvariant()
+        })
+        $null = $covered.Add($byIndex[$index])
+        $rows.Add($key + '=' + ($normalized -join ','))
+    }
+    if ($covered.Count -ne $PhysicalAdapters.Count) { throw 'DNS capture is missing a physical adapter.' }
+    foreach ($adapter in $PhysicalAdapters.Values) {
+        foreach ($family in @('IPv4','IPv6')) {
+            if (-not $seen.Contains($adapter.Guid + '/' + $family)) {
+                throw ('DNS capture is missing a physical adapter address family: ' + $family + '. A provider omission cannot establish complete DNS restoration; retain this snapshot for manual review.')
+            }
+        }
+    }
+    $rows.ToArray() | Sort-Object
+}
+function Get-AcceptanceFirewallProfiles($Profiles, [bool]$Effective) {
+    if ($null -eq $Profiles) { throw 'A firewall profile capture is missing.' }
+    $seen = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $rows = New-Object 'Collections.Generic.List[string]'
+    foreach ($profile in @($Profiles)) {
+        $name = [string](Get-AcceptanceProperty $profile 'Name')
+        if ($name -notin @('Domain','Private','Public') -or -not $seen.Add($name)) { throw 'Firewall profile identities are missing or duplicated.' }
+        $enabled = [string](Get-AcceptanceProperty $profile 'Enabled')
+        if ($enabled -notin @('True','False','NotConfigured')) { throw 'A firewall profile enabled state is invalid.' }
+        $row = $name.ToLowerInvariant() + '=' + $enabled.ToLowerInvariant()
+        if ($Effective) {
+            $localRules = [string](Get-AcceptanceProperty $profile 'AllowLocalFirewallRules')
+            if ($localRules -notin @('True','False','NotConfigured')) { throw 'A firewall local-rule state is invalid.' }
+            $row += '/' + $localRules.ToLowerInvariant()
+        }
+        $excluded=Get-AcceptanceProperty $profile 'DisabledInterfaceAliases'
+        if ($null -eq $excluded -or (Get-AcceptanceProperty $excluded 'Present') -isnot [bool] -or -not $excluded.Present -or
+            -not (Test-AcceptanceProperty $excluded 'Value')) { throw 'A firewall profile excluded-interface capture is missing.' }
+        $aliases=@(Get-AcceptanceProperty $excluded 'Value' | Where-Object {$null -ne $_ -and [string]$_ -ne '' -and [string]$_ -ne 'NotConfigured'} | ForEach-Object {([string]$_).ToLowerInvariant()} | Sort-Object -Unique)
+        $row += '/interfaces=' + (ConvertTo-Json -InputObject $aliases -Compress)
+        $rows.Add($row)
+    }
+    if ($seen.Count -ne 3) { throw 'All three Windows Firewall profiles must be captured.' }
+    $rows.ToArray() | Sort-Object
+}
+function Compare-AcceptanceBaseline($Before, $Current) {
+    # This compares selected read-only facts. It cannot certify that a live
+    # recovery ran, that routes are correct, or that packets did not leak.
+    foreach ($snapshot in @($Before,$Current)) {
+        if ((Get-AcceptanceProperty $snapshot 'Kind') -cne 'GephTunWindowsAcceptanceSnapshot' -or
+            ((Get-AcceptanceProperty $snapshot 'Schema') -isnot [int] -and (Get-AcceptanceProperty $snapshot 'Schema') -isnot [long]) -or (Get-AcceptanceProperty $snapshot 'Schema') -ne 2 -or
+            (Get-AcceptanceProperty $snapshot 'CaptureStatus') -cne 'CAPTURED') { throw 'Both reports must be complete schema-2 acceptance snapshots without failed checks.' }
+        $records = @(Get-AcceptanceProperty $snapshot 'Checks')
+        if ($records.Count -eq 0 -or @($records | Where-Object { (Get-AcceptanceProperty $_ 'Result') -cne 'PASS' }).Count -gt 0) { throw 'A snapshot contains missing or unsuccessful checks.' }
+        foreach ($required in @('Target host and administrator access','Package integrity','Package identity','Package unchanged during capture','Physical adapter identities','No saved session','No remaining containment rule','No remaining DNS rule',
+            'Read Adapters','Read IPv6Bindings','Read Addresses','Read Routes','Read DnsServers','Read FirewallProfiles','Read LocalFirewallProfiles','Read Session','Read Status',
+            'Read ContainmentRules','Read LocalContainmentRules','Read FirewallProviderShapes','Firewall provider shape queries','Read CommandContracts','Native command metadata observations','Read DnsRules','Read EffectiveDnsPolicy','Read ConnectionProfiles','Read FirewallServices','Read LocalDnsListenersTcp','Read LocalDnsListenersUdp','Read DriverSignature','Wintun Authenticode trust')) {
+            Assert-AcceptancePassedCheck $snapshot $required
+        }
+    }
+    if ((Get-AcceptanceProperty $Before 'Stage') -cne 'Baseline' -or (Get-AcceptanceProperty $Current 'Stage') -cne 'Recovered') { throw 'Comparison requires Baseline and Recovered snapshots.' }
+    $computer = [string](Get-AcceptanceProperty $Before 'ComputerName')
+    if ([string]::IsNullOrWhiteSpace($computer) -or $computer -cne (Get-AcceptanceProperty $Current 'ComputerName')) { throw 'Baseline must be from this computer.' }
+    $oldTime = [DateTimeOffset]::MinValue; $newTime = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse([string](Get-AcceptanceProperty $Before 'CapturedUtc'), [ref]$oldTime) -or
+        -not [DateTimeOffset]::TryParse([string](Get-AcceptanceProperty $Current 'CapturedUtc'), [ref]$newTime) -or $oldTime -ge $newTime) { throw 'Baseline must have a valid capture time before the recovered snapshot.' }
+    $oldIdentity = Get-AcceptanceProperty $Before 'PackageIdentity'; $newIdentity = Get-AcceptanceProperty $Current 'PackageIdentity'
+    foreach ($field in @('Version','ManifestSha256','CollectorSha256','CommonSha256','VerifierSha256')) {
+        $value = [string](Get-AcceptanceProperty $oldIdentity $field)
+        if (($field -eq 'Version' -and $value -notmatch '^\d+\.\d+\.\d+$') -or
+            ($field -ne 'Version' -and $value -notmatch '^[0-9a-fA-F]{64}$') -or
+            $value -cne (Get-AcceptanceProperty $newIdentity $field)) { throw ('Baseline is for a different or unidentified package: ' + $field) }
+    }
+    if ((Get-AcceptanceProperty $Before 'Version') -cne $oldIdentity.Version -or (Get-AcceptanceProperty $Current 'Version') -cne $newIdentity.Version) { throw 'Snapshot version disagrees with its package identity.' }
+    $oldCaptures = Get-AcceptanceProperty $Before 'Captures'; $newCaptures = Get-AcceptanceProperty $Current 'Captures'
+    $oldAdapters = Get-AcceptancePhysicalAdapters (Get-AcceptanceProperty $oldCaptures 'Adapters')
+    $newAdapters = Get-AcceptancePhysicalAdapters (Get-AcceptanceProperty $newCaptures 'Adapters')
+    if ((@($oldAdapters.Keys | Sort-Object) -join ',') -cne (@($newAdapters.Keys | Sort-Object) -join ',')) { throw 'Physical adapter GUIDs differ from baseline; interface indices alone cannot establish identity.' }
+    $oldDns = @(Get-AcceptancePhysicalDns (Get-AcceptanceProperty $oldCaptures 'DnsServers') $oldAdapters)
+    $newDns = @(Get-AcceptancePhysicalDns (Get-AcceptanceProperty $newCaptures 'DnsServers') $newAdapters)
+    if (($oldDns -join "`n") -cne ($newDns -join "`n")) { throw 'Physical DNS differs from baseline on the identified adapters.' }
+    foreach ($section in @('FirewallProfiles','LocalFirewallProfiles')) {
+        $oldProfiles = @(Get-AcceptanceFirewallProfiles (Get-AcceptanceProperty $oldCaptures $section) ($section -eq 'FirewallProfiles'))
+        $newProfiles = @(Get-AcceptanceFirewallProfiles (Get-AcceptanceProperty $newCaptures $section) ($section -eq 'FirewallProfiles'))
+        if (($oldProfiles -join "`n") -cne ($newProfiles -join "`n")) { throw ($section + ' differs from baseline.') }
+    }
+    return 'Physical DNS on matching adapter GUIDs and captured firewall profile enablement, local-rule policy and excluded-interface values match this exact package baseline. Routes, connectivity, packet leakage, recovery execution and native UI still require operator review.'
+}
+
+function Assert-AcceptanceStablePackage([string]$PackageRoot, $Sources) {
+    if (@($Sources).Count -eq 0) { throw 'No initial package identity was recorded.' }
+    $files = Get-GephPackageInventory $PackageRoot
+    foreach ($entry in @($Sources)) { Assert-GephPackageHashMatches ([string]$entry.Path) $entry.Sha256 $files }
+}
+
+try {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    try { $admin = (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
+    finally { $identity.Dispose() }
+    $native = $PSVersionTable.PSEdition -eq 'Desktop' -and $PSVersionTable.PSVersion.Major -eq 5 -and [Environment]::Is64BitProcess -and $env:PROCESSOR_ARCHITECTURE -eq 'AMD64'
+    if (-not $native -or -not $admin) { throw 'Use an administrator Windows PowerShell 5.1 x64 window for target qualification; partial reads may still be useful.' }
+    Add-AcceptanceCheck 'Target host and administrator access' 'PASS' 'Windows PowerShell 5.1 x64 with administrator access.'
+} catch { Add-AcceptanceCheck 'Target host and administrator access' 'FAIL' $_.Exception.Message }
+
+try {
+    $verification = @(& (Join-Path $PSScriptRoot '..\Verify-GephTun.ps1') -PackageDirectory $root -Quiet)
+    if ($verification.Count -ne 1 -or $verification[0].Success -isnot [bool] -or -not $verification[0].Success) { throw 'Package verification did not succeed.' }
+    Add-AcceptanceCheck 'Package integrity' 'PASS' 'The release inventory and recorded portable evidence match. This is not a publisher signature.'
+} catch { Add-AcceptanceCheck 'Package integrity' 'FAIL' $_.Exception.Message }
+
+$version = 'UNVERIFIED'
+$packageIdentity = $null
+$sources = New-Object 'Collections.Generic.List[object]'
+try {
+    $release = Read-AcceptanceJson (Join-Path $root 'RELEASE.json')
+    if ($null -eq $release -or $release.Package -cne 'GephTun' -or $release.Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Release identity is missing or invalid.' }
+    $version = [string]$release.Version
+    foreach ($relative in @('RELEASE.json','PACKAGE-MANIFEST.json','GephTun.Core.psm1','GephTun.Network.cs','tests/Collect-WindowsAcceptance.ps1','tests/Package.Common.ps1','Verify-GephTun.ps1')) {
+        $path=Join-Path $root $relative
+        Assert-GephPackageNoRedirect $path
+        $sources.Add([pscustomobject]@{Path=$relative;Sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()})
+    }
+    $hashes=@{}
+    foreach ($entry in $sources) { $hashes[$entry.Path]=$entry.Sha256 }
+    foreach ($relative in @('tests/Collect-WindowsAcceptance.ps1','tests/Package.Common.ps1','Verify-GephTun.ps1')) {
+        $running=Join-Path (Split-Path -Parent $PSScriptRoot) $relative
+        if ((Get-FileHash -LiteralPath $running -Algorithm SHA256 -ErrorAction Stop).Hash -ne $hashes[$relative]) { throw ('Executing collector tooling differs from the selected package: '+$relative) }
+    }
+    $packageIdentity=[pscustomobject]@{Version=$version;ManifestSha256=$hashes['PACKAGE-MANIFEST.json'];CollectorSha256=$hashes['tests/Collect-WindowsAcceptance.ps1'];CommonSha256=$hashes['tests/Package.Common.ps1'];VerifierSha256=$hashes['Verify-GephTun.ps1']}
+    Add-AcceptanceCheck 'Package identity' 'PASS' 'Exact manifest and executing collector tooling hashes recorded; these are consistency identities, not signatures.'
+} catch { Add-AcceptanceCheck 'Package identity' 'FAIL' $_.Exception.Message }
+
+# Record declared parameter types and enum names, not just presence: native
+# GpoBoolean parameters do not necessarily accept a System.Boolean argument.
+$contracts=Get-AcceptanceCommandSpecifications
+Read-AcceptanceCapture 'CommandContracts' {
+    foreach ($name in $contracts.Keys) { Get-AcceptanceCommandContract $name $contracts[$name] }
+}
+foreach ($contract in @($captures.CommandContracts)) {
+    if ($null -eq $contract) { continue }
+    $detail='Declared types and enum names captured. Parameter binding and command execution are not tested.'
+    if ($contract.Result -ne 'PASS') { $detail=$contract.Error }
+    Add-AcceptanceCheck ('Command contract '+$contract.Name) $contract.Result $detail
+}
+if (@($captures.CommandContracts).Count -eq $contracts.Count -and @($captures.CommandContracts | Where-Object {$null -eq $_ -or $_.Result -ne 'PASS'}).Count -eq 0) {
+    Add-AcceptanceCheck 'Native command metadata observations' 'PASS' 'All selected current command parameters were observed; this is metadata, not native binding or execution acceptance.'
+} else {
+    Add-AcceptanceCheck 'Native command metadata observations' 'FAIL' 'At least one current command/parameter metadata observation failed or was missing; inspect CommandContracts.'
+}
+
+Read-AcceptanceCapture 'Adapters' { Get-NetAdapter -IncludeHidden -ErrorAction Stop | Select-Object Name,InterfaceIndex,InterfaceGuid,Status,HardwareInterface,InterfaceDescription }
+Read-AcceptanceCapture 'IPv6Bindings' { Get-NetAdapterBinding -Name '*' -IncludeHidden -ComponentID ms_tcpip6 -ErrorAction Stop | Select-Object Name,InterfaceDescription,ComponentID,Enabled }
+Read-AcceptanceCapture 'Addresses' { Get-NetIPAddress -ErrorAction Stop | Select-Object InterfaceIndex,AddressFamily,IPAddress,PrefixLength,AddressState }
+Read-AcceptanceCapture 'Routes' { Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop | Select-Object DestinationPrefix,InterfaceIndex,NextHop,RouteMetric,State,Protocol }
+Read-AcceptanceCapture 'DnsServers' { Get-DnsClientServerAddress -ErrorAction Stop | Select-Object InterfaceIndex,InterfaceAlias,@{Name='AddressFamily';Expression={[string]$_.AddressFamily}},ServerAddresses }
+Read-AcceptanceCapture 'DnsRules' { Get-DnsClientNrptRule -ErrorAction Stop | Select-Object Name,Namespace,NameServers,Comment }
+Read-AcceptanceCapture 'EffectiveDnsPolicy' { Get-DnsClientNrptPolicy -Effective -ErrorAction Stop | Select-Object Namespace,NameServers }
+Read-AcceptanceCapture 'FirewallProfiles' { Get-NetFirewallProfile -PolicyStore ActiveStore -ErrorAction Stop | ForEach-Object { [pscustomobject]@{Name=[string]$_.Name;Enabled=[string]$_.Enabled;AllowLocalFirewallRules=[string]$_.AllowLocalFirewallRules;DisabledInterfaceAliases=(Get-AcceptanceFieldObservation $_ 'DisabledInterfaceAliases')} } }
+Read-AcceptanceCapture 'LocalFirewallProfiles' { Get-NetFirewallProfile -PolicyStore PersistentStore -ErrorAction Stop | ForEach-Object { [pscustomobject]@{Name=[string]$_.Name;Enabled=[string]$_.Enabled;DisabledInterfaceAliases=(Get-AcceptanceFieldObservation $_ 'DisabledInterfaceAliases')} } }
+Read-AcceptanceCapture 'ContainmentRules' {
+    Get-NetFirewallRule -PolicyStore ActiveStore -ErrorAction Stop | Where-Object { $_.Name -like 'GephTun-IPv6-Contain-*' } | ForEach-Object {
+        $r=$_; $addresses=@(Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $r -ErrorAction Stop)
+        [pscustomobject]@{Name=$r.Name;Enabled=[string]$r.Enabled;Direction=[string]$r.Direction;Action=[string]$r.Action;Profile=[string]$r.Profile;PolicyStoreSourceType=[string]$r.PolicyStoreSourceType;RemoteAddress=@($addresses | ForEach-Object {$_.RemoteAddress})}
+    }
+}
+Read-AcceptanceCapture 'LocalContainmentRules' {
+    Get-NetFirewallRule -PolicyStore PersistentStore -ErrorAction Stop | Where-Object { $_.Name -like 'GephTun-IPv6-Contain-*' } | Select-Object Name,Enabled,Direction,Action,Profile
+}
+Read-AcceptanceCapture 'FirewallProviderShapes' { Get-AcceptanceFirewallProviderShapes }
+if (@($captures.FirewallProviderShapes | Where-Object {$null -ne $_ -and $_.Result -eq 'PASS'}).Count -eq 2) {
+    Add-AcceptanceCheck 'Firewall provider shape queries' 'PASS' 'Owned filters and at most one existing outbound block-rule sample per store were read. Missing/null/empty fields remain distinct; these observations do not prove enforcement.'
+} else { Add-AcceptanceCheck 'Firewall provider shape queries' 'FAIL' 'At least one store/filter query failed or exceeded its capture bound; partial provider shapes and error details are retained.' }
+Read-AcceptanceCapture 'ConnectionProfiles' { Get-NetConnectionProfile -ErrorAction Stop | Select-Object Name,InterfaceAlias,InterfaceIndex,NetworkCategory,IPv4Connectivity,IPv6Connectivity }
+Read-AcceptanceCapture 'FirewallServices' { Get-Service -Name BFE,MpsSvc -ErrorAction Stop | Select-Object Name,Status,StartType }
+Read-AcceptanceCapture 'LocalDnsListenersTcp' { Get-NetTCPConnection -ErrorAction Stop | Where-Object { $_.LocalPort -eq 53 -and $_.State -eq 'Listen' } | Select-Object LocalAddress,LocalPort,OwningProcess }
+Read-AcceptanceCapture 'LocalDnsListenersUdp' { Get-NetUDPEndpoint -ErrorAction Stop | Where-Object { $_.LocalPort -eq 53 } | Select-Object LocalAddress,LocalPort,OwningProcess }
+Read-AcceptanceCapture 'DriverSignature' { Get-AuthenticodeSignature -LiteralPath (Join-Path $root 'bin\wintun.dll') -ErrorAction Stop | Select-Object @{Name='Status';Expression={[string]$_.Status}},StatusMessage,Path }
+Read-AcceptanceCapture 'Session' { Read-AcceptanceJson (Join-Path $env:ProgramData 'GephTun\session.json') }
+Read-AcceptanceCapture 'Status' { Read-AcceptanceJson (Join-Path $env:ProgramData 'GephTun\status.json') }
+
+try {
+    $null=Get-AcceptancePhysicalAdapters $captures.Adapters
+    Add-AcceptanceCheck 'Physical adapter identities' 'PASS' 'Physical interface GUIDs and indices are present and unambiguous.'
+} catch { Add-AcceptanceCheck 'Physical adapter identities' 'FAIL' $_.Exception.Message }
+
+$signatureResults=@($captures.DriverSignature | Where-Object {$null -ne $_})
+if ($signatureResults.Count -eq 1 -and [string]$signatureResults[0].Status -ceq 'Valid') {
+    Add-AcceptanceCheck 'Wintun Authenticode trust' 'PASS' 'Windows reported a valid signature. Driver loading is not tested.'
+} else { Add-AcceptanceCheck 'Wintun Authenticode trust' 'FAIL' 'Windows did not return one valid Wintun signature result; see DriverSignature capture.' }
+
+if ($Stage -in @('Baseline','Recovered')) {
+    foreach ($absence in @(
+        @{Name='No saved session';Sections=@('Session')},
+        @{Name='No remaining containment rule';Sections=@('ContainmentRules','LocalContainmentRules')},
+        @{Name='No remaining DNS rule';Sections=@('DnsRules')}
+    )) {
+        try {
+            foreach ($section in $absence.Sections) {
+                Assert-AcceptancePassedCheck ([pscustomobject]@{Checks=$checks.ToArray()}) ('Read '+$section)
+                $remaining=@($captures[$section] | Where-Object {$null -ne $_})
+                if ($section -eq 'DnsRules') { $remaining=@($remaining | Where-Object {$_.Comment -like 'GephTun:*'}) }
+                if ($remaining.Count -gt 0) { throw ('Owned state remains in '+$section+'; the requested stage label does not establish recovery.') }
+            }
+            Add-AcceptanceCheck $absence.Name 'PASS' 'The relevant provider reads completed and no owned state was observed at capture time.'
+        } catch { Add-AcceptanceCheck $absence.Name 'FAIL' $_.Exception.Message }
+    }
+} elseif ($Stage -eq 'Connected') {
+    if (@($captures.Session | Where-Object {$null -ne $_}).Count -eq 1) {
+        Add-AcceptanceCheck 'Connected-stage journal observation' 'PASS' 'A session journal was observed. Live connection health and traffic coverage are not inferred.'
+    } else { Add-AcceptanceCheck 'Connected-stage journal observation' 'FAIL' 'The Connected label has no readable single session journal; review the capture.' }
+}
+
+try {
+    # Sequential provider reads can take time. Bind the final receipt to the
+    # same unchanged package that was verified before capture began.
+    Assert-AcceptanceStablePackage $root $sources.ToArray()
+    $verification = @(& (Join-Path $PSScriptRoot '..\Verify-GephTun.ps1') -PackageDirectory $root -Quiet)
+    if ($verification.Count -ne 1 -or $verification[0].Success -isnot [bool] -or -not $verification[0].Success) { throw 'Final package verification did not succeed.' }
+    Add-AcceptanceCheck 'Package unchanged during capture' 'PASS' 'The original package identity and full inventory still match after the sequential provider reads.'
+} catch { Add-AcceptanceCheck 'Package unchanged during capture' 'FAIL' $_.Exception.Message }
+
+$comparison = [ordered]@{Requested=[bool]$BaselineReport;Result='NOT_RUN';Detail='Supply -BaselineReport for a recovered-state comparison.'}
+$report=[ordered]@{
+    Kind='GephTunWindowsAcceptanceSnapshot';Schema=2;Version=$version;PackageIdentity=$packageIdentity
+    CaptureStartedUtc=$captureStartedUtc;CapturedUtc=[DateTime]::UtcNow.ToString('o');Stage=$Stage;ComputerName=$env:COMPUTERNAME
+    PowerShellVersion=$PSVersionTable.PSVersion.ToString();OSVersion=[Environment]::OSVersion.VersionString
+    NativeAcceptance='NOT_RUN';CaptureStatus='CAPTURED'
+    Scope='Read-only, sequential snapshots and prerequisite checks only. The operator supplies the stage label. Captures are not atomic. CAPTURE_FAILED means at least one provider, prerequisite or comparison check failed; useful partial captures are retained. No traffic, recovery, leak, throughput, or UI acceptance is inferred.'
+    Sources=$sources.ToArray();Checks=$checks.ToArray();Comparison=$comparison;Captures=$captures
+}
+if (@($checks | Where-Object {$_.Result -cne 'PASS'}).Count -gt 0) { $report.CaptureStatus='CAPTURE_FAILED' }
+if ($BaselineReport) {
+    try {
+        $before=Read-AcceptanceJson (Get-GephPackageFullPath $BaselineReport)
+        $comparison.Detail=Compare-AcceptanceBaseline $before $report
+        $comparison.Result='PASS'
+    } catch { $comparison.Result='FAIL';$comparison.Detail=$_.Exception.Message }
+    Add-AcceptanceCheck 'Baseline comparison' $comparison.Result $comparison.Detail
+}
+$report.Checks=$checks.ToArray()
+if (@($checks | Where-Object {$_.Result -cne 'PASS'}).Count -gt 0) { $report.CaptureStatus='CAPTURE_FAILED' }
+$filename='GephTun-'+$version+'-'+$Stage+'-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')+'.json'
+$target=Join-Path $output $filename
+Write-GephPackageNewJson $target $report
+Write-Output ('Saved read-only acceptance snapshot: '+$target)
+Write-Output 'This snapshot does not certify Windows production acceptance. Follow WINDOWS-ACCEPTANCE.md.'
+if (@($checks | Where-Object {$_.Result -eq 'FAIL'}).Count -gt 0) { exit 1 }
