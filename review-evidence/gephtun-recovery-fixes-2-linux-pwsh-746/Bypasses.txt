@@ -1,0 +1,40 @@
+
+Name
+----                                                                           
+Repeated snapshots reuse one verified bypass without adding routes or log flood
+s
+New endpoints produce one periodic summary instead of per-IP normal warnings
+Persistent captured socket is escalated but warning is rate-limited
+Unused owned routes are retired after the quiet period
+An empty peer snapshot cannot prune owned routes
+Borrowed routes are never removed by retirement
+Changed owned route metric is rejected, not overwritten
+Adapter identity changes are rejected before adding a route
+Remembered endpoint is preinstalled on the fresh session gateway
+Wrong image identity cannot seed the endpoint cache
+Old and future endpoint records are ignored
+Unsafe cache address classes are excluded
+Cache serialization drops old overflow entries rather than growing unbounded
+Actual selected route is required: Competitor
+Actual selected route is required: WrongGateway
+Actual selected route is required: Ambiguous
+Actual selected route is required: Missing
+Actual selected route is required: QueryFailure
+Borrowed route metric changes that select another path are refused
+Failed retirement preserves route journal and registry for another attempt
+Exceptional bypass conditions fail without foreign deletion: Down
+Exceptional bypass conditions fail without foreign deletion: NotHardware
+Exceptional bypass conditions fail without foreign deletion: RouteQuery
+Exceptional bypass conditions fail without foreign deletion: AddFailure
+Combined interface and route metrics determine the selected path
+A higher total metric competitor permits the intended physical route
+Gateway changes are rejected before installing a stale bypass
+Actual route cleanup retains ownership on uncertainty: AdapterChanged
+Actual route cleanup retains ownership on uncertainty: MetricChanged
+Actual route cleanup retains ownership on uncertainty: RemovalUnconfirmed
+Actual route cleanup retains ownership on uncertainty: RemovalSuccess
+Actual route cleanup retains ownership on uncertainty: AlreadyAbsent
+Actual route creation journals only newly owned resources: Borrowed
+Actual route creation journals only newly owned resources: Added
+Actual route creation journals only newly owned resources: AddFailure
+

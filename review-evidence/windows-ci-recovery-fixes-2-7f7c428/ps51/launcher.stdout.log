@@ -1,0 +1,87 @@
+Isolated validation host: 5.1.20348.5622; standard user; no live network acceptance.
+GephTun 1.5.0: integrity PASS for 126 files. 250 STATIC checks passed. PowerShell/C# execution and native Windows acceptance were NOT RUN; this is not production qualification.
+Running Source in a fresh process...
+Running WfpPolicy in a fresh process...
+Running Bypasses in a fresh process...
+Running Protection in a fresh process...
+Running Resilience in a fresh process...
+Running Controller in a fresh process...
+Running DnsMandatory in a fresh process...
+Running BootRecovery in a fresh process...
+Running Package in a fresh process...
+
+Suite        ExitCode Result Detail Receipt                                                Log    
+-----        -------- ------ ------ -------                                                ---    
+Source              0 PASS          D:\a\_temp\gephtun-validation\suites\Source.json       D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\Sourc
+                                                                                           e.txt  
+WfpPolicy           0 PASS          D:\a\_temp\gephtun-validation\suites\WfpPolicy.json    D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\WfpPo
+                                                                                           licy.tx
+                                                                                           t      
+Bypasses            0 PASS          D:\a\_temp\gephtun-validation\suites\Bypasses.json     D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\Bypas
+                                                                                           ses.txt
+Protection          0 PASS          D:\a\_temp\gephtun-validation\suites\Protection.json   D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\Prote
+                                                                                           ction.t
+                                                                                           xt     
+Resilience          0 PASS          D:\a\_temp\gephtun-validation\suites\Resilience.json   D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\Resil
+                                                                                           ience.t
+                                                                                           xt     
+Controller          0 PASS          D:\a\_temp\gephtun-validation\suites\Controller.json   D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\Contr
+                                                                                           oller.t
+                                                                                           xt     
+DnsMandatory        0 PASS          D:\a\_temp\gephtun-validation\suites\DnsMandatory.json D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\DnsMa
+                                                                                           ndatory
+                                                                                           .txt   
+BootRecovery        0 PASS          D:\a\_temp\gephtun-validation\suites\BootRecovery.json D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\BootR
+                                                                                           ecovery
+                                                                                           .txt   
+Package             0 PASS          D:\a\_temp\gephtun-validation\suites\Package.json      D:\a\_t
+                                                                                           emp\gep
+                                                                                           htun-va
+                                                                                           lidatio
+                                                                                           n\suite
+                                                                                           s\Packa
+                                                                                           ge.txt 
+
+
+Results: D:\a\_temp\gephtun-validation\suites
+This runner does not alter the bundled historical/static qualification metadata or certify a production release.

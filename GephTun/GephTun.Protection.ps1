@@ -88,7 +88,7 @@ function Disable-GephTunProtection([switch]$AllowDirectInternet) {
     try {
         if (Test-Path -LiteralPath (Join-Path (Get-GephTunRoot) 'session.json')) { throw 'Recovery is incomplete; protection was retained.' }
         Initialize-GephTunWfpTypes
-        [GephTun.Security.WfpController]::Disable($true)
+        Remove-GephTunPersistentProtection
         $configPath = Join-Path (Get-GephTunRoot) 'protection.json'
         $config = Read-GephTunJson $configPath
         if ($null -ne $config) { $config.Requested='Disabled'; Write-GephTunJson $configPath $config }
@@ -113,7 +113,7 @@ function Open-GephTunProtectionLease {
     })
     $adapters = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object { $_.HardwareInterface -and $_.Status -eq 'Up' })
     if ($adapters.Count -eq 0) { Throw-GephTunTransient 'NETWORK_UNAVAILABLE' 'No active physical adapter is available for Geph bootstrap.' }
-    [ulong[]]$luids = @($adapters | ForEach-Object { [GephTun.Security.WfpController]::InterfaceLuid($_.InterfaceGuid.ToString()) })
+    [System.UInt64[]]$luids = @($adapters | ForEach-Object { [GephTun.Security.WfpController]::InterfaceLuid($_.InterfaceGuid.ToString()) })
     $script:ProtectionLease = [GephTun.Security.WfpController]::OpenLease([GephTun.Security.TrustedImage[]]$images, $luids)
     $script:ProtectionObserved='Enabled'
     Write-GephTunLog 'Temporary exact-image Geph TCP permissions opened on verified physical interfaces. The persistent blocker remains installed.'
@@ -161,4 +161,9 @@ function Assert-GephTunApprovedProxy($Identity) {
     if (@($config.TrustedImages | Where-Object { [string]::Equals($_.Path,$Identity.Path,[StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) {
         throw 'This Geph proxy executable was not explicitly approved for WFP bootstrap. Review protection configuration before connecting.'
     }
+}
+
+function Remove-GephTunPersistentProtection {
+    # Called only after explicit consent and completed session recovery.
+    [GephTun.Security.WfpController]::Disable($true)
 }

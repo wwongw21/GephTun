@@ -1,0 +1,445 @@
+{
+  "CapturedUtc": "2026-10-09T18:22:57.7454503Z",
+  "PowerShellVersion": "7.4.6",
+  "Platform": "Unix",
+  "Total": 40,
+  "Passed": 40,
+  "Failed": 0,
+  "Scope": "PowerShell parser and C#5 compile on the current host; no Windows runtime or live network acceptance.",
+  "Sources": [
+    {
+      "Path": "DEPENDENCIES.json",
+      "Sha256": "7802252de9609333062955175029506de85464f8f8f54de0725bb44ce968fb2d"
+    },
+    {
+      "Path": "Emergency-Unlock-GephTun.ps1",
+      "Sha256": "67630c0337c73b291afda0deae1b81c52fb0ea9aa535578c667e5ba2e2155766"
+    },
+    {
+      "Path": "GephTun-BootReconcile.ps1",
+      "Sha256": "22a0a4c9a77d06455828e9216e50ff825174bda381a86c91174060ff93bd506a"
+    },
+    {
+      "Path": "GephTun.Bypasses.ps1",
+      "Sha256": "98f61944a02ffac7a28575130a261c9be81a384ec330ddc2a8e75ea205526f79"
+    },
+    {
+      "Path": "GephTun.Core.psm1",
+      "Sha256": "f0d5b653c950203ba6595a93d3c93b44a8a083fbc51086f1b596f93ea8dbacca"
+    },
+    {
+      "Path": "GephTun.Network.cs",
+      "Sha256": "d5af45962ba84886e62fa5385304870d46237362722f384d259ea1b00ab34a39"
+    },
+    {
+      "Path": "GephTun.Protection.ps1",
+      "Sha256": "60242977048c9ea834c2c923efc89e95193ad464002da596c4a4206ea4ed64c2"
+    },
+    {
+      "Path": "GephTun.Resilience.ps1",
+      "Sha256": "1bf2d9e2778529059ee2647e90c7cd2018c0fddcee2dd54efd429521cddac8a0"
+    },
+    {
+      "Path": "GephTun.UI.ps1",
+      "Sha256": "3a8a971bab94a748f636e493f8d848b897bb2f5763c81607dd32193a17368985"
+    },
+    {
+      "Path": "GephTun.Wfp.cs",
+      "Sha256": "4853a984f851c6f6128081ae2cd90d3b34489f81aa4aa9000661efce18327bd0"
+    },
+    {
+      "Path": "GephTun.Worker.ps1",
+      "Sha256": "849afb21b12f06db99ee35feccbcc514474e7e78fd04b608c11c9585d3a8258d"
+    },
+    {
+      "Path": "GephTun.WorkerHost.ps1",
+      "Sha256": "4c22e7a3beb7a0a4a6bb33e3c5c7b219d5dd8622e530c854d8a79e50d75e3461"
+    },
+    {
+      "Path": "Launch-GephTun.cmd",
+      "Sha256": "c4a8708c6f2f3046620c746af58c915afc2dfb829d3e97655ffd516d8834bdbc"
+    },
+    {
+      "Path": "Launch-GephTun.ps1",
+      "Sha256": "92e374ac014dcdb6037f1a60c31bd521502d739056b82708c074ffebb0af5a33"
+    },
+    {
+      "Path": "Protection-GephTun.cmd",
+      "Sha256": "5cdbcce84b1e38e5111e2149af43ee4efb3dbf636c6cff46d8be1785a888bf12"
+    },
+    {
+      "Path": "Protection-GephTun.ps1",
+      "Sha256": "6e2046628aea78a3f8062e644eed99e4fa691542350154f360bf1abc23f02508"
+    },
+    {
+      "Path": "RELEASE.json",
+      "Sha256": "dff3879c44e03c9ed627ff9b7b0b6f565294f053329d3bf4b8fa93bae75d1216"
+    },
+    {
+      "Path": "Start-GephTun.cmd",
+      "Sha256": "d36714eb01db025b7c71d6477c5b12e5a6a7f683dc8262e6f68a9844914b50b2"
+    },
+    {
+      "Path": "Stop-GephTun.cmd",
+      "Sha256": "a0c2db5c91c7c0f28153ccc4cbcbc011b1a9ea8d0c45362c5d6a33a016cfaa26"
+    },
+    {
+      "Path": "tests/BootRecovery.Tests.ps1",
+      "Sha256": "3d0d75b5d7222c3ea2e7cd4a92872feeb41954814f5896be1d541b53c3ec601b"
+    },
+    {
+      "Path": "tests/Bypasses.Tests.ps1",
+      "Sha256": "5c89cc72f46952a422dd17fbf15c262d53ec42d024aa2c52ae36434cfea0afcf"
+    },
+    {
+      "Path": "tests/Controller.Tests.ps1",
+      "Sha256": "781ff391484806d7602f59a08e6495111a4b3f6aad3365ca8e8b8f2734a86210"
+    },
+    {
+      "Path": "tests/Diagnostics.Tests.ps1",
+      "Sha256": "fdcda3e739937683531fd3527669099db5ee85ee9c76cf728baf4141dde81fe7"
+    },
+    {
+      "Path": "tests/DnsMandatory.Tests.ps1",
+      "Sha256": "41c36821e061cb40faf64052a2a3da19055e0acf209538d8965cb82794194ae1"
+    },
+    {
+      "Path": "tests/Measure-WindowsResources.ps1",
+      "Sha256": "7a373677709dafc1b734a271f25134e8e00b7e2db796429112addd93ac3d3450"
+    },
+    {
+      "Path": "tests/Package.Common.ps1",
+      "Sha256": "3cc5a1926bcd3fdda766635715764388438def056d1ea624c6845f429ab84de5"
+    },
+    {
+      "Path": "tests/Package.Tests.ps1",
+      "Sha256": "8be2d399e2d0cdcfcd073be2959ee6bb9593a2320c7db2ac9a8a5bafc8be1220"
+    },
+    {
+      "Path": "tests/Protection.Tests.ps1",
+      "Sha256": "6a97c86fcabdb7c1ef88b9cc8d0b180b05e2d40a75787b2c5b1594049fb0d89b"
+    },
+    {
+      "Path": "tests/proxy-helper-driver.ps1",
+      "Sha256": "2b37a5e015d9e27e7ff7e57276e5e85f236e23f14dfb44d91b02a9722b2eb130"
+    },
+    {
+      "Path": "tests/proxy-helper-tests.py",
+      "Sha256": "91d4298e086d796ff52a791caeec5a3a9c9db7c58798b48413f20c460f0914eb"
+    },
+    {
+      "Path": "tests/Resilience.Tests.ps1",
+      "Sha256": "0d742c130beeda7b043e7e95c0b4dfc9c23b15c423306d4b934f777dc6fb8f03"
+    },
+    {
+      "Path": "tests/Run-UpdateValidation.ps1",
+      "Sha256": "2c22798f005a95b6477251d7632bdceccc2cc5f0af8b9c991f08d0886323c6f9"
+    },
+    {
+      "Path": "tests/Targeted-D001-SvcParamFilter.ps1",
+      "Sha256": "5e869092c59b0162cb48fc11c1122ade34b96e568109023f28c06ff235bfe4eb"
+    },
+    {
+      "Path": "tests/Test-NrptConflict.ps1",
+      "Sha256": "fa0c4594767f23c5ebb4e86d00b1682fdb11f3a92ebe9df8317fa168d251c6a5"
+    },
+    {
+      "Path": "tests/tray-harness.ps1",
+      "Sha256": "e9aba80ba9e1f11b20de24c4b77db7d9b9d04353666590712c36a208e4195d06"
+    },
+    {
+      "Path": "tests/Validate-Source.ps1",
+      "Sha256": "6f3d8d9b62810632c93988d1ece7b2e0efc3de64817cb71847dcc47e57809c52"
+    },
+    {
+      "Path": "tests/Wfp-NativeSmoke.ps1",
+      "Sha256": "d3c4bbc478240da4bec3479eadf7649158f98227a48c4fa0e0ce58549d6e5e7d"
+    },
+    {
+      "Path": "tests/WfpPolicy.Tests.ps1",
+      "Sha256": "e48e20becbac854836f69f50b450ee42111f54f1a6bad45bc124f80441f3c945"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-BypassQueries.ps1",
+      "Sha256": "0dcaef571e0591031decfffda2b57ee4105f0f20761979f784a09d41375c997a"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Sha256": "d1a68af98298c527fbc4a94c807f9517f8159879282039f45ae0fe73cfe69272"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Sha256": "1bd8e8844312d1c64ab1673693854e2f9d6e2baf3975c0225948946eabf036f8"
+    },
+    {
+      "Path": "tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Sha256": "0c9ee08f87f55cbdbb3f2b252f8c4c5e89b87989d6cb447b3c2dd87bd901181c"
+    },
+    {
+      "Path": "tools/diagnostics/Diagnostics.Common.ps1",
+      "Sha256": "2817bb6ebd4471d35f53fdbb021df91cce8078ede29769ab4b25dc0819c808d6"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Sha256": "19cfd0457ccb67757b11dbc8113915efd0a24bbfa728f6daba00382a9aa21598"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Sha256": "218be09c3f4aeb03cb4cdc58724d9dafef4d73d878ba3903a9690c34e45439b6"
+    },
+    {
+      "Path": "tools/diagnostics/Measure-CimWorkload.ps1",
+      "Sha256": "e5f7d397fff9bdd45bdfc547a9536fba1015b9c24c1a117fdc2043f34ba29938"
+    },
+    {
+      "Path": "tools/release_tool.py",
+      "Sha256": "62b0d00ac91b56955280806f21b5c716ef9da5d6b6a7db23f9c50a6628db6a23"
+    },
+    {
+      "Path": "Verify-GephTun.ps1",
+      "Sha256": "aa71a321bc6d8ae0f7dcb1356e9f51fdb07db8554e5ac577753301d86477e8d1"
+    }
+  ],
+  "Tests": [
+    {
+      "File": "Emergency-Unlock-GephTun.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "67630c0337c73b291afda0deae1b81c52fb0ea9aa535578c667e5ba2e2155766"
+    },
+    {
+      "File": "GephTun-BootReconcile.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "22a0a4c9a77d06455828e9216e50ff825174bda381a86c91174060ff93bd506a"
+    },
+    {
+      "File": "GephTun.Bypasses.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "98f61944a02ffac7a28575130a261c9be81a384ec330ddc2a8e75ea205526f79"
+    },
+    {
+      "File": "GephTun.Core.psm1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "f0d5b653c950203ba6595a93d3c93b44a8a083fbc51086f1b596f93ea8dbacca"
+    },
+    {
+      "File": "GephTun.Network.cs",
+      "Passed": true,
+      "Detail": "C# language version 5; current host .NET only.",
+      "Sha256": "d5af45962ba84886e62fa5385304870d46237362722f384d259ea1b00ab34a39"
+    },
+    {
+      "File": "GephTun.Protection.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "60242977048c9ea834c2c923efc89e95193ad464002da596c4a4206ea4ed64c2"
+    },
+    {
+      "File": "GephTun.Resilience.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "1bf2d9e2778529059ee2647e90c7cd2018c0fddcee2dd54efd429521cddac8a0"
+    },
+    {
+      "File": "GephTun.UI.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "3a8a971bab94a748f636e493f8d848b897bb2f5763c81607dd32193a17368985"
+    },
+    {
+      "File": "GephTun.Wfp.cs",
+      "Passed": true,
+      "Detail": "C# language version 5; current host .NET only.",
+      "Sha256": "4853a984f851c6f6128081ae2cd90d3b34489f81aa4aa9000661efce18327bd0"
+    },
+    {
+      "File": "GephTun.Worker.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "849afb21b12f06db99ee35feccbcc514474e7e78fd04b608c11c9585d3a8258d"
+    },
+    {
+      "File": "GephTun.WorkerHost.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "4c22e7a3beb7a0a4a6bb33e3c5c7b219d5dd8622e530c854d8a79e50d75e3461"
+    },
+    {
+      "File": "Launch-GephTun.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "92e374ac014dcdb6037f1a60c31bd521502d739056b82708c074ffebb0af5a33"
+    },
+    {
+      "File": "Protection-GephTun.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "6e2046628aea78a3f8062e644eed99e4fa691542350154f360bf1abc23f02508"
+    },
+    {
+      "File": "tests/BootRecovery.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "3d0d75b5d7222c3ea2e7cd4a92872feeb41954814f5896be1d541b53c3ec601b"
+    },
+    {
+      "File": "tests/Bypasses.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "5c89cc72f46952a422dd17fbf15c262d53ec42d024aa2c52ae36434cfea0afcf"
+    },
+    {
+      "File": "tests/Controller.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "781ff391484806d7602f59a08e6495111a4b3f6aad3365ca8e8b8f2734a86210"
+    },
+    {
+      "File": "tests/Diagnostics.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "fdcda3e739937683531fd3527669099db5ee85ee9c76cf728baf4141dde81fe7"
+    },
+    {
+      "File": "tests/DnsMandatory.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "41c36821e061cb40faf64052a2a3da19055e0acf209538d8965cb82794194ae1"
+    },
+    {
+      "File": "tests/Measure-WindowsResources.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "7a373677709dafc1b734a271f25134e8e00b7e2db796429112addd93ac3d3450"
+    },
+    {
+      "File": "tests/Package.Common.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "3cc5a1926bcd3fdda766635715764388438def056d1ea624c6845f429ab84de5"
+    },
+    {
+      "File": "tests/Package.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "8be2d399e2d0cdcfcd073be2959ee6bb9593a2320c7db2ac9a8a5bafc8be1220"
+    },
+    {
+      "File": "tests/Protection.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "6a97c86fcabdb7c1ef88b9cc8d0b180b05e2d40a75787b2c5b1594049fb0d89b"
+    },
+    {
+      "File": "tests/proxy-helper-driver.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "2b37a5e015d9e27e7ff7e57276e5e85f236e23f14dfb44d91b02a9722b2eb130"
+    },
+    {
+      "File": "tests/Resilience.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "0d742c130beeda7b043e7e95c0b4dfc9c23b15c423306d4b934f777dc6fb8f03"
+    },
+    {
+      "File": "tests/Run-UpdateValidation.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "2c22798f005a95b6477251d7632bdceccc2cc5f0af8b9c991f08d0886323c6f9"
+    },
+    {
+      "File": "tests/Targeted-D001-SvcParamFilter.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "5e869092c59b0162cb48fc11c1122ade34b96e568109023f28c06ff235bfe4eb"
+    },
+    {
+      "File": "tests/Test-NrptConflict.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "fa0c4594767f23c5ebb4e86d00b1682fdb11f3a92ebe9df8317fa168d251c6a5"
+    },
+    {
+      "File": "tests/tray-harness.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "e9aba80ba9e1f11b20de24c4b77db7d9b9d04353666590712c36a208e4195d06"
+    },
+    {
+      "File": "tests/Validate-Source.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "6f3d8d9b62810632c93988d1ece7b2e0efc3de64817cb71847dcc47e57809c52"
+    },
+    {
+      "File": "tests/Wfp-NativeSmoke.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "d3c4bbc478240da4bec3479eadf7649158f98227a48c4fa0e0ce58549d6e5e7d"
+    },
+    {
+      "File": "tests/WfpPolicy.Tests.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "e48e20becbac854836f69f50b450ee42111f54f1a6bad45bc124f80441f3c945"
+    },
+    {
+      "File": "tools/benchmarks/Measure-BypassQueries.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "0dcaef571e0591031decfffda2b57ee4105f0f20761979f784a09d41375c997a"
+    },
+    {
+      "File": "tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "d1a68af98298c527fbc4a94c807f9517f8159879282039f45ae0fe73cfe69272"
+    },
+    {
+      "File": "tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "1bd8e8844312d1c64ab1673693854e2f9d6e2baf3975c0225948946eabf036f8"
+    },
+    {
+      "File": "tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "0c9ee08f87f55cbdbb3f2b252f8c4c5e89b87989d6cb447b3c2dd87bd901181c"
+    },
+    {
+      "File": "tools/diagnostics/Diagnostics.Common.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "2817bb6ebd4471d35f53fdbb021df91cce8078ede29769ab4b25dc0819c808d6"
+    },
+    {
+      "File": "tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "19cfd0457ccb67757b11dbc8113915efd0a24bbfa728f6daba00382a9aa21598"
+    },
+    {
+      "File": "tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "218be09c3f4aeb03cb4cdc58724d9dafef4d73d878ba3903a9690c34e45439b6"
+    },
+    {
+      "File": "tools/diagnostics/Measure-CimWorkload.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "e5f7d397fff9bdd45bdfc547a9536fba1015b9c24c1a117fdc2043f34ba29938"
+    },
+    {
+      "File": "Verify-GephTun.ps1",
+      "Passed": true,
+      "Detail": "",
+      "Sha256": "aa71a321bc6d8ae0f7dcb1356e9f51fdb07db8554e5ac577753301d86477e8d1"
+    }
+  ]
+}

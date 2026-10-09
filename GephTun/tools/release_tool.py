@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """GephTun 1.5.0 read-only checks, candidate sealing, ZIP build and verification.
 Python 3.10+, standard library. Does not execute PowerShell/C#, binaries or networking.
 Static checks are not parser/compiler/runtime tests. Build never grants qualification.
@@ -74,7 +74,7 @@ def function(text: str, name: str) -> str:
     if not match:
         raise ValueError(f'Function not found: {name}')
     tail = text[match.end():]
-    following = re.search(r'(?m)^function ', tail)
+    following = re.search(r'(?m)^(?:function |Export-ModuleMember\b)', tail)
     return text[match.start(): match.end() + following.start()] if following else text[match.start():]
 
 def lexical_check(text: str, csharp: bool = False) -> None:
@@ -252,7 +252,7 @@ def static_checks(root: Path) -> dict:
         'Fresh sessions do not enable global firewall profiles': 'Set-NetFirewallProfile' not in containment and 'Test-GephTunFirewallBaseline' in containment,
         'Preflight rejects disabled global firewall profiles': 'Test-GephTunFirewallBaseline' in function(core,'Test-GephTunPreflight') and "@('True','NotConfigured')" in helper,
         'Legacy global-profile recovery remains available': 'Set-NetFirewallProfile' in function(core,'Remove-GephTunContainment'),
-        'Legacy boot profile residue prevents task deletion': boot.index('A legacy session changed global firewall profiles') < boot.index('try { Unregister-ScheduledTask'),
+        'Legacy boot profile residue prevents task deletion': boot.index('A legacy session changed global firewall profiles') < boot.index('Unregister-ScheduledTask -TaskName'),
         'Boot cleanup verifies remaining owned rules before disarming': 'remainingNrpt.Count -ne 0' in boot and 'remainingFirewall.Count -ne 0' in boot and 'tasks.Count -ne 0' in boot,
         'UI gates configuration and exit on live intent': ui.count('[IO.File]::Exists($script:IntentPath)') >= 5 and "'Reconnecting'" in ui,
         'UI displays candidate status and persistent-blocking warning': '(test candidate)' in ui and 'Disconnect and Exit KEEP blocking' in ui,
@@ -337,6 +337,15 @@ def static_checks(root: Path) -> dict:
         'Default runner never calls native smoke':'Wfp-NativeSmoke.ps1' not in text('tests/Run-UpdateValidation.ps1'),
         'Native smoke is opt-in and locally confirmed':'AllowNetworkDisruption' in text('tests/Wfp-NativeSmoke.ps1') and 'TEST BLOCKING' in text('tests/Wfp-NativeSmoke.ps1'),
         'Windows/native qualification is explicitly pending':'NativeWindowsAcceptance: NOT_RUN' in text('VALIDATION.md'),
+    })
+    checks.update({
+        'Runtime protection uses PowerShell 5.1-compatible UInt64 arrays': '[System.UInt64[]]$luids' in protection and not re.search(r'\[(?:ulong|ushort|uint)(?:\[\])?\]', protection),
+        'Boot identity uses exact typed UTC ticks': 'ConvertTo-GephTunProcessStartUtc $Worker.StartUtc' in boot and 'DateTimeOffset' in boot,
+        'Failed setup closes only its own acquired lease': 'ReferenceEquals($ownedStartLease,$script:ProtectionLease)' in setup and '-not $startSucceeded' in setup,
+        'Recovery retry budget preserves persistent blocking': '$attempt -le 3' in function(core,'Wait-GephTunRecovery') and 'Close-GephTunProtectionLease' in function(core,'Wait-GephTunRecovery') and 'Disable-GephTunProtection' not in function(core,'Wait-GephTunRecovery'),
+        'Bypasses verify actual Windows route selection': 'Find-NetRoute -RemoteIPAddress' in bypass and '$selected.Count -ne 1' in bypass,
+        'Boot task removal requires action and principal ownership': 'Assert-GephTunBootTaskOwned $task' in boot and 'ServiceAccount' in boot and 'Highest' in boot and 'action.Arguments' in boot,
+        'Normal boot guard removal requires the same ownership check': 'Assert-GephTunBootTaskOwned $task' in function(core,'Unregister-GephTunBootGuard'),
     })
     expected = {'NETWORK_UNAVAILABLE','NETWORK_CHANGED','PEER_SNAPSHOT','PEER_MISSING','PROXY_UNAVAILABLE','DNS_UNAVAILABLE'}
     values = set(re.findall(r"'([A-Z_]+)'", function(helper,'Test-GephTunRetryableFailure')))

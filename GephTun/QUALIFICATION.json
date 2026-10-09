@@ -18,15 +18,15 @@
     },
     {
       "Path": "GephTun-BootReconcile.ps1",
-      "Sha256": "4d2cff454adcdb00fc076cefe6ebadebd3e3d82770a4b81c6a4b9912b72b77c4"
+      "Sha256": "22a0a4c9a77d06455828e9216e50ff825174bda381a86c91174060ff93bd506a"
     },
     {
       "Path": "GephTun.Bypasses.ps1",
-      "Sha256": "819a27b79036eeb4315c8e16b3f33b70776519b6f2deace36585a70548c97d5a"
+      "Sha256": "98f61944a02ffac7a28575130a261c9be81a384ec330ddc2a8e75ea205526f79"
     },
     {
       "Path": "GephTun.Core.psm1",
-      "Sha256": "2047326731ace8952d735ef9e427a9fbc349ae05498aabd5c32f2bc59d00391e"
+      "Sha256": "f0d5b653c950203ba6595a93d3c93b44a8a083fbc51086f1b596f93ea8dbacca"
     },
     {
       "Path": "GephTun.Network.cs",
@@ -34,11 +34,11 @@
     },
     {
       "Path": "GephTun.Protection.ps1",
-      "Sha256": "3ea0d457dfad3712e8b06bad1a01116062474935b1aa959fb3ded16d1f7eca64"
+      "Sha256": "60242977048c9ea834c2c923efc89e95193ad464002da596c4a4206ea4ed64c2"
     },
     {
       "Path": "GephTun.Resilience.ps1",
-      "Sha256": "0f8a261bea3d26d9a79feb65c14268b1173b6a9b8b2768a6f47158562f3c18e1"
+      "Sha256": "1bf2d9e2778529059ee2647e90c7cd2018c0fddcee2dd54efd429521cddac8a0"
     },
     {
       "Path": "GephTun.UI.ps1",
@@ -74,7 +74,7 @@
     },
     {
       "Path": "RELEASE.json",
-      "Sha256": "cfce1748b337257f1e504f544ca8f553f72d8f00df0729aebbf7c2eec8168fde"
+      "Sha256": "dff3879c44e03c9ed627ff9b7b0b6f565294f053329d3bf4b8fa93bae75d1216"
     },
     {
       "Path": "Start-GephTun.cmd",
@@ -90,11 +90,11 @@
     },
     {
       "Path": "tests/BootRecovery.Tests.ps1",
-      "Sha256": "06ad0f07430f89a963e7e330584dc1d19ea53998c3dde96603f8abb0fde72761"
+      "Sha256": "3d0d75b5d7222c3ea2e7cd4a92872feeb41954814f5896be1d541b53c3ec601b"
     },
     {
       "Path": "tests/Bypasses.Tests.ps1",
-      "Sha256": "d6fee8efc3dda7a95cf84078f72bec6ecd10af0944fff8a784e264bbcfc544df"
+      "Sha256": "5c89cc72f46952a422dd17fbf15c262d53ec42d024aa2c52ae36434cfea0afcf"
     },
     {
       "Path": "tests/Controller.Tests.ps1",
@@ -122,11 +122,11 @@
     },
     {
       "Path": "tests/Protection.Tests.ps1",
-      "Sha256": "d8bb51d210ce01197ccfcb7fd00ff6abc59c626912ee8295ed80961a2a3eecce"
+      "Sha256": "6a97c86fcabdb7c1ef88b9cc8d0b180b05e2d40a75787b2c5b1594049fb0d89b"
     },
     {
       "Path": "tests/Resilience.Tests.ps1",
-      "Sha256": "8720d68f9f65216d62d0126fc9ed0f654a0122e0e5f3379a8daf321f48dcb3d0"
+      "Sha256": "0d742c130beeda7b043e7e95c0b4dfc9c23b15c423306d4b934f777dc6fb8f03"
     },
     {
       "Path": "tests/Run-UpdateValidation.ps1",
@@ -150,7 +150,7 @@
     },
     {
       "Path": "tests/WfpPolicy.Tests.ps1",
-      "Sha256": "8b10c0657f897c34c2075cddadeac008954156bb59bc12158cde018ddff095c6"
+      "Sha256": "e48e20becbac854836f69f50b450ee42111f54f1a6bad45bc124f80441f3c945"
     },
     {
       "Path": "tests/proxy-helper-driver.ps1",
@@ -198,17 +198,17 @@
     },
     {
       "Path": "tools/release_tool.py",
-      "Sha256": "0e1f44c0a05f105edcce86da95c7a68d19d86a84976e227eecd7bedc1caa23a5"
+      "Sha256": "62b0d00ac91b56955280806f21b5c716ef9da5d6b6a7db23f9c50a6628db6a23"
     }
   ],
   "Evidence": [
     {
       "Path": "tests/static-results.json",
-      "Sha256": "bb5258e10c5ef3251431535b9e8fd4a248ecb81459ba79d8b2d8f2fea64da8dc"
+      "Sha256": "66e110f5f9fefbd4455572db0a0a67063bbd108b5a5678940c481b0ea6f20b6b"
     },
     {
       "Path": "tests/current-validation.json",
-      "Sha256": "25c315f3d0cb6b74961e30aaa46af61142c708fd3ef949ff9c396c764b53f9c2"
+      "Sha256": "cc1625f7b736df4e58b67b78a237de0070b5a86499e2d83b83012c5afe93c811"
     }
   ]
 }

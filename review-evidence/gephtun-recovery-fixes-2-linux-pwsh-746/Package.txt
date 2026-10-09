@@ -1,0 +1,11 @@
+
+Name                                        Result Detail
+----                                        ------ ------
+Complete current package verifies           PASS   
+Modified runtime source is rejected         PASS   
+Missing resilience helper is rejected       PASS   
+Unlisted installation files are rejected    PASS   
+Forged production qualification is rejected PASS   
+Unsafe Windows archive paths are rejected   PASS   
+An output inside the package is rejected    PASS   
+

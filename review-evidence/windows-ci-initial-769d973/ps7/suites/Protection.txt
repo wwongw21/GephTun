@@ -1,0 +1,34 @@
+
+[32;1mName                                                                               [0m[32;1m Result[0m[32;1m Detail[0m
+[32;1m----                                                                               [0m [32;1m------[0m [32;1m------[0m
+Normal close disposes only the temporary lease                                      PASS   
+Policy verification failure closes permissions and reports Unknown                  PASS   
+No lease cannot count as a verified protected session                               PASS   
+Tunnel authorization is revoked before session resources are cleaned                PASS   
+A revoke error closes the full temporary lease instead of retaining obsolete access PASS   
+Persistent blocking cannot be enabled without explicit consent                      PASS   
+Persistent protection cannot be removed without explicit consent                    PASS   
+Actual failed session start closes its acquired lease: preflight                    PASS   
+Actual failed session start closes its acquired lease: cancel                       PASS   
+Actual failed session start closes its acquired lease: adapter                      PASS   
+Actual failed session start closes its acquired lease: probe                        PASS   
+A successful actual session start retains its own permissions                       PASS   
+A partially acquired lease is closed if acquisition throws                          PASS   
+Failed rollback retains the session journal but closes newly owned permissions      PASS   
+A failed direct start cannot close a preexisting controller lease                   PASS   
+Starting over an existing session is refused without modifying its lease            PASS   
+Explicit protection disable requires completed recovery: CleanupFailure             PASS   
+Explicit protection disable requires completed recovery: PendingJournal             PASS   
+Explicit protection disable requires completed recovery: Recovered                  PASS   
+A failed Dispose retains ownership and can be retried safely                        PASS   
+JSON process identity round trip retains fractional seconds and offsets             PASS   
+Core identity accepts equivalent JSON timestamp: 2026-10-09T00:00:00.1234567Z       PASS   
+Core identity accepts equivalent JSON timestamp: 2026-10-09T05:45:00.1234567+05:45  PASS   
+Core identity accepts equivalent JSON timestamp: 2026-10-08T20:30:00.1234567-03:30  PASS   
+Malformed timestamp never permits process cleanup: bad                              PASS   
+Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00.1234567      PASS   
+Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00.12345678Z    PASS   
+Malformed timestamp never permits process cleanup: 2026-10-09T00:00:00+25:00        PASS   
+Unspecified DateTime and unreadable process metadata remain UNKNOWN                 PASS   
+Actual process exit is DEAD and one tick of PID reuse is DEAD                       PASS   
+

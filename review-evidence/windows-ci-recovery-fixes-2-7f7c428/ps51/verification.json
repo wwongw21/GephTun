@@ -1,0 +1,11 @@
+﻿{
+    "Success":  true,
+    "Version":  "1.5.0",
+    "Files":  126,
+    "StaticChecks":  250,
+    "PowerShellExecution":  "NOT_RUN",
+    "CSharpCompilation":  "NOT_RUN",
+    "NativeWindowsAcceptance":  "NOT_RUN",
+    "ProductionQualified":  false,
+    "Scope":  "Integrity and static-source evidence only."
+}

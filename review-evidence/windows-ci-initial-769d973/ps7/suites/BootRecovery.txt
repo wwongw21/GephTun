@@ -1,0 +1,48 @@
+
+[32;1mResult[0m[32;1m Test                                                                                   [0m[32;1m Detail[0m
+[32;1m------[0m [32;1m----                                                                                   [0m [32;1m------[0m
+PASS   Boot confirmed stale recovery succeeds: NoJournal                                       
+PASS   Boot confirmed stale recovery succeeds: Dead                                            
+PASS   Boot confirmed stale recovery succeeds: PidReused                                       
+PASS   Boot confirmed stale recovery succeeds: WrongProcess                                    
+PASS   Boot confirmed stale recovery succeeds: Transient                                       
+PASS   Boot confirmed stale recovery succeeds: Abandoned                                       
+PASS   Boot confirmed stale recovery succeeds: SameNameForeignTask                             
+PASS   Boot already-clean recovery is idempotent: Empty                                        
+PASS   Boot already-clean recovery is idempotent: TaskAbsent                                   
+PASS   Boot uncertain state preserves all recovery: NrptUnreadable                             
+PASS   Boot uncertain state preserves all recovery: FirewallUnreadable                         
+PASS   Boot uncertain state preserves all recovery: ProcessDenied                              
+PASS   Boot uncertain state preserves all recovery: MissingIdentity                            
+PASS   Boot uncertain state preserves all recovery: JournalDenied                              
+PASS   Boot uncertain state preserves all recovery: Malformed                                  
+PASS   Boot uncertain state preserves all recovery: Busy                                       
+PASS   Boot uncertain state preserves all recovery: MutexDenied                                
+PASS   Boot incomplete cleanup preserves recovery: NrptDenied                                  
+PASS   Boot incomplete cleanup preserves recovery: FirewallDenied                              
+PASS   Boot incomplete cleanup preserves recovery: Remaining                                   
+PASS   Boot incomplete cleanup preserves recovery: VerifyUnreadable                            
+PASS   Boot task removal failure preserves its script: TaskRemovalDenied                       
+PASS   Boot task removal failure preserves its script: TaskStillPresent                        
+PASS   Boot legacy global profile changes retain a path to explicit recovery                   
+PASS   Boot unreadable task-absence confirmation preserves its script                          
+PASS   Boot keeps live-session policy and recovery while removing stale foreign-session policy 
+PASS   Boot failed cleanup can be retried successfully using the retained script               
+PASS   Live worker JSON round trip preserves exact UTC ticks: LiveOffset                       
+PASS   Live worker JSON round trip preserves exact UTC ticks: LiveFraction                     
+PASS   Live worker JSON round trip preserves exact UTC ticks: LivePwsh                         
+PASS   Uncertain process identity preserves every policy: MalformedTimestamp                   
+PASS   Uncertain process identity preserves every policy: NoZoneTimestamp                      
+PASS   Uncertain process identity preserves every policy: MissingProcessPath                   
+PASS   Uncertain process identity preserves every policy: UnknownTimestampKind                 
+PASS   Unverified task is never unregistered: ForeignRootTask                                  
+PASS   Unverified task is never unregistered: WrongTaskAction                                  
+PASS   Unverified task is never unregistered: WrongTaskPrincipal                               
+PASS   Unverified task is never unregistered: WrongTaskLogon                                   
+PASS   Unverified task is never unregistered: WrongTaskRunLevel                                
+PASS   Unverified task is never unregistered: MissingTaskMetadata                              
+PASS   Unverified task is never unregistered: MissingPrincipal                                 
+PASS   Unverified task is never unregistered: MultipleActions                                  
+PASS   Unverified task is never unregistered: TaskMetadataDenied                               
+
+43 boot recovery tests; 43 passed; 0 failed.

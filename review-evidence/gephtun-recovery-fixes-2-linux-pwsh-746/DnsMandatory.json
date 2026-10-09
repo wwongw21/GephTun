@@ -1,0 +1,113 @@
+{
+  "CapturedUtc": "2026-10-09T18:23:04.7317013Z",
+  "Version": "1.5.0",
+  "Scope": "Actual C#5 DNS filter; in-memory fixtures only; no Windows networking.",
+  "SourceSha256": "D5AF45962BA84886E62FA5385304870D46237362722F384D259EA1B00AB34A39",
+  "PowerShellVersion": "7.4.6",
+  "Total": 20,
+  "Passed": 20,
+  "Failed": 0,
+  "Skipped": 0,
+  "Tests": [
+    {
+      "Name": "Optional ipv6hint is removed, ALPN and IPv4 are preserved",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Mandatory ipv6hint makes an HTTPS record incompatible",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Mandatory IPv4 is kept while optional IPv6 is removed",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "An unknown mandatory key is preserved when actually present",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A mandatory key missing from SvcParams is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "An empty mandatory list is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "The mandatory list cannot name itself",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Unordered mandatory keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Duplicate mandatory keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Odd-length mandatory data is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Duplicate SvcParam keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Unordered SvcParam keys are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Reserved-invalid SvcParam key 65535 is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Truncated IPv6-hint address length is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Zero-length IPv6-hint value is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Multiple well-formed IPv6 hints are removed",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A record without IPv6 remains usable",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Mandatory 65535 is refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "An incompatible HTTPS record does not remove a following A record",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "The mandatory check also applies to SVCB type 64",
+      "Result": "PASS",
+      "Detail": ""
+    }
+  ]
+}

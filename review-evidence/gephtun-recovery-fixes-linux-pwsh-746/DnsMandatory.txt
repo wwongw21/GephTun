@@ -1,0 +1,24 @@
+
+Name                                                              Result Detail
+----                                                              ------ ------
+Optional ipv6hint is removed, ALPN and IPv4 are preserved         PASS   
+Mandatory ipv6hint makes an HTTPS record incompatible             PASS   
+Mandatory IPv4 is kept while optional IPv6 is removed             PASS   
+An unknown mandatory key is preserved when actually present       PASS   
+A mandatory key missing from SvcParams is refused                 PASS   
+An empty mandatory list is refused                                PASS   
+The mandatory list cannot name itself                             PASS   
+Unordered mandatory keys are refused                              PASS   
+Duplicate mandatory keys are refused                              PASS   
+Odd-length mandatory data is refused                              PASS   
+Duplicate SvcParam keys are refused                               PASS   
+Unordered SvcParam keys are refused                               PASS   
+Reserved-invalid SvcParam key 65535 is refused                    PASS   
+Truncated IPv6-hint address length is refused                     PASS   
+Zero-length IPv6-hint value is refused                            PASS   
+Multiple well-formed IPv6 hints are removed                       PASS   
+A record without IPv6 remains usable                              PASS   
+Mandatory 65535 is refused                                        PASS   
+An incompatible HTTPS record does not remove a following A record PASS   
+The mandatory check also applies to SVCB type 64                  PASS   
+
