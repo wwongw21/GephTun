@@ -7,8 +7,8 @@
   "Files": [
     {
       "Path": "CANDIDATE-FIXES.md",
-      "Bytes": 3781,
-      "Sha256": "e4e8fa255f3e8c79ce26da59969b4ee71c20aba8fa18df87177fc350d23b7010"
+      "Bytes": 4073,
+      "Sha256": "f75b6e8298000d439afe189d63e90b7d47abdae15be33074761636f1eacbe556"
     },
     {
       "Path": "CHANGELOG.md",
@@ -57,8 +57,8 @@
     },
     {
       "Path": "GephTun.Protection.ps1",
-      "Bytes": 10178,
-      "Sha256": "e88df3f947fac07b1be8c823d0974b733a3ad49031c34f8f566403de5630e3e8"
+      "Bytes": 10186,
+      "Sha256": "60242977048c9ea834c2c923efc89e95193ad464002da596c4a4206ea4ed64c2"
     },
     {
       "Path": "GephTun.Resilience.ps1",
@@ -108,7 +108,7 @@
     {
       "Path": "QUALIFICATION.json",
       "Bytes": 7402,
-      "Sha256": "6a872dfa79d3b1e9d2623ec2fef017e95f243292c95b0b3dc87254b22d4bc414"
+      "Sha256": "b5ee800cdf606e8f0d56492a9cc0a4b383cd3bdd24f40d0fb39b552381efcdc2"
     },
     {
       "Path": "README.md",
@@ -118,7 +118,7 @@
     {
       "Path": "RELEASE.json",
       "Bytes": 537,
-      "Sha256": "06234db76b53ee165479eaa38066b6fbc73a26003ec35858b12465396d2314f1"
+      "Sha256": "dff3879c44e03c9ed627ff9b7b0b6f565294f053329d3bf4b8fa93bae75d1216"
     },
     {
       "Path": "RUNTIME-CHANGES.patch",
@@ -487,13 +487,13 @@
     },
     {
       "Path": "tests/WfpPolicy.Tests.ps1",
-      "Bytes": 9464,
-      "Sha256": "8b10c0657f897c34c2075cddadeac008954156bb59bc12158cde018ddff095c6"
+      "Bytes": 10887,
+      "Sha256": "e48e20becbac854836f69f50b450ee42111f54f1a6bad45bc124f80441f3c945"
     },
     {
       "Path": "tests/current-validation.json",
       "Bytes": 7440,
-      "Sha256": "3be68a8bab588216bc807e31b4ec533772a84800edebaef6e38b7e4301421b64"
+      "Sha256": "cc1625f7b736df4e58b67b78a237de0070b5a86499e2d83b83012c5afe93c811"
     },
     {
       "Path": "tests/dns-mandatory-fixtures.json",
@@ -512,8 +512,8 @@
     },
     {
       "Path": "tests/static-results.json",
-      "Bytes": 41120,
-      "Sha256": "58b8d8ed098e72f15f7f07e531c598daa33d1bb239ea89ae203f0111daa8a4f3"
+      "Bytes": 41275,
+      "Sha256": "66e110f5f9fefbd4455572db0a0a67063bbd108b5a5678940c481b0ea6f20b6b"
     },
     {
       "Path": "tests/tray-harness.ps1",
@@ -632,8 +632,8 @@
     },
     {
       "Path": "tools/release_tool.py",
-      "Bytes": 36945,
-      "Sha256": "3aed22ccba0e45b0302d14733c270dbc8d63f5c3f20f3a3a3bcec83c082884e1"
+      "Bytes": 37130,
+      "Sha256": "62b0d00ac91b56955280806f21b5c716ef9da5d6b6a7db23f9c50a6628db6a23"
     }
   ]
 }

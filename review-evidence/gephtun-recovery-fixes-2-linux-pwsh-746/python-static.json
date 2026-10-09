@@ -1,7 +1,7 @@
 {
   "Kind": "StaticSourceChecks",
   "Version": "1.5.0",
-  "CapturedUtc": "2026-10-09T18:22:53.121070+00:00",
+  "CapturedUtc": "2026-10-09T18:22:55.312712+00:00",
   "Scope": "Python AST, lexical framing (NOT PowerShell/C# parse or compile), source assertions, DNS INPUT framing, native SHA/PE checks only.",
   "PowerShellExecution": "NOT_RUN",
   "CSharpCompilation": "NOT_RUN",

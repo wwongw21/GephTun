@@ -1,0 +1,12 @@
+GephTun 1.5.0: integrity PASS for 126 files. 250 STATIC checks passed. PowerShell/C# execution and native Windows acceptance were NOT RUN; this is not production qualification.
+
+Success                 : True
+Version                 : 1.5.0
+Files                   : 126
+StaticChecks            : 250
+PowerShellExecution     : NOT_RUN
+CSharpCompilation       : NOT_RUN
+NativeWindowsAcceptance : NOT_RUN
+ProductionQualified     : False
+Scope                   : Integrity and static-source evidence only.
+
