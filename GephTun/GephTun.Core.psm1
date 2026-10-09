@@ -10,6 +10,50 @@ $script:ContainmentSecurityBaseline = $null
 . (Join-Path $PSScriptRoot 'GephTun.Protection.ps1')
 . (Join-Path $PSScriptRoot 'GephTun.Bypasses.ps1')
 
+function ConvertTo-GephTunProcessStartUtc($Value) {
+    if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
+    if ($Value -is [DateTime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) { throw 'Process timestamp has no verified timezone.' }
+        return $Value.ToUniversalTime()
+    }
+    if ($Value -isnot [string] -or $Value -cnotmatch '\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})\z') {
+        throw 'Process timestamp must be an exact ISO timestamp with a timezone.'
+    }
+    return [DateTimeOffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None).UtcDateTime
+}
+
+function ConvertFrom-GephTunJsonDates($Value) {
+    if ($Value -is [DateTime] -or $Value -is [DateTimeOffset]) { return (ConvertTo-GephTunProcessStartUtc $Value).ToString('o') }
+    if ($Value -is [pscustomobject]) {
+        foreach ($property in $Value.PSObject.Properties) { $property.Value=ConvertFrom-GephTunJsonDates $property.Value }
+    } elseif ($Value -is [array]) {
+        $items=@(foreach ($item in $Value) { ConvertFrom-GephTunJsonDates $item })
+        return ,$items
+    }
+    return $Value
+}
+
+function Get-GephTunBootTaskExecutable {
+    if ([string]::IsNullOrWhiteSpace($env:SystemRoot)) { throw 'Windows system directory is unknown.' }
+    return (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe')
+}
+
+function Assert-GephTunBootTaskOwned($Task, [string]$StateScript) {
+    if ($null -eq $Task -or $Task.TaskName -cne 'GephTunBootReconcile' -or $Task.TaskPath -cne '\' -or
+        @($Task.Actions).Count -ne 1) { throw 'Recovery task ownership is unknown; task and script retained.' }
+    $action=@($Task.Actions)[0]
+    $expected=Get-GephTunBootTaskExecutable
+    $arguments='-NoProfile -ExecutionPolicy Bypass -File "' + $StateScript + '"'
+    if (-not [string]::Equals([string]$action.Execute,$expected,[StringComparison]::OrdinalIgnoreCase) -or
+        [string]$action.Arguments -cne $arguments -or
+        -not [string]::IsNullOrEmpty([string]$action.WorkingDirectory) -or
+        [string]$Task.Principal.UserId -notin @('SYSTEM','S-1-5-18','NT AUTHORITY\SYSTEM') -or
+        [string]$Task.Principal.LogonType -ne 'ServiceAccount' -or
+        [string]$Task.Principal.RunLevel -ne 'Highest') {
+        throw 'Recovery task action or principal is foreign or unreadable; task and script retained.'
+    }
+}
+
 function Assert-GephTunConnectContinuing {
     Assert-GephTunIntentContinuing
     # Cooperative cancellation never terminates the controller in the middle of a
@@ -331,7 +375,7 @@ function Read-GephTunJson([string]$Path) {
         if ($null -eq $value -or $value -isnot [pscustomobject]) {
             throw "The JSON file must contain one object; the existing file was preserved: $Path"
         }
-        return $value
+        return (ConvertFrom-GephTunJsonDates $value)
     }
 }
 
@@ -372,7 +416,7 @@ function Set-GephTunStatus([string]$Status, [string]$Message) {
 function Get-GephTunProcessIdentity([int]$ProcessId) {
     $p = Get-Process -Id $ProcessId -ErrorAction Stop
     try {
-        [pscustomobject]@{ Id = $p.Id; StartUtc = $p.StartTime.ToUniversalTime().ToString('o'); Path = $p.Path }
+        [pscustomobject]@{ Id = $p.Id; StartUtc = (ConvertTo-GephTunProcessStartUtc $p.StartTime).ToString('o'); Path = $p.Path }
     } finally {
         # Monitoring reads several identities each second. Release their native
         # handles immediately, including when an identity property cannot be read.
@@ -380,26 +424,29 @@ function Get-GephTunProcessIdentity([int]$ProcessId) {
     }
 }
 
+function Get-GephTunProcessIdentityState($Identity) {
+    try {
+        if ($null -eq $Identity -or [int]$Identity.Id -lt 1 -or [string]::IsNullOrWhiteSpace([string]$Identity.Path)) { return 'UNKNOWN' }
+        $expected=ConvertTo-GephTunProcessStartUtc $Identity.StartUtc
+    } catch { return 'UNKNOWN' }
+    try { $actual=Get-GephTunProcessIdentity ([int]$Identity.Id) }
+    catch {
+        if ($_.CategoryInfo.Category -eq 'ObjectNotFound' -or $_.Exception.GetBaseException() -is [ArgumentException]) { return 'DEAD' }
+        return 'UNKNOWN'
+    }
+    try {
+        if ([string]::IsNullOrWhiteSpace([string]$actual.Path)) { return 'UNKNOWN' }
+        $observed=ConvertTo-GephTunProcessStartUtc $actual.StartUtc
+        if ($observed.Ticks -ne $expected.Ticks -or -not [string]::Equals([string]$actual.Path,[string]$Identity.Path,[StringComparison]::OrdinalIgnoreCase)) { return 'DEAD' }
+        return 'ALIVE'
+    } catch { return 'UNKNOWN' }
+}
+
 function Test-GephTunProcessIdentity($Identity) {
-    if ($null -eq $Identity) { return $false }
-    # Process metadata can be briefly unreadable while Windows is closing or
-    # reopening the process handle. Do not turn one typed sharing/access blip
-    # into RecoveryRequired, but keep the check fail-closed after a small,
-    # bounded retry budget. Missing processes and unclassified failures remain
-    # immediate negatives; a later success still has to match all identity
-    # fields exactly.
-    for ($attempt = 0; $attempt -lt 3; $attempt++) {
-        try {
-            $p = Get-GephTunProcessIdentity ([int]$Identity.Id)
-            return ($p.StartUtc -eq $Identity.StartUtc -and $p.Path -eq $Identity.Path)
-        } catch {
-            $cause = $_.Exception.GetBaseException()
-            $transient = $cause -is [UnauthorizedAccessException] -or
-                ($cause -is [IO.IOException] -and ($cause.HResult -band 65535) -in @(32, 33)) -or
-                ($cause -is [ComponentModel.Win32Exception] -and $cause.NativeErrorCode -in @(5, 32, 33))
-            if (-not $transient -or $attempt -eq 2) { return $false }
-            [Threading.Thread]::Sleep(60)
-        }
+    for ($attempt=0; $attempt -lt 3; $attempt++) {
+        $state=Get-GephTunProcessIdentityState $Identity
+        if ($state -ne 'UNKNOWN') { return $state -eq 'ALIVE' }
+        if ($attempt -lt 2) { [Threading.Thread]::Sleep(60) }
     }
     return $false
 }
@@ -640,7 +687,11 @@ function Add-GephTunOwnedRoute([string]$Prefix, [int]$InterfaceIndex, [string]$N
 function Remove-GephTunOwnedRoute($Entry) {
     # A saved index is insufficient: Windows may reuse it for a different adapter.
     $adapter = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object { $_.InterfaceIndex -eq [int]$Entry.InterfaceIndex }) | Select-Object -First 1
-    if ($null -eq $adapter -or $adapter.InterfaceGuid.ToString() -ne $Entry.InterfaceGuid) { return }
+    if ($null -eq $adapter -or $adapter.InterfaceGuid.ToString() -ne $Entry.InterfaceGuid) {
+        $residue=@(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop | Where-Object { $_.DestinationPrefix -eq $Entry.DestinationPrefix -and $_.InterfaceIndex -eq [int]$Entry.InterfaceIndex -and $_.NextHop -eq $Entry.NextHop })
+        if ($residue.Count) { throw 'Adapter ownership changed while a saved route remains; recovery journal retained.' }
+        return
+    }
     $matching = @(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop |
         Where-Object { $_.DestinationPrefix -eq $Entry.DestinationPrefix -and $_.InterfaceIndex -eq [int]$Entry.InterfaceIndex -and $_.NextHop -eq $Entry.NextHop })
     if (@($matching | Where-Object { [int]$_.RouteMetric -ne [int]$Entry.RouteMetric }).Count -gt 0) {
@@ -648,6 +699,8 @@ function Remove-GephTunOwnedRoute($Entry) {
     }
     $routes = @($matching | Where-Object { [int]$_.RouteMetric -eq [int]$Entry.RouteMetric })
     foreach ($route in $routes) { $route | Remove-NetRoute -Confirm:$false -ErrorAction Stop }
+    $residue=@(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop | Where-Object { $_.DestinationPrefix -eq $Entry.DestinationPrefix -and $_.InterfaceIndex -eq [int]$Entry.InterfaceIndex -and $_.NextHop -eq $Entry.NextHop })
+    if ($residue.Count) { throw 'Owned route removal was not confirmed; recovery journal retained.' }
 }
 
 function Remove-GephTunDnsPolicy($Session) {
@@ -986,9 +1039,9 @@ function Stop-GephTunOwnedProcess($Identity) {
         # could target a replacement process if Windows recycles the ID.
         $heldHandle = $process.get_Handle()
         if ($heldHandle -eq [IntPtr]::Zero) { throw 'The tunnel process handle could not be verified.' }
-        $actual = [pscustomobject]@{ Id = $process.Id; StartUtc = $process.StartTime.ToUniversalTime().ToString('o'); Path = $process.Path }
+        $actual = [pscustomobject]@{ Id = $process.Id; StartUtc = (ConvertTo-GephTunProcessStartUtc $process.StartTime).ToString('o'); Path = $process.Path }
         if ([string]::IsNullOrWhiteSpace($actual.Path)) { throw 'The tunnel process executable path could not be verified.' }
-        if ($actual.StartUtc -eq $Identity.StartUtc -and $actual.Path -eq $Identity.Path) {
+        if ((ConvertTo-GephTunProcessStartUtc $actual.StartUtc).Ticks -eq (ConvertTo-GephTunProcessStartUtc $Identity.StartUtc).Ticks -and $actual.Path -eq $Identity.Path) {
             # Recovery may use a moved package. Never use only the process name or ID.
             if ([IO.Path]::GetFileName($Identity.Path) -ne 'tun2socks-windows-amd64.exe') { throw 'Unexpected saved process identity.' }
             $hash = (Get-FileHash -LiteralPath $Identity.Path -Algorithm SHA256 -ErrorAction Stop).Hash
@@ -1352,12 +1405,17 @@ function Register-GephTunBootGuard {
     # while a session is connected, so it runs a hash-verified copy from the
     # protected GephTun state tree instead of the installation folder.
     $stateScript = Join-Path (Get-GephTunRoot) 'GephTun-BootReconcile.ps1'
+    $tasks=@()
+    try { $tasks=@(Get-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -ErrorAction Stop) }
+    catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { throw } }
+    if ($tasks.Count -gt 1) { throw 'Recovery task identity is ambiguous.' }
+    foreach ($task in $tasks) { Assert-GephTunBootTaskOwned $task $stateScript }
     [IO.File]::Copy($packageScript, $stateScript, $true)
     $scriptHash = (Get-FileHash -LiteralPath $packageScript -Algorithm SHA256).Hash
     if ((Get-FileHash -LiteralPath $stateScript -Algorithm SHA256).Hash -cne $scriptHash) {
         throw 'The startup recovery script copy in the GephTun state tree could not be verified.'
     }
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -File "' + $stateScript + '"')
+    $action = New-ScheduledTaskAction -Execute (Get-GephTunBootTaskExecutable) -Argument ('-NoProfile -ExecutionPolicy Bypass -File "' + $stateScript + '"')
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
@@ -1378,9 +1436,13 @@ function Unregister-GephTunBootGuard {
     # The state-tree script copy goes away with the task - neither may linger
     # after a completed session.
     $removedTask = $false
+    $tasks=@()
+    try { $tasks=@(Get-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -ErrorAction Stop) }
+    catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { throw } }
+    if ($tasks.Count -gt 1) { throw 'Recovery task identity is ambiguous.' }
+    foreach ($task in $tasks) { Assert-GephTunBootTaskOwned $task (Join-Path (Get-GephTunRoot) 'GephTun-BootReconcile.ps1') }
     try {
-        Unregister-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -Confirm:$false -ErrorAction Stop
-        $removedTask = $true
+        if ($tasks.Count -eq 1) { Unregister-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -Confirm:$false -ErrorAction Stop; $removedTask = $true }
     } catch {
         if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { $removedTask = $false }
         else { throw }
@@ -1394,7 +1456,13 @@ function Unregister-GephTunBootGuard {
     if ([IO.File]::Exists($stateScript)) { [IO.File]::Delete($stateScript) }
 }
 
+function New-GephTunDnsRelay([int]$Port) { [GephTun.SocksDnsRelay]::Start($Port) }
+function Test-GephTunDirectTunnel { [GephTun.ProxyProbe]::TestDirect() }
+
 function Start-GephTunSession([int]$Port = 0, [int]$OwnerProcessId = 0, [string]$OperationToken = '') {
+    if ($null -ne $script:Session) { throw 'Recover the existing session before starting another session.' }
+    $ownedStartLease=$null
+    $startSucceeded=$false
     if ($OperationToken -and $OperationToken -cnotmatch '^[a-f0-9]{32}$') { throw 'Invalid connection operation token.' }
     $owner = $null
     if ($OwnerProcessId -gt 0) { $owner = Get-GephTunProcessIdentity $OwnerProcessId }
@@ -1403,7 +1471,9 @@ function Start-GephTunSession([int]$Port = 0, [int]$OwnerProcessId = 0, [string]
     $script:ConnectContext = [pscustomobject]@{ Token = $OperationToken; CancelPath = $cancelPath; Owner = $owner; DeadlineUtc = [DateTime]::UtcNow.AddSeconds(120) }
     try {
     Assert-GephTunConnectContinuing
-    if ($null -eq $script:ProtectionLease) { Open-GephTunProtectionLease }
+    if ($null -eq $script:ProtectionLease) {
+        try { Open-GephTunProtectionLease } finally { $ownedStartLease=$script:ProtectionLease }
+    }
     Assert-GephTunProtection
     $preflight = Test-GephTunPreflight $Port
     Assert-GephTunConnectContinuing
@@ -1434,7 +1504,7 @@ function Start-GephTunSession([int]$Port = 0, [int]$OwnerProcessId = 0, [string]
         Register-GephTunBootGuard
         Set-GephTunStatus 'Connecting' 'Checking DNS forwarding and creating the network adapter...'
         # Bind before changing any routes or DNS policies. A busy port fails cleanly.
-        $script:Relay = [GephTun.SocksDnsRelay]::Start([int]$script:Session.ProxyPort)
+        $script:Relay = New-GephTunDnsRelay ([int]$script:Session.ProxyPort)
         Install-GephTunRememberedBypasses
         Update-GephTunBypasses
         Save-GephTunBypassCache -Force
@@ -1571,7 +1641,7 @@ function Start-GephTunSession([int]$Port = 0, [int]$OwnerProcessId = 0, [string]
             }
         }
         if (-not $connectProbeVerified) { Throw-GephTunTransient 'DNS_UNAVAILABLE' $connectProbeFailure }
-        [GephTun.ProxyProbe]::TestDirect() | Out-Null
+        Test-GephTunDirectTunnel | Out-Null
         Assert-GephTunConnectContinuing
         if (-not $script:Relay.Healthy) { throw 'The local DNS forwarder stopped.' }
         # The blocking end-to-end probe can outlive a network, proxy, policy or
@@ -1584,6 +1654,7 @@ function Start-GephTunSession([int]$Port = 0, [int]$OwnerProcessId = 0, [string]
         Assert-GephTunProtection
         Assert-GephTunConnectContinuing
         Set-GephTunStatus 'Connected' 'Connected. TCP traffic is routed through Geph; DNS forwarding is active; IPv6 internet egress is contained.'
+        $startSucceeded=$true
         return [pscustomobject]@{ Success = $true; Message = 'Connected. The tunnel keeps running in the background; Disconnect stops the tunnel but retains WFP protection.'; Details = @{ ProxyPort = $script:Session.ProxyPort; Adapter = $name; Network = $preflight.Network.Alias; Coverage = 'IPv4 TCP and DNS are tunneled through Geph. IPv6 is not tunneled: nonlocal IPv6 unicast, including NAT64 and private/site-local destinations, is blocked by an owned firewall rule except current Geph relay addresses. Loopback and narrowly scoped link-maintenance exceptions remain; ordinary LAN and native IPv6 application traffic are blocked by WFP. WFP physical egress permissions are restricted to approved Geph executables; route exceptions alone do not authorize other applications. The DNS relay also suppresses AAAA answers. General UDP compatibility is not verified.' } }
     } catch {
         $reason = $_.Exception.Message
@@ -1598,7 +1669,9 @@ function Start-GephTunSession([int]$Port = 0, [int]$OwnerProcessId = 0, [string]
         throw $startFailure
     }
     } finally {
-        $script:ConnectContext = $null
+        try {
+            if (-not $startSucceeded -and $null -ne $ownedStartLease -and [object]::ReferenceEquals($ownedStartLease,$script:ProtectionLease)) { Close-GephTunProtectionLease }
+        } finally { $script:ConnectContext = $null }
         if ($null -eq $script:ConnectionIntent -and $cancelPath -and (Test-Path -LiteralPath $cancelPath)) {
             try { Assert-GephTunPlainPath $cancelPath; Remove-Item -LiteralPath $cancelPath -Force -ErrorAction Stop } catch { }
         }
@@ -1712,6 +1785,7 @@ function Watch-GephTunCurrentSession {
 
 function Request-GephTunDisconnect {
     $intent = Get-GephTunConnectionIntent
+    if ($null -ne $intent -and (Get-GephTunProcessIdentityState $intent.Worker) -eq 'UNKNOWN') { throw 'Controller identity is unknown; recovery and protection were retained.' }
     if ($null -ne $intent -and (Test-GephTunProcessIdentity $intent.Worker)) {
         Write-GephTunJson (Join-Path (Get-GephTunRoot) 'disconnect-intent.json') @{ Token = $intent.Token }
         $ownedSession = Read-GephTunJson (Join-Path (Get-GephTunRoot) 'session.json')
@@ -1729,6 +1803,7 @@ function Request-GephTunDisconnect {
         if (Test-GephTunProcessIdentity $intent.Worker) { throw 'Disconnect is waiting for safe recovery. Automatic reconnect is cancelled; the controller was not force-killed.' }
     }
     $session = Read-GephTunJson (Join-Path (Get-GephTunRoot) 'session.json')
+    if ($null -ne $session -and (Get-GephTunProcessIdentityState $session.Worker) -eq 'UNKNOWN') { throw 'Saved worker identity is unknown; no operator cleanup was attempted.' }
     if ($null -ne $session -and (Test-GephTunProcessIdentity $session.Worker)) {
         Write-GephTunJson (Join-Path (Get-GephTunRoot) 'disconnect.json') @{ Token = $session.Token }
         $deadline = [DateTime]::UtcNow.AddSeconds(45)
@@ -1741,6 +1816,12 @@ function Request-GephTunDisconnect {
     }
     $mutex = Get-GephTunLock
     try {
+        # Recheck ownership under the session mutex; a prior ALIVE result may
+        # become UNKNOWN during the wait. Uncertainty never authorizes takeover.
+        $currentIntent=Get-GephTunConnectionIntent
+        $savedSession=Read-GephTunJson (Join-Path (Get-GephTunRoot) 'session.json')
+        if (($null -ne $currentIntent -and (Get-GephTunProcessIdentityState $currentIntent.Worker) -ne 'DEAD') -or
+            ($null -ne $savedSession -and (Get-GephTunProcessIdentityState $savedSession.Worker) -ne 'DEAD')) { throw 'Worker ownership is live or unknown; operator recovery was refused.' }
         $script:Session = $null
         Restore-GephTunSession
         Clear-GephTunConnectionIntent
@@ -1748,29 +1829,37 @@ function Request-GephTunDisconnect {
     } finally { Release-GephTunLock $mutex }
 }
 
+function Wait-GephTunRecoveryDelay([int]$Milliseconds) {
+    Start-Sleep -Milliseconds $Milliseconds
+}
+
+function Test-GephTunRecoveryCancelled {
+    if (Test-GephTunIntentStopRequested) { return $true }
+    if ($null -eq $script:Session) { return $false }
+    $request=Read-GephTunJson (Join-Path (Get-GephTunRoot) 'disconnect.json')
+    return ($null -ne $request -and $request.PSObject.Properties['Token'] -and $request.Token -ceq $script:Session.Token)
+}
+
 function Wait-GephTunRecovery {
-    # Keep owned services alive if Windows refuses rollback; retry on user request
-    # and periodically. Do not kill unrelated processes or erase the recovery record.
-    while ($null -ne $script:Session) {
-        try { Restore-GephTunSession; return } catch { try { Write-GephTunLog $_.Exception.Message } catch { } }
+    $blocker=''
+    try {
+    for ($attempt=1; $attempt -le 3; $attempt++) {
         if ($null -eq $script:Session) { return }
-        $retryAt = [DateTime]::UtcNow.AddSeconds(30)
-        do {
-            Start-Sleep -Milliseconds 500
-            $path = Join-Path (Get-GephTunRoot) 'disconnect.json'
-            try {
-                if (Test-Path -LiteralPath $path) {
-                    $request = Read-GephTunJson $path
-                    Remove-Item -LiteralPath $path -Force -ErrorAction Stop
-                    if ($null -ne $request -and $request.PSObject.Properties['Token'] -and $request.Token -eq $script:Session.Token) { break }
-                }
-            } catch {
-                # A locked, unreadable, or malformed request is not permission to
-                # exit and destroy a DNS relay still required by an active rule.
-                try { Write-GephTunLog ('Recovery request could not be read; periodic recovery will continue: ' + $_.Exception.Message) } catch { }
-            }
-        } while ([DateTime]::UtcNow -lt $retryAt)
+        try { Restore-GephTunSession; return }
+        catch { $blocker=$_.Exception.Message; try { Write-GephTunLog $blocker } catch {} }
+        if ($null -eq $script:Session) { return }
+        if (Test-GephTunRecoveryCancelled) { break }
+        if ($attempt -lt 3) { Wait-GephTunRecoveryDelay (1000 * $attempt) }
     }
+    } catch { $blocker+=' | Recovery control failed: '+$_.Exception.Message }
+    # A failed rollback is never consent to unlock. Closing dynamic permissions
+    # leaves the persistent blocker in place and permits an operator to acquire
+    # the session mutex after this worker exits. The journal/guard remain intact.
+    try { Close-GephTunProtectionLease }
+    catch { $blocker+=' | Temporary permissions could not be closed: '+$_.Exception.Message }
+    $message='RecoveryRequired: automatic cleanup stopped; persistent protection was not disabled. Blocker: '+$blocker+'. Repair the named dependency, then choose Disconnect / Recover again. Disable protection remains an explicit operation after verified recovery.'
+    try { Set-GephTunStatus 'RecoveryRequired' $message } catch {}
+    throw $message
 }
 
 Export-ModuleMember -Function Initialize-GephTunStorage, Get-GephTunStatus, Test-GephTunPreflight,

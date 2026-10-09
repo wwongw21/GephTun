@@ -1,0 +1,88 @@
+name: GephTun candidate tests
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'GephTun/**'
+      - '.github/workflows/gephtun-tests.yml'
+      - '.github/scripts/Test-GephTunCandidate.ps1'
+  pull_request:
+    paths:
+      - 'GephTun/**'
+      - '.github/workflows/gephtun-tests.yml'
+      - '.github/scripts/Test-GephTunCandidate.ps1'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-static:
+    name: Linux package integrity and static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check package integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 GephTun/tools/release_tool.py check GephTun | tee "$RUNNER_TEMP/gephtun-check.json"
+      - name: Run static source checks
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 GephTun/tools/release_tool.py static GephTun | tee "$RUNNER_TEMP/gephtun-static.json"
+      - name: Confirm package bytes are unchanged
+        if: ${{ !cancelled() }}
+        run: git diff --exit-code -- GephTun
+      - name: Retain current Linux receipts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gephtun-linux-static
+          path: ${{ runner.temp }}/gephtun-*.json
+          if-no-files-found: warn
+
+  windows-tests:
+    name: Windows isolated tests (${{ matrix.engine }})
+    runs-on: windows-2022
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [powershell.exe, pwsh.exe]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Windows Server regression checks, NOT Windows 11/native/leak certification.
+      # Only Verify-GephTun.ps1 and the nine isolated default suites are executed.
+      # The CI helper runs them as a standard user, never with elevation.
+      - name: Verify package and run isolated validation without administrator rights
+        shell: powershell
+        run: |
+          & .\.github\scripts\Test-GephTunCandidate.ps1 `
+            -PackageDirectory (Join-Path $env:GITHUB_WORKSPACE 'GephTun') `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'gephtun-validation') `
+            -PowerShellExecutable '${{ matrix.engine }}'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Confirm package bytes are unchanged
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          git diff --exit-code -- GephTun
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain current Windows receipts and per-suite logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gephtun-windows-${{ matrix.engine }}
+          path: ${{ runner.temp }}/gephtun-validation/
+          if-no-files-found: warn

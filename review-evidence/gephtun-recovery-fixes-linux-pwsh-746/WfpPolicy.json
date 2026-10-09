@@ -1,0 +1,137 @@
+{
+  "Version": "1.5.0",
+  "CapturedUtc": "2026-10-09T18:13:07.4927646Z",
+  "Scope": "Actual managed WFP policy compiler inputs and Marshal layouts. NO native WFP API, installed filters, or leak test.",
+  "SourceSha256": "4853A984F851C6F6128081AE2CD90D3B34489F81AA4AA9000661EFCE18327BD0",
+  "Total": 25,
+  "Passed": 25,
+  "Failed": 0,
+  "Skipped": 0,
+  "Tests": [
+    {
+      "Name": "x64 native layouts match the declared SDK offsets",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "All rule keys are unique and weights are legal range indexes",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Boot plan has four non-loopback IP blocking rules and no permits",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Disconnected Connect4 has a deny fallback",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Disconnected Connect6 has a deny fallback",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Disconnected Accept4 has a deny fallback",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Disconnected Accept6 has a deny fallback",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Disconnected Forward4 has a deny fallback",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Disconnected Forward6 has a deny fallback",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Ordinary physical protocol 6 remains blocked with a live Geph lease",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Ordinary physical protocol 17 remains blocked with a live Geph lease",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Ordinary physical protocol 1 remains blocked with a live Geph lease",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Ordinary physical protocol 58 remains blocked with a live Geph lease",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Geph TCP is permitted only on its approved physical path",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "The same remote IP does not grant a browser or PowerShell transport permission",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Geph UDP is not silently enabled",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Tunnel TCP requires both current local and next-hop LUID",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Removing the temporary tunnel plan restores blocking",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Removing every temporary permission also blocks Geph internet",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Arrival-interface alternative requires reauthorization",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Application IPv6 remains blocked even with a live IPv4 tunnel",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "DHCP permit is restricted to system host, UDP and client/server ports",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "IPv6 neighbor maintenance does not permit global ICMPv6",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Loopback remains available while disconnected",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Zero interface and empty transport lists are rejected",
+      "Result": "PASS",
+      "Detail": ""
+    }
+  ]
+}

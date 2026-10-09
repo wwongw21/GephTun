@@ -88,7 +88,7 @@ function Disable-GephTunProtection([switch]$AllowDirectInternet) {
     try {
         if (Test-Path -LiteralPath (Join-Path (Get-GephTunRoot) 'session.json')) { throw 'Recovery is incomplete; protection was retained.' }
         Initialize-GephTunWfpTypes
-        [GephTun.Security.WfpController]::Disable($true)
+        Remove-GephTunPersistentProtection
         $configPath = Join-Path (Get-GephTunRoot) 'protection.json'
         $config = Read-GephTunJson $configPath
         if ($null -ne $config) { $config.Requested='Disabled'; Write-GephTunJson $configPath $config }
@@ -161,4 +161,9 @@ function Assert-GephTunApprovedProxy($Identity) {
     if (@($config.TrustedImages | Where-Object { [string]::Equals($_.Path,$Identity.Path,[StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) {
         throw 'This Geph proxy executable was not explicitly approved for WFP bootstrap. Review protection configuration before connecting.'
     }
+}
+
+function Remove-GephTunPersistentProtection {
+    # Called only after explicit consent and completed session recovery.
+    [GephTun.Security.WfpController]::Disable($true)
 }

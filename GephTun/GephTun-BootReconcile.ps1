@@ -19,6 +19,39 @@ function New-BootSessionMutex {
     return (New-Object Threading.Mutex($false, 'Global\GephTun-Session-v1'))
 }
 
+function ConvertTo-GephTunProcessStartUtc($Value) {
+    if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
+    if ($Value -is [DateTime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) { throw 'Process timestamp has no verified timezone.' }
+        return $Value.ToUniversalTime()
+    }
+    if ($Value -isnot [string] -or $Value -cnotmatch '\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})\z') {
+        throw 'Process timestamp must be an exact ISO timestamp with a timezone.'
+    }
+    return [DateTimeOffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None).UtcDateTime
+}
+
+function Get-GephTunBootTaskExecutable {
+    if ([string]::IsNullOrWhiteSpace($env:SystemRoot)) { throw 'Windows system directory is unknown.' }
+    return (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe')
+}
+
+function Assert-GephTunBootTaskOwned($Task, [string]$StateScript) {
+    if ($null -eq $Task -or $Task.TaskName -cne 'GephTunBootReconcile' -or $Task.TaskPath -cne '\' -or
+        @($Task.Actions).Count -ne 1) { throw 'Recovery task ownership is unknown; task and script retained.' }
+    $action=@($Task.Actions)[0]
+    $expected=Get-GephTunBootTaskExecutable
+    $arguments='-NoProfile -ExecutionPolicy Bypass -File "' + $StateScript + '"'
+    if (-not [string]::Equals([string]$action.Execute,$expected,[StringComparison]::OrdinalIgnoreCase) -or
+        [string]$action.Arguments -cne $arguments -or
+        -not [string]::IsNullOrEmpty([string]$action.WorkingDirectory) -or
+        [string]$Task.Principal.UserId -notin @('SYSTEM','S-1-5-18','NT AUTHORITY\SYSTEM') -or
+        [string]$Task.Principal.LogonType -ne 'ServiceAccount' -or
+        [string]$Task.Principal.RunLevel -ne 'Highest') {
+        throw 'Recovery task action or principal is foreign or unreadable; task and script retained.'
+    }
+}
+
 function Get-BootWorkerState($Worker) {
     if ($null -eq $Worker -or -not $Worker.PSObject.Properties['Id'] -or
         -not $Worker.PSObject.Properties['StartUtc'] -or
@@ -27,8 +60,7 @@ function Get-BootWorkerState($Worker) {
     try {
         if ([int]$Worker.Id -lt 1 -or [string]::IsNullOrWhiteSpace([string]$Worker.StartUtc) -or
             [string]::IsNullOrWhiteSpace([string]$Worker.Path)) { return 'UNKNOWN' }
-        $expected = [DateTime]::Parse([string]$Worker.StartUtc, [Globalization.CultureInfo]::InvariantCulture,
-            [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+        $expected = ConvertTo-GephTunProcessStartUtc $Worker.StartUtc
         try { $process = Get-Process -Id ([int]$Worker.Id) -ErrorAction Stop }
         catch {
             $cause = $_.Exception.GetBaseException()
@@ -36,8 +68,9 @@ function Get-BootWorkerState($Worker) {
             return 'UNKNOWN'
         }
         if ($null -eq $process) { return 'UNKNOWN' }
-        if ([string]$process.ProcessName -cne 'powershell' -or
-            $process.StartTime.ToUniversalTime().Ticks -ne $expected.Ticks -or
+        if ([string]::IsNullOrWhiteSpace([string]$process.Path) -or $null -eq $process.StartTime) { return 'UNKNOWN' }
+        if ([string]$process.ProcessName -notin @('powershell','pwsh') -or
+            (ConvertTo-GephTunProcessStartUtc $process.StartTime).Ticks -ne $expected.Ticks -or
             -not [string]::Equals([string]$process.Path, [string]$Worker.Path, [StringComparison]::OrdinalIgnoreCase)) {
             return 'DEAD'
         }
@@ -59,7 +92,7 @@ function Get-BootSession {
         throw
     }
     $session = Get-Content -LiteralPath $path -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-    if ($null -eq $session -or -not $session.PSObject.Properties['Token'] -or
+    if ($null -eq $session -or -not $session.PSObject.Properties['Schema'] -or $session.Schema -notin @(1,2) -or -not $session.PSObject.Properties['Token'] -or
         [string]$session.Token -cnotmatch '\A[a-f0-9]{32}\z' -or -not $session.PSObject.Properties['Worker']) {
         throw 'The recovery journal does not establish session ownership.'
     }
@@ -153,7 +186,12 @@ try {
         @($session.Containment.Profiles).Count -gt 0) {
         throw 'A legacy session changed global firewall profiles. Open GephTun and choose Disconnect / Recover; boot cleanup will not guess whether an administrator changed those profiles.'
     }
-    try { Unregister-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -Confirm:$false -ErrorAction Stop }
+    $ownedTasks=@()
+    try { $ownedTasks=@(Get-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -ErrorAction Stop) }
+    catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { throw } }
+    if ($ownedTasks.Count -gt 1) { throw 'Recovery task identity is ambiguous.' }
+    foreach ($task in $ownedTasks) { Assert-GephTunBootTaskOwned $task (Join-Path $root 'GephTun-BootReconcile.ps1') }
+    try { if ($ownedTasks.Count -eq 1) { Unregister-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -Confirm:$false -ErrorAction Stop } }
     catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { throw } }
     $tasks = @()
     try { $tasks = @(Get-ScheduledTask -TaskName 'GephTunBootReconcile' -TaskPath '\' -ErrorAction Stop) }

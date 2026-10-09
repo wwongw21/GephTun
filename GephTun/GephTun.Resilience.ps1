@@ -41,7 +41,7 @@ function Get-GephTunConnectionIntent {
 function Initialize-GephTunConnectionIntent([int]$Port = 0, [int]$OwnerProcessId = 0, [string]$OperationToken = '') {
     # Caller owns Global\GephTun-Session-v1 before entering this function.
     $previous = Get-GephTunConnectionIntent
-    if ($null -ne $previous -and (Test-GephTunProcessIdentity $previous.Worker)) {
+    if ($null -ne $previous -and (Get-GephTunProcessIdentityState $previous.Worker) -ne 'DEAD') {
         throw 'A verified connection controller already owns this intent.'
     }
     if ($OperationToken -and $OperationToken -cnotmatch '\A[a-f0-9]{32}\z') { throw 'Invalid connection operation token.' }
@@ -91,7 +91,7 @@ function Clear-GephTunConnectionIntent {
     if ($null -ne $script:ConnectionIntent) {
         if ($current.Token -cne $script:ConnectionIntent.Token) { throw 'Connection-intent ownership changed; it was not removed.' }
     }
-    elseif (Test-GephTunProcessIdentity $current.Worker) { throw 'A live controller still owns the connection intent.' }
+    elseif ((Get-GephTunProcessIdentityState $current.Worker) -ne 'DEAD') { throw 'A live controller still owns the connection intent.' }
     $stop = Read-GephTunJson (Join-Path (Get-GephTunRoot) 'disconnect-intent.json')
     if ($null -ne $stop -and $stop.PSObject.Properties['Token'] -and $stop.Token -ceq $current.Token) {
         $path = Join-Path (Get-GephTunRoot) 'disconnect-intent.json'

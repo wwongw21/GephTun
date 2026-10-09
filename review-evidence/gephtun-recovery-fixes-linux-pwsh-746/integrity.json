@@ -1,0 +1,11 @@
+{
+  "Version": "1.5.0",
+  "ManifestEntries": 126,
+  "TotalFiles": 127,
+  "StaticChecks": 249,
+  "ManifestAndSourceEvidence": "PASS",
+  "PowerShellExecution": "NOT_RUN",
+  "CSharpCompilation": "NOT_RUN",
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "ProductionQualified": false
+}

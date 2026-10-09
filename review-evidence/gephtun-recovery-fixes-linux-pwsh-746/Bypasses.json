@@ -1,0 +1,186 @@
+{
+  "Version": "1.5.0",
+  "CapturedUtc": "2026-10-09T18:13:08.7585224Z",
+  "Scope": "Actual bypass registry/cache functions with isolated OS/storage doubles. No live networking.",
+  "Total": 35,
+  "Passed": 35,
+  "Failed": 0,
+  "Skipped": 0,
+  "Tests": [
+    {
+      "Name": "Repeated snapshots reuse one verified bypass without adding routes or log floods",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "New endpoints produce one periodic summary instead of per-IP normal warnings",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Persistent captured socket is escalated but warning is rate-limited",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Unused owned routes are retired after the quiet period",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "An empty peer snapshot cannot prune owned routes",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Borrowed routes are never removed by retirement",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Changed owned route metric is rejected, not overwritten",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Adapter identity changes are rejected before adding a route",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Remembered endpoint is preinstalled on the fresh session gateway",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Wrong image identity cannot seed the endpoint cache",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Old and future endpoint records are ignored",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Unsafe cache address classes are excluded",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Cache serialization drops old overflow entries rather than growing unbounded",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual selected route is required: Competitor",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual selected route is required: WrongGateway",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual selected route is required: Ambiguous",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual selected route is required: Missing",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual selected route is required: QueryFailure",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Borrowed route metric changes that select another path are refused",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Failed retirement preserves route journal and registry for another attempt",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Exceptional bypass conditions fail without foreign deletion: Down",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Exceptional bypass conditions fail without foreign deletion: NotHardware",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Exceptional bypass conditions fail without foreign deletion: RouteQuery",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Exceptional bypass conditions fail without foreign deletion: AddFailure",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Combined interface and route metrics determine the selected path",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "A higher total metric competitor permits the intended physical route",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Gateway changes are rejected before installing a stale bypass",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route cleanup retains ownership on uncertainty: AdapterChanged",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route cleanup retains ownership on uncertainty: MetricChanged",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route cleanup retains ownership on uncertainty: RemovalUnconfirmed",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route cleanup retains ownership on uncertainty: RemovalSuccess",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route cleanup retains ownership on uncertainty: AlreadyAbsent",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route creation journals only newly owned resources: Borrowed",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route creation journals only newly owned resources: Added",
+      "Result": "PASS",
+      "Detail": ""
+    },
+    {
+      "Name": "Actual route creation journals only newly owned resources: AddFailure",
+      "Result": "PASS",
+      "Detail": ""
+    }
+  ]
+}

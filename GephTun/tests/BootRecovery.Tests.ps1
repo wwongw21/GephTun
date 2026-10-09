@@ -22,7 +22,7 @@ function Invoke-BootFixture([string]$Mode, [scriptblock]$Check) {
     $global:GephTunBootFixture = [pscustomobject]@{
         Mode=$Mode; Nrpt=[Collections.Generic.List[object]]::new(); Firewall=[Collections.Generic.List[object]]::new()
         RemovedNrpt=[Collections.Generic.List[string]]::new(); RemovedFirewall=[Collections.Generic.List[string]]::new()
-        NrptReads=0; FirewallReads=0; Unregisters=0; TaskExists=$true; ForeignTaskExists=$true; Released=0; Disposed=0; Waits=0
+        NrptReads=0; FirewallReads=0; Unregisters=0; TaskExists=$true; Tasks=[Collections.Generic.List[object]]::new(); Released=0; Disposed=0; Waits=0
         Start=$start; StateRoot=$stateRoot; Copy=$copy; Runs=0; OwnershipReadFailures=0
     }
     $fixture = $global:GephTunBootFixture
@@ -37,12 +37,19 @@ function Invoke-BootFixture([string]$Mode, [scriptblock]$Check) {
     $journal = @{Schema=2;Token=('a'*32);Worker=@{Id=4242;StartUtc=$start.ToString('o');Path='fixture-powershell.exe'}}
     if ($Mode -eq 'LegacyProfiles') { $journal.Containment=@{Profiles=@(@{Name='Public';WasEnabled=$false})} }
     if ($Mode -eq 'MissingIdentity') { $journal.Worker.Remove('StartUtc') }
-    if ($Mode -eq 'Live') {
+    if ($Mode -like 'Live*') {
         $journal.Token=('b'*32)
         $fixture.Nrpt.Add([pscustomobject]@{Name='live-dns';Comment=('GephTun:'+('b'*32))})
         $fixture.Firewall.Add([pscustomobject]@{Name=('GephTun-IPv6-Contain-'+('b'*32))})
     }
-    if ($Mode -in @('LegacyProfiles','Live','Dead','PidReused','WrongProcess','ProcessDenied','MissingIdentity','JournalDenied','Malformed')) {
+    if ($Mode -in @('LiveOffset','LiveFraction','LivePwsh','MalformedTimestamp','NoZoneTimestamp','MissingProcessPath','UnknownTimestampKind')) {
+        if ($Mode -eq 'LiveFraction') { $fixture.Start=[DateTime]::Parse('2026-10-09T00:00:00.1234567Z').ToUniversalTime() }
+        $journal.Worker.StartUtc=$fixture.Start.ToString('o')
+        if ($Mode -eq 'LiveOffset') { $journal.Worker.StartUtc=[DateTimeOffset]::new($fixture.Start).ToOffset([TimeSpan]::FromMinutes(345)).ToString('o') }
+        if ($Mode -eq 'MalformedTimestamp') { $journal.Worker.StartUtc='not-a-date' }
+        if ($Mode -eq 'NoZoneTimestamp') { $journal.Worker.StartUtc='2026-10-09T00:00:00.1234567' }
+    }
+    if ($Mode -in @('LiveOffset','LiveFraction','LivePwsh','MalformedTimestamp','NoZoneTimestamp','MissingProcessPath','UnknownTimestampKind') -or $Mode -in @('LegacyProfiles','Live','Dead','PidReused','WrongProcess','ProcessDenied','MissingIdentity','JournalDenied','Malformed')) {
         $text = $journal | ConvertTo-Json -Depth 6
         if ($Mode -eq 'Malformed') { $text='broken-json{{{' }
         [IO.File]::WriteAllText((Join-Path $stateRoot 'session.json'), $text)
@@ -74,7 +81,7 @@ function Invoke-BootFixture([string]$Mode, [scriptblock]$Check) {
         if($f.Mode -eq 'ProcessDenied'){throw [UnauthorizedAccessException]::new('Fixture process metadata denied')}
         $actual=$f.Start
         if($f.Mode -eq 'PidReused'){$actual=$actual.AddTicks(1)}
-        return [pscustomobject]@{ProcessName=$(if($f.Mode -eq 'WrongProcess'){'explorer'}else{'powershell'});StartTime=$actual.ToLocalTime();Path='fixture-powershell.exe'}
+        return [pscustomobject]@{ProcessName=$(if($f.Mode -eq 'WrongProcess'){'explorer'}elseif($f.Mode -eq 'LivePwsh'){'pwsh'}else{'powershell'});StartTime=$(if($f.Mode -eq 'UnknownTimestampKind'){[DateTime]::SpecifyKind($actual,[DateTimeKind]::Unspecified)}else{$actual.ToLocalTime()});Path=$(if($f.Mode -eq 'MissingProcessPath'){''}else{'fixture-powershell.exe'})}
     }
     function Get-Content {
         [CmdletBinding()]param($LiteralPath,[switch]$Raw,$Encoding)
@@ -114,24 +121,36 @@ function Invoke-BootFixture([string]$Mode, [scriptblock]$Check) {
     }
     function Unregister-ScheduledTask {
         [CmdletBinding()]param($TaskName,$TaskPath,[switch]$Confirm)
-        Assert-Boot ($TaskPath -eq '\') 'Task removal must use the exact root task namespace.'
         $f=$global:GephTunBootFixture;$f.Unregisters++
         if($f.Mode -eq 'TaskRemovalDenied'){throw [UnauthorizedAccessException]::new('Fixture task removal denied')}
-        if($f.Mode -eq 'TaskAbsent'){Write-Error 'Fixture task absent' -Category ObjectNotFound -ErrorAction Stop}
-        if($f.Mode -ne 'TaskStillPresent'){$f.TaskExists=$false}
+        if($f.Mode -ne 'TaskStillPresent') {
+            foreach($task in @($f.Tasks.ToArray()|Where-Object {$_.TaskName -eq $TaskName -and $_.TaskPath -eq $TaskPath})) { [void]$f.Tasks.Remove($task) }
+            $f.TaskExists=@($f.Tasks|Where-Object TaskPath -eq '\').Count -gt 0
+        }
     }
     function Get-ScheduledTask {
         [CmdletBinding()]param($TaskName,$TaskPath)
-        Assert-Boot ($TaskPath -eq '\') 'Task verification must use the exact root task namespace.'
         $f=$global:GephTunBootFixture
-        if($f.Mode -eq 'TaskQueryDenied'){throw [UnauthorizedAccessException]::new('Fixture task absence query denied')}
-        if($f.TaskExists){return [pscustomobject]@{TaskName=$TaskName}}
-        return @()
+        if($f.Mode -in @('TaskQueryDenied','TaskMetadataDenied')){throw [UnauthorizedAccessException]::new('Fixture task metadata denied')}
+        return @($f.Tasks.ToArray()|Where-Object {$_.TaskName -eq $TaskName -and $_.TaskPath -eq $TaskPath})
     }
     function Run-Boot {
         $f=$global:GephTunBootFixture;$f.Runs++
         & $f.Copy
     }
+    $previousSystemRoot=$env:SystemRoot
+    $env:SystemRoot=Join-Path $fixtureRoot 'Windows'
+    $task=[pscustomobject]@{TaskName='GephTunBootReconcile';TaskPath='\';Actions=@([pscustomobject]@{Execute=(Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe');Arguments=('-NoProfile -ExecutionPolicy Bypass -File "'+$copy+'"');WorkingDirectory=''});Principal=[pscustomobject]@{UserId='SYSTEM';LogonType='ServiceAccount';RunLevel='Highest'}}
+    if($Mode -eq 'ForeignRootTask'){$task.Actions[0].Execute='foreign.exe'}
+    if($Mode -eq 'WrongTaskAction'){$task.Actions[0].Arguments='-Command Write-Output foreign'}
+    if($Mode -eq 'WrongTaskPrincipal'){$task.Principal.UserId='OtherUser'}
+    if($Mode -eq 'WrongTaskLogon'){$task.Principal.LogonType='Interactive'}
+    if($Mode -eq 'WrongTaskRunLevel'){$task.Principal.RunLevel='Limited'}
+    if($Mode -eq 'MissingTaskMetadata'){$task.Actions=@()}
+    if($Mode -eq 'MissingPrincipal'){$task.Principal=$null}
+    if($Mode -eq 'MultipleActions'){$task.Actions+=@($task.Actions[0])}
+    if($fixture.TaskExists){$fixture.Tasks.Add($task)}
+    $fixture.Tasks.Add([pscustomobject]@{TaskName='GephTunBootReconcile';TaskPath='\Other\';Actions=@();Principal=$null})
     $previousProgramData=$env:ProgramData
     try {
         $env:ProgramData=$fixtureRoot
@@ -139,12 +158,12 @@ function Invoke-BootFixture([string]$Mode, [scriptblock]$Check) {
         & $Check $fixture
         Assert-Boot (@($fixture.Nrpt|Where-Object{$_.Name -eq 'foreign-dns'}).Count -eq 1) 'A foreign DNS rule was changed.'
         Assert-Boot (@($fixture.Firewall|Where-Object{$_.Name -eq 'OtherVPN-keep'}).Count -eq 1) 'A foreign firewall rule was changed.'
-        Assert-Boot $fixture.ForeignTaskExists 'A same-named foreign task was changed.'
+        Assert-Boot (@($fixture.Tasks|Where-Object TaskPath -eq '\Other\').Count -eq 1) 'A same-named foreign task was changed.'
         Assert-Boot ($fixture.Disposed -eq $fixture.Runs) 'Every mutex lease must be disposed.'
         if($fixture.Mode -in @('Busy','MutexDenied')){
             Assert-Boot ($fixture.Released -eq 0) 'An unowned mutex must not be released.'
         }else{Assert-Boot ($fixture.Released -eq $fixture.Runs) 'Every owned mutex must be released.'}
-    } finally { $env:ProgramData=$previousProgramData }
+    } finally { $env:ProgramData=$previousProgramData; $env:SystemRoot=$previousSystemRoot }
 }
 
 function Test-BootCase([string]$Name,[string]$Mode,[scriptblock]$Check) {
@@ -210,6 +229,26 @@ try {
         $f.Mode='NoJournal'
         Run-Boot
         Assert-Boot (-not $f.TaskExists -and -not [IO.File]::Exists($f.Copy)) 'A repeated recovery could not complete.'
+    }
+    foreach($mode in @('LiveOffset','LiveFraction','LivePwsh')) {
+        Test-BootCase ('Live worker JSON round trip preserves exact UTC ticks: '+$mode) $mode {
+            param($f)
+            Assert-Boot ($f.TaskExists -and [IO.File]::Exists($f.Copy) -and $f.Unregisters -eq 0) 'Timezone/fraction round trip lost a live guard.'
+            Assert-Boot (@($f.Nrpt|Where-Object Name -eq 'live-dns').Count -eq 1) 'Live DNS protection was removed.'
+        }
+    }
+    foreach($mode in @('MalformedTimestamp','NoZoneTimestamp','MissingProcessPath','UnknownTimestampKind')) {
+        Test-BootCase ('Uncertain process identity preserves every policy: '+$mode) $mode {
+            param($f)
+            Assert-Boot ($f.TaskExists -and $f.Unregisters -eq 0 -and $f.RemovedNrpt.Count -eq 0 -and $f.RemovedFirewall.Count -eq 0) 'Uncertain identity authorized cleanup.'
+        }
+    }
+    foreach($mode in @('ForeignRootTask','WrongTaskAction','WrongTaskPrincipal','WrongTaskLogon','WrongTaskRunLevel','MissingTaskMetadata','MissingPrincipal','MultipleActions','TaskMetadataDenied')) {
+        Test-BootCase ('Unverified task is never unregistered: '+$mode) $mode {
+            param($f)
+            Assert-Boot ($f.TaskExists -and $f.Unregisters -eq 0 -and [IO.File]::Exists($f.Copy)) 'A foreign/unreadable task or recovery script was removed.'
+            Assert-Boot (@($f.Tasks|Where-Object TaskPath -eq '\').Count -eq 1) 'Root foreign task was deleted.'
+        }
     }
     Assert-Boot ((Get-FileHash -LiteralPath $BootScriptPath -Algorithm SHA256).Hash -eq $originalHash) 'The installed boot script was modified.'
 } finally {

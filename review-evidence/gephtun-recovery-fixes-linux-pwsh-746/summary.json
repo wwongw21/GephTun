@@ -1,0 +1,86 @@
+{
+  "Version": "1.5.0",
+  "CapturedUtc": "2026-10-09T18:13:16.7556738Z",
+  "HostPowerShell": "7.4.6",
+  "Platform": "Unix",
+  "Scope": "Parser/C# compilation, managed WFP policy plan, mocked bypass/protection/controller/recovery, in-memory DNS, package-integrity tests. No live tunnel, reboot, TLS/network or UI acceptance.",
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "ProductionQualified": false,
+  "Total": 9,
+  "Passed": 9,
+  "Failed": 0,
+  "Suites": [
+    {
+      "Suite": "Source",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Source.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Source.txt"
+    },
+    {
+      "Suite": "WfpPolicy",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/WfpPolicy.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/WfpPolicy.txt"
+    },
+    {
+      "Suite": "Bypasses",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Bypasses.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Bypasses.txt"
+    },
+    {
+      "Suite": "Protection",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Protection.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Protection.txt"
+    },
+    {
+      "Suite": "Resilience",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Resilience.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Resilience.txt"
+    },
+    {
+      "Suite": "Controller",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Controller.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Controller.txt"
+    },
+    {
+      "Suite": "DnsMandatory",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/DnsMandatory.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/DnsMandatory.txt"
+    },
+    {
+      "Suite": "BootRecovery",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/BootRecovery.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/BootRecovery.txt"
+    },
+    {
+      "Suite": "Package",
+      "ExitCode": 0,
+      "Result": "PASS",
+      "Detail": "",
+      "Receipt": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Package.json",
+      "Log": "/tmp/gephtun-fix-sealed-linux-pwsh-746/Package.txt"
+    }
+  ]
+}

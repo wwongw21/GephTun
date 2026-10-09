@@ -1,0 +1,19 @@
+{
+  "CandidateBaseCommit": "452180886b43f1faed849c57af18315052e1d755",
+  "DevelopmentBranch": "fix/gephtun-1.5.0-recovery",
+  "Host": "Linux; PowerShell 7.4.6",
+  "SuiteTotal": 9,
+  "SuitesPassed": 9,
+  "ChecksPassed": 252,
+  "ChecksFailed": 0,
+  "Skipped": 0,
+  "WindowsExecution": "NOT_RUN",
+  "NativeWindowsAcceptance": "NOT_TESTED",
+  "ProductionQualified": false,
+  "CurrentSourceHashesVerified": 48,
+  "HistoricalFilesUnchanged": 42,
+  "WorkflowActionlint": "PASS; 1.7.7; ShellCheck disabled",
+  "CIHelperPowerShellParser": "PASS; Linux PowerShell 7.4.6 only",
+  "WindowsAccountOrchestration": "NOT_RUN",
+  "ArchiveSha256": "8e15d3bc012bf384d8777b3921c24d672e3da988ededb8ba873d706b74f1c193"
+}
