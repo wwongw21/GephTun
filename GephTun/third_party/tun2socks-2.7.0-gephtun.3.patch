@@ -1,0 +1,1277 @@
+--- a/go.mod
++++ b/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/xjasonlyu/tun2socks/v2
+ 
+-go 1.26.3
++go 1.26.8
+ 
+ require (
+ 	github.com/docker/go-units v0.5.0
+@@ -16,8 +16,8 @@
+ 	github.com/stretchr/testify v1.11.1
+ 	go.uber.org/atomic v1.11.0
+ 	go.uber.org/zap v1.28.0
+-	golang.org/x/crypto v0.53.0
+-	golang.org/x/sys v0.46.0
++	golang.org/x/crypto v0.56.0
++	golang.org/x/sys v0.47.0
+ 	golang.org/x/time v0.15.0
+ 	golang.zx2c4.com/wireguard v0.0.0-20260522210424-ecfc5a8d5446
+ 	gopkg.in/yaml.v3 v3.0.1
+@@ -33,7 +33,7 @@
+ 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+ 	go.uber.org/multierr v1.11.0 // indirect
+ 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
+-	golang.org/x/net v0.56.0 // indirect
++	golang.org/x/net v0.57.0 // indirect
+ 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
+ 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
+ )
+--- a/go.sum
++++ b/go.sum
+@@ -53,14 +53,21 @@
+ go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
+ golang.org/x/crypto v0.53.0 h1:QZ4Muo8THX6CizN2vPPd5fBGHyogrdK9fG4wLPFUsto=
+ golang.org/x/crypto v0.53.0/go.mod h1:DNLU434OwVakk9PzuwV8w62mAJpRJL3vsgcfp4Qnsio=
++golang.org/x/crypto v0.56.0 h1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=
++golang.org/x/crypto v0.56.0/go.mod h1:OMW5y6CY9l38uPLmxU6l6pwcXp1obtLo3e6gT7gQR2I=
+ golang.org/x/exp v0.0.0-20260611194520-c48552f49976 h1:X8Hz2ImujgbmetVuW+w2YkyZChE3cBpZi2P158rTG9M=
+ golang.org/x/exp v0.0.0-20260611194520-c48552f49976/go.mod h1:vnf4pv9iKZXY58sQE1L86zmNWJ4159e1RkcWiLCkeEY=
+ golang.org/x/net v0.56.0 h1:Rw8j/hFzGvJUZwNBXnAtf5sVDVt+65SK2C7IxCxZt5o=
+ golang.org/x/net v0.56.0/go.mod h1:D3Ku6r+V6JROoZK144D2XfMHFcMq/0zSfLelVTCFKec=
++golang.org/x/net v0.57.0 h1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=
++golang.org/x/net v0.57.0/go.mod h1:KpXc8iv+r3XplLAG/f7Jsf9RPszJzdR0f58q9vGOuEU=
+ golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=
+ golang.org/x/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
++golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
++golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+ golang.org/x/term v0.44.0 h1:0rLvDRCtNj0gZkyIXhCyOb2OAzEhLVqc4B+hrsBhrmc=
+ golang.org/x/term v0.44.0/go.mod h1:7ze4MdzUzLXpSAoFP1H0bOI9aXDqveSvatT5vKcFh2Y=
++golang.org/x/term v0.45.0 h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=
+ golang.org/x/time v0.15.0 h1:bbrp8t3bGUeFOx08pvsMYRTCVSMk89u4tKbNOZbp88U=
+ golang.org/x/time v0.15.0/go.mod h1:Y4YMaQmXwGQZoFaVFk4YpCt4FLQMYKZe9oeV/f4MSno=
+ golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 h1:B82qJJgjvYKsXS9jeunTOisW56dUokqW/FOteYJJ/yg=
+--- /dev/null
++++ b/proxy/socks5/gephtun_handshake_test.go
+@@ -0,0 +1,399 @@
++package socks5
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"fmt"
++	M "github.com/xjasonlyu/tun2socks/v2/metadata"
++	wire "github.com/xjasonlyu/tun2socks/v2/transport/socks5"
++	"io"
++	"net"
++	"net/netip"
++	"testing"
++	"time"
++)
++
++func TestAuditConstructorRejectsShortEndpoints(t *testing.T) {
++	for _, addr := range []string{"", "x"} {
++		t.Run(addr, func(t *testing.T) {
++			defer func() {
++				if v := recover(); v != nil {
++					t.Errorf("constructor panicked for short endpoint %q: %v", addr, v)
++				}
++			}()
++			_, err := New(addr, "", "")
++			if err == nil {
++				t.Errorf("invalid short endpoint %q did not return error", addr)
++			}
++		})
++	}
++}
++
++func TestAuditSOCKSHandshakeRespectsContextCancellation(t *testing.T) {
++	listener, err := net.Listen("tcp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { listener.Close() })
++	accepted := make(chan net.Conn, 1)
++	go func() {
++		c, e := listener.Accept()
++		if e == nil {
++			accepted <- c
++		}
++	}()
++	ss, err := New(listener.Addr().String(), "", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	result := make(chan error, 1)
++	go func() {
++		c, e := ss.DialContext(ctx, &M.Metadata{Network: M.TCP, DstIP: netip.MustParseAddr("192.0.2.1"), DstPort: 443})
++		if c != nil {
++			c.Close()
++		}
++		result <- e
++	}()
++	var peer net.Conn
++	select {
++	case peer = <-accepted:
++	case <-time.After(time.Second):
++		t.Fatal("proxy connection not accepted")
++	}
++	t.Cleanup(func() { peer.Close() })
++	// Cancel only after TCP connects, to exercise the pending SOCKS response.
++	cancel()
++	select {
++	case e := <-result:
++		if e == nil {
++			t.Fatal("canceled handshake returned success")
++		}
++	case <-time.After(500 * time.Millisecond):
++		peer.Close()
++		<-result
++		t.Fatal("SOCKS handshake remained blocked after its context was canceled")
++	}
++}
++
++func TestAuditConstructorPreservesSupportedEndpoints(t *testing.T) {
++	for _, item := range []struct {
++		input, want string
++		unix        bool
++	}{
++		{"127.0.0.1:1080", "127.0.0.1:1080", false},
++		{"[::1]:1080", "[::1]:1080", false},
++		{"/tmp/proxy.sock", "/tmp/proxy.sock", true},
++		{"/@proxy", "@proxy", true},
++		{"/\x00proxy", "\x00proxy", true},
++	} {
++		ss, err := New(item.input, "", "")
++		if err != nil || ss.addr != item.want || ss.unix != item.unix {
++			t.Fatalf("supported endpoint %q changed: proxy=%+v err=%v", item.input, ss, err)
++		}
++	}
++}
++
++func TestAuditSOCKSHandshakeRespectsContextDeadline(t *testing.T) {
++	listener, err := net.Listen("tcp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { listener.Close() })
++	accepted := make(chan net.Conn, 1)
++	go func() {
++		c, e := listener.Accept()
++		if e == nil {
++			accepted <- c
++		}
++	}()
++	ss, err := New(listener.Addr().String(), "", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
++	defer cancel()
++	result := make(chan error, 1)
++	go func() {
++		c, e := ss.DialContext(ctx, &M.Metadata{Network: M.TCP, DstIP: netip.MustParseAddr("192.0.2.1"), DstPort: 443})
++		if c != nil {
++			c.Close()
++		}
++		result <- e
++	}()
++	var peer net.Conn
++	select {
++	case peer = <-accepted:
++	case <-time.After(time.Second):
++		t.Fatal("proxy connection not accepted")
++	}
++	t.Cleanup(func() { peer.Close() })
++	select {
++	case e := <-result:
++		if e == nil {
++			t.Fatal("expired handshake returned success")
++		}
++	case <-time.After(time.Second):
++		peer.Close()
++		<-result
++		t.Fatal("SOCKS handshake exceeded its context deadline")
++	}
++}
++
++func TestAuditCompletedSOCKSHandshakeLeavesConnectionUsable(t *testing.T) {
++	listener, err := net.Listen("tcp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { listener.Close() })
++	serverDone := make(chan error, 1)
++	go func() {
++		peer, e := listener.Accept()
++		if e != nil {
++			serverDone <- e
++			return
++		}
++		defer peer.Close()
++		peer.SetDeadline(time.Now().Add(2 * time.Second))
++		greeting := make([]byte, 3)
++		if _, e = io.ReadFull(peer, greeting); e != nil {
++			serverDone <- e
++			return
++		}
++		if _, e = peer.Write([]byte{5, 0}); e != nil {
++			serverDone <- e
++			return
++		}
++		request := make([]byte, 10)
++		if _, e = io.ReadFull(peer, request); e != nil {
++			serverDone <- e
++			return
++		}
++		if _, e = peer.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0}); e != nil {
++			serverDone <- e
++			return
++		}
++		payload := make([]byte, 4)
++		if _, e = io.ReadFull(peer, payload); e == nil {
++			_, e = peer.Write(payload)
++		}
++		serverDone <- e
++	}()
++	ss, err := New(listener.Addr().String(), "", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
++	defer cancel()
++	client, err := ss.DialContext(ctx, &M.Metadata{Network: M.TCP, DstIP: netip.MustParseAddr("192.0.2.1"), DstPort: 443})
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { client.Close() })
++	cancel()
++	time.Sleep(100 * time.Millisecond)
++	if _, err = client.Write([]byte("ping")); err != nil {
++		t.Fatalf("completed connection retained handshake cancellation/deadline: %v", err)
++	}
++	payload := make([]byte, 4)
++	if _, err = io.ReadFull(client, payload); err != nil || string(payload) != "ping" {
++		t.Fatalf("completed connection unusable: payload=%q err=%v", payload, err)
++	}
++	if err = <-serverDone; err != nil {
++		t.Fatal(err)
++	}
++}
++
++func TestAuditUDPAssociateHandshakeIsBounded(t *testing.T) {
++	listener, err := net.Listen("tcp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { listener.Close() })
++	accepted := make(chan net.Conn, 1)
++	// Complete greeting, then withhold UDP ASSOCIATE reply.
++	go func() {
++		peer, e := listener.Accept()
++		if e != nil {
++			return
++		}
++		accepted <- peer
++		greeting := make([]byte, 3)
++		if _, e = io.ReadFull(peer, greeting); e == nil {
++			peer.Write([]byte{5, 0})
++		}
++	}()
++	ss, err := New(listener.Addr().String(), "", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	result := make(chan error, 1)
++	go func() {
++		pc, e := ss.DialUDP(&M.Metadata{Network: M.UDP, DstIP: netip.MustParseAddr("192.0.2.1"), DstPort: 443})
++		if pc != nil {
++			pc.Close()
++		}
++		result <- e
++	}()
++	var peer net.Conn
++	select {
++	case peer = <-accepted:
++	case <-time.After(time.Second):
++		t.Fatal("proxy connection not accepted")
++	}
++	t.Cleanup(func() { peer.Close() })
++	select {
++	case e := <-result:
++		if e == nil {
++			t.Fatal("stalled UDP handshake returned success")
++		}
++	case <-time.After(6 * time.Second):
++		peer.Close()
++		<-result
++		t.Fatal("UDP ASSOCIATE handshake was not bounded by the five-second connection budget")
++	}
++}
++
++func TestAuditUDPAssociateSuccessSurvivesHandshakeAndTracksControlClose(t *testing.T) {
++	relay, err := net.ListenPacket("udp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { relay.Close() })
++	listener, err := net.Listen("tcp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { listener.Close() })
++	type serverResult struct {
++		peer net.Conn
++		err  error
++	}
++	server := make(chan serverResult, 1)
++	go func() {
++		peer, e := listener.Accept()
++		if e != nil {
++			server <- serverResult{err: e}
++			return
++		}
++		peer.SetDeadline(time.Now().Add(2 * time.Second))
++		serve := func() error {
++			greeting := make([]byte, 3)
++			if _, e := io.ReadFull(peer, greeting); e != nil {
++				return e
++			}
++			if _, e := peer.Write([]byte{5, 0}); e != nil {
++				return e
++			}
++			request := make([]byte, 10)
++			if _, e := io.ReadFull(peer, request); e != nil {
++				return e
++			}
++			if request[1] != byte(wire.CmdUDPAssociate) {
++				return fmt.Errorf("received command %d, expected UDP ASSOCIATE", request[1])
++			}
++			response := append([]byte{5, 0, 0}, wire.ParseAddr(relay.LocalAddr())...)
++			if _, e := peer.Write(response); e != nil {
++				return e
++			}
++			return peer.SetDeadline(time.Time{})
++		}
++		e = serve()
++		if e != nil {
++			peer.Close()
++		}
++		server <- serverResult{peer: peer, err: e}
++	}()
++	ss, err := New(listener.Addr().String(), "", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	pc, err := ss.DialUDP(&M.Metadata{Network: M.UDP, DstIP: netip.MustParseAddr("192.0.2.5"), DstPort: 443})
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { pc.Close() })
++	state := <-server
++	if state.err != nil {
++		t.Fatal(state.err)
++	}
++	t.Cleanup(func() { state.peer.Close() })
++	// A successful association must survive the DialUDP defer and its old
++	// five-second handshake deadline while retaining the TCP control socket.
++	time.Sleep(5*time.Second + 100*time.Millisecond)
++	relay.SetDeadline(time.Now().Add(2 * time.Second))
++	pc.SetDeadline(time.Now().Add(2 * time.Second))
++	target := &net.UDPAddr{IP: net.IPv4(192, 0, 2, 5), Port: 443}
++	if _, err = pc.WriteTo([]byte("request"), target); err != nil {
++		t.Fatalf("successful association closed after handshake: %v", err)
++	}
++	b := make([]byte, 1024)
++	n, from, err := relay.ReadFrom(b)
++	if err != nil {
++		t.Fatal(err)
++	}
++	address, payload, err := wire.DecodeUDPPacket(b[:n])
++	if err != nil || address.String() != target.String() || string(payload) != "request" {
++		t.Fatalf("bad outgoing packet: addr=%v payload=%q err=%v", address, payload, err)
++	}
++	if _, err = relay.WriteTo(regressionPacket(t, "response"), from); err != nil {
++		t.Fatal(err)
++	}
++	n, from, err = pc.ReadFrom(b)
++	if err != nil || from.String() != target.String() || string(b[:n]) != "response" {
++		t.Fatalf("bad association response: address=%v n=%d err=%v", from, n, err)
++	}
++	state.peer.Close()
++	pc.SetReadDeadline(time.Now().Add(2 * time.Second))
++	if _, _, err = pc.ReadFrom(b); !errors.Is(err, net.ErrClosed) {
++		t.Fatalf("closing SOCKS control TCP did not close UDP association: %v", err)
++	}
++}
++
++type auditWritePacketConn struct {
++	scriptedPacketConn
++	count   int
++	err     error
++	written []byte
++}
++
++func (pc *auditWritePacketConn) WriteTo(b []byte, _ net.Addr) (int, error) {
++	pc.written = append([]byte(nil), b...)
++	if pc.count < 0 {
++		return len(b), pc.err
++	}
++	return pc.count, pc.err
++}
++
++func TestAuditUDPWriteToReportsPayloadBytes(t *testing.T) {
++	target := &net.UDPAddr{IP: net.IP{192, 0, 2, 5}, Port: 443}
++	for _, tc := range []struct {
++		name      string
++		payload   []byte
++		count     int
++		err       error
++		wantCount int
++		wantErr   error
++	}{
++		{"success", []byte("hello"), -1, nil, 5, nil},
++		{"empty-payload", nil, -1, nil, 0, nil},
++		{"write-error", []byte("hello"), 0, io.ErrClosedPipe, 0, io.ErrClosedPipe},
++		{"short-write", []byte("hello"), 12, nil, 2, io.ErrShortWrite},
++		{"partial-write-error", []byte("hello"), 12, io.ErrClosedPipe, 2, io.ErrClosedPipe},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			wireConn := &auditWritePacketConn{count: tc.count, err: tc.err}
++			pc := &socksPacketConn{PacketConn: wireConn, rAddr: target}
++			n, err := pc.WriteTo(tc.payload, target)
++			if n != tc.wantCount || !errors.Is(err, tc.wantErr) {
++				t.Fatalf("payload count/error mismatch: got n=%d err=%v, want n=%d err=%v", n, err, tc.wantCount, tc.wantErr)
++			}
++			addr, payload, decodeErr := wire.DecodeUDPPacket(wireConn.written)
++			if decodeErr != nil || addr.String() != target.String() || !bytes.Equal(payload, tc.payload) {
++				t.Fatalf("wire encoding changed: addr=%v payload=%q err=%v", addr, payload, decodeErr)
++			}
++		})
++	}
++}
+--- /dev/null
++++ b/proxy/socks5/gephtun_lifecycle_test.go
+@@ -0,0 +1,421 @@
++package socks5
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"fmt"
++	"io"
++	"math/rand"
++	"net"
++	"net/netip"
++	"os"
++	"runtime"
++	"sync"
++	"testing"
++	"time"
++
++	M "github.com/xjasonlyu/tun2socks/v2/metadata"
++	wire "github.com/xjasonlyu/tun2socks/v2/transport/socks5"
++)
++
++type auditServer struct {
++	listener net.Listener
++	mu       sync.Mutex
++	peers    map[string]net.Conn
++	workers  sync.WaitGroup
++	stopped  chan struct{}
++	once     sync.Once
++}
++
++func newAuditServer(t *testing.T, handler func(net.Conn)) *auditServer {
++	t.Helper()
++	ln, err := net.Listen("tcp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	s := &auditServer{listener: ln, peers: make(map[string]net.Conn), stopped: make(chan struct{})}
++	go func() {
++		defer close(s.stopped)
++		for {
++			c, err := ln.Accept()
++			if err != nil {
++				return
++			}
++			key := c.RemoteAddr().String()
++			s.mu.Lock()
++			s.peers[key] = c
++			s.mu.Unlock()
++			s.workers.Add(1)
++			go func() {
++				defer s.workers.Done()
++				defer c.Close()
++				defer func() { s.mu.Lock(); delete(s.peers, key); s.mu.Unlock() }()
++				c.SetDeadline(time.Now().Add(5 * time.Second))
++				handler(c)
++			}()
++		}
++	}()
++	t.Cleanup(s.close)
++	return s
++}
++func (s *auditServer) close() {
++	s.once.Do(func() {
++		s.listener.Close()
++		<-s.stopped
++		s.mu.Lock()
++		for _, c := range s.peers {
++			c.Close()
++		}
++		s.mu.Unlock()
++		s.workers.Wait()
++	})
++}
++func (s *auditServer) closePeer(key string) bool {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	c, ok := s.peers[key]
++	if ok {
++		c.Close()
++	}
++	return ok
++}
++func (s *auditServer) active() int { s.mu.Lock(); defer s.mu.Unlock(); return len(s.peers) }
++func (s *auditServer) waitIdle(t *testing.T) {
++	t.Helper()
++	until := time.Now().Add(2 * time.Second)
++	for s.active() != 0 && time.Now().Before(until) {
++		time.Sleep(time.Millisecond)
++	}
++	if n := s.active(); n != 0 {
++		t.Fatalf("%d server sockets remained after clients finished", n)
++	}
++}
++func auditServerRequest(c net.Conn) (byte, error) {
++	greeting := make([]byte, 3)
++	if _, err := io.ReadFull(c, greeting); err != nil {
++		return 0, err
++	}
++	if !bytes.Equal(greeting, []byte{5, 1, 0}) {
++		return 0, fmt.Errorf("unexpected greeting %x", greeting)
++	}
++	if _, err := c.Write([]byte{5, 0}); err != nil {
++		return 0, err
++	}
++	header := make([]byte, 3)
++	if _, err := io.ReadFull(c, header); err != nil {
++		return 0, err
++	}
++	if _, err := wire.ReadAddr(c, make([]byte, wire.MaxAddrLen)); err != nil {
++		return 0, err
++	}
++	return header[1], nil
++}
++func auditMetadata() *M.Metadata {
++	return &M.Metadata{Network: M.TCP, DstIP: netip.MustParseAddr("192.0.2.5"), DstPort: 443}
++}
++func auditFDCount() int {
++	if runtime.GOOS != "linux" {
++		return -1
++	}
++	entries, err := os.ReadDir("/proc/self/fd")
++	if err != nil {
++		return -1
++	}
++	return len(entries)
++}
++
++func TestGephTunConcurrentCanceledHandshakesReleaseSockets(t *testing.T) {
++	const clients = 128
++	greetings := make(chan struct{}, clients)
++	server := newAuditServer(t, func(c net.Conn) {
++		greeting := make([]byte, 3)
++		if _, err := io.ReadFull(c, greeting); err != nil {
++			return
++		}
++		greetings <- struct{}{}
++		io.Copy(io.Discard, c)
++	})
++	ss, _ := New(server.listener.Addr().String(), "", "")
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	results := make(chan error, clients)
++	for i := 0; i < clients; i++ {
++		go func() {
++			c, err := ss.DialContext(ctx, auditMetadata())
++			if c != nil {
++				c.Close()
++			}
++			results <- err
++		}()
++	}
++	for i := 0; i < clients; i++ {
++		select {
++		case <-greetings:
++		case <-time.After(3 * time.Second):
++			t.Fatal("not all clients reached SOCKS greeting")
++		}
++	}
++	cancel()
++	for i := 0; i < clients; i++ {
++		select {
++		case err := <-results:
++			if !errors.Is(err, context.Canceled) {
++				t.Fatalf("canceled client returned %v", err)
++			}
++		case <-time.After(2 * time.Second):
++			t.Fatal("canceled handshake remained blocked")
++		}
++	}
++	server.waitIdle(t)
++	t.Logf("%d simultaneous canceled handshakes released their server sockets", clients)
++}
++
++func TestGephTunConcurrentTCPFragmentedRepliesAndData(t *testing.T) {
++	const clients = 64
++	server := newAuditServer(t, func(c net.Conn) {
++		cmd, err := auditServerRequest(c)
++		if err != nil || cmd != 1 {
++			return
++		}
++		for _, b := range []byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0} {
++			if _, err := c.Write([]byte{b}); err != nil {
++				return
++			}
++		}
++		io.Copy(c, c)
++	})
++	ss, _ := New(server.listener.Addr().String(), "", "")
++	results := make(chan error, clients)
++	for i := 0; i < clients; i++ {
++		go func(id int) {
++			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
++			c, err := ss.DialContext(ctx, auditMetadata())
++			cancel()
++			if err != nil {
++				results <- err
++				return
++			}
++			defer c.Close()
++			c.SetDeadline(time.Now().Add(2 * time.Second))
++			payload := []byte(fmt.Sprintf("client-%03d", id))
++			if _, err = c.Write(payload); err != nil {
++				results <- err
++				return
++			}
++			reply := make([]byte, len(payload))
++			_, err = io.ReadFull(c, reply)
++			if err == nil && !bytes.Equal(payload, reply) {
++				err = fmt.Errorf("TCP payload mismatch")
++			}
++			results <- err
++		}(i)
++	}
++	for i := 0; i < clients; i++ {
++		if err := <-results; err != nil {
++			t.Fatal(err)
++		}
++	}
++	server.waitIdle(t)
++	t.Logf("%d concurrent TCP streams accepted fragmented replies and exchanged data after dial context cancellation", clients)
++}
++
++func TestGephTunConcurrentUDPAssociationsAndControlClose(t *testing.T) {
++	const clients = 64
++	const packets = 8
++	relay, err := net.ListenPacket("udp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	done := make(chan struct{})
++	go func() {
++		defer close(done)
++		buf := make([]byte, 65535)
++		for {
++			n, from, err := relay.ReadFrom(buf)
++			if err != nil {
++				return
++			}
++			if _, err = relay.WriteTo(buf[:n], from); err != nil {
++				return
++			}
++		}
++	}()
++	t.Cleanup(func() { relay.Close(); <-done })
++	server := newAuditServer(t, func(c net.Conn) {
++		cmd, err := auditServerRequest(c)
++		if err != nil || cmd != 3 {
++			return
++		}
++		if _, err = c.Write(append([]byte{5, 0, 0}, wire.ParseAddr(relay.LocalAddr())...)); err != nil {
++			return
++		}
++		io.Copy(io.Discard, c)
++	})
++	ss, _ := New(server.listener.Addr().String(), "", "")
++	results := make(chan error, clients)
++	target := &net.UDPAddr{IP: net.IP{192, 0, 2, 5}, Port: 443}
++	for i := 0; i < clients; i++ {
++		go func(id int) {
++			pc, err := ss.DialUDP(auditMetadata())
++			if err != nil {
++				results <- err
++				return
++			}
++			defer pc.Close()
++			pc.SetDeadline(time.Now().Add(3 * time.Second))
++			buf := make([]byte, 256)
++			for seq := 0; seq < packets; seq++ {
++				payload := []byte(fmt.Sprintf("client-%03d-packet-%02d", id, seq))
++				n, err := pc.WriteTo(payload, target)
++				if err != nil || n != len(payload) {
++					results <- fmt.Errorf("UDP send count=%d err=%v", n, err)
++					return
++				}
++				n, from, err := pc.ReadFrom(buf)
++				if err != nil || from.String() != target.String() || !bytes.Equal(payload, buf[:n]) {
++					results <- fmt.Errorf("UDP receive mismatch n=%d err=%v", n, err)
++					return
++				}
++			}
++			if id%2 == 0 {
++				control := pc.(*socksPacketConn).tcpConn
++				if !server.closePeer(control.LocalAddr().String()) {
++					results <- fmt.Errorf("server control socket vanished")
++					return
++				}
++			} else {
++				pc.Close()
++			}
++			pc.SetReadDeadline(time.Now().Add(time.Second))
++			_, _, err = pc.ReadFrom(buf)
++			if !errors.Is(err, net.ErrClosed) {
++				results <- fmt.Errorf("UDP survived control/owner close: %v", err)
++				return
++			}
++			results <- nil
++		}(i)
++	}
++	for i := 0; i < clients; i++ {
++		if err := <-results; err != nil {
++			t.Fatal(err)
++		}
++	}
++	server.waitIdle(t)
++	t.Logf("%d UDP associations, %d datagram round trips; server control close and caller close both released associations", clients, clients*packets)
++}
++
++func TestGephTunInvalidUDPBindingReleasesResources(t *testing.T) {
++	server := newAuditServer(t, func(c net.Conn) {
++		cmd, err := auditServerRequest(c)
++		if err != nil || cmd != 3 {
++			return
++		}
++		reply := append([]byte{5, 0, 0}, wire.SerializeAddr("relay.invalid", netip.Addr{}, 1080)...)
++		if _, err = c.Write(reply); err != nil {
++			return
++		}
++		io.Copy(io.Discard, c)
++	})
++	ss, _ := New(server.listener.Addr().String(), "", "")
++	runtime.GC()
++	beforeFD := auditFDCount()
++	beforeGo := runtime.NumGoroutine()
++	const requests = 128
++	results := make(chan error, requests)
++	for i := 0; i < requests; i++ {
++		go func() {
++			pc, err := ss.DialUDP(auditMetadata())
++			if pc != nil {
++				pc.Close()
++			}
++			if err == nil {
++				err = fmt.Errorf("unsupported UDP binding accepted")
++			} else {
++				err = nil
++			}
++			results <- err
++		}()
++	}
++	for i := 0; i < requests; i++ {
++		if err := <-results; err != nil {
++			t.Fatal(err)
++		}
++	}
++	server.waitIdle(t)
++	until := time.Now().Add(2 * time.Second)
++	for time.Now().Before(until) {
++		if runtime.NumGoroutine() <= beforeGo+2 && (beforeFD < 0 || auditFDCount() <= beforeFD) {
++			break
++		}
++		time.Sleep(time.Millisecond)
++	}
++	afterFD := auditFDCount()
++	afterGo := runtime.NumGoroutine()
++	if beforeFD >= 0 && afterFD > beforeFD {
++		t.Fatalf("UDP binding failures leaked descriptors: before=%d after=%d", beforeFD, afterFD)
++	}
++	if afterGo > beforeGo+2 {
++		t.Fatalf("UDP binding failures left goroutines: before=%d after=%d", beforeGo, afterGo)
++	}
++	t.Logf("%d simultaneous failed associations: descriptors %d -> %d, goroutines %d -> %d", requests, beforeFD, afterFD, beforeGo, afterGo)
++}
++
++func TestGephTunMalformedReplyClosesTCP(t *testing.T) {
++	for _, tc := range []struct {
++		name   string
++		header []byte
++	}{{"wrong-version", []byte{4, 0, 0}}, {"reserved-byte", []byte{5, 0, 1}}} {
++		t.Run(tc.name, func(t *testing.T) {
++			server := newAuditServer(t, func(c net.Conn) {
++				if _, err := auditServerRequest(c); err != nil {
++					return
++				}
++				c.Write(append(tc.header, []byte{1, 127, 0, 0, 1, 4, 56}...))
++				io.Copy(io.Discard, c)
++			})
++			ss, _ := New(server.listener.Addr().String(), "", "")
++			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
++			defer cancel()
++			c, err := ss.DialContext(ctx, auditMetadata())
++			if c != nil {
++				c.Close()
++			}
++			if err == nil {
++				t.Fatal("malformed SOCKS reply was reported as a successful connection")
++			}
++			server.waitIdle(t)
++		})
++	}
++}
++
++func TestGephTunDatagramMutationBounds(t *testing.T) {
++	const cases = 100000
++	rng := rand.New(rand.NewSource(17092026))
++	relay := &net.UDPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43210}
++	buf := make([]byte, 512)
++	for i := 0; i < cases; i++ {
++		size := rng.Intn(256)
++		packet := make([]byte, size)
++		rng.Read(packet)
++		if i%3 == 0 && size >= 10 {
++			packet[0] = 0
++			packet[1] = 0
++			packet[2] = 0
++			packet[3] = 1
++		}
++		rng.Read(buf)
++		pc := &socksPacketConn{PacketConn: &scriptedPacketConn{queue: []queuedDatagram{{packet, relay}}}, rAddr: relay}
++		n, from, err := pc.ReadFrom(buf)
++		if n < 0 || n > len(packet) || n > len(buf) {
++			t.Fatalf("invalid count %d for packet length %d", n, len(packet))
++		}
++		if err != nil && n != 0 {
++			t.Fatalf("error returned nonzero count %d", n)
++		}
++		if err == nil && from == nil {
++			t.Fatal("successful datagram has no source")
++		}
++	}
++	t.Logf("%d deterministic datagram mutations stayed within current-packet bounds", cases)
++}
+--- /dev/null
++++ b/proxy/socks5/gephtun_udp_test.go
+@@ -0,0 +1,141 @@
++package socks5
++
++import (
++	"bytes"
++	"io"
++	"net"
++	"net/netip"
++	"testing"
++	"time"
++
++	wire "github.com/xjasonlyu/tun2socks/v2/transport/socks5"
++)
++
++type queuedDatagram struct {
++	data []byte
++	from net.Addr
++}
++
++type scriptedPacketConn struct{ queue []queuedDatagram }
++
++func (s *scriptedPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
++	if len(s.queue) == 0 {
++		return 0, nil, io.EOF
++	}
++	d := s.queue[0]
++	s.queue = s.queue[1:]
++	return copy(b, d.data), d.from, nil
++}
++func (*scriptedPacketConn) WriteTo([]byte, net.Addr) (int, error) { return 0, io.ErrClosedPipe }
++func (*scriptedPacketConn) Close() error                          { return nil }
++func (*scriptedPacketConn) LocalAddr() net.Addr                   { return &net.UDPAddr{} }
++func (*scriptedPacketConn) SetDeadline(time.Time) error           { return nil }
++func (*scriptedPacketConn) SetReadDeadline(time.Time) error       { return nil }
++func (*scriptedPacketConn) SetWriteDeadline(time.Time) error      { return nil }
++
++func regressionPacket(t *testing.T, payload string) []byte {
++	t.Helper()
++	a := wire.SerializeAddr("", netip.MustParseAddr("192.0.2.5"), 443)
++	b, err := wire.EncodeUDPPacket(a, []byte(payload))
++	if err != nil {
++		t.Fatal(err)
++	}
++	return b
++}
++
++func TestReadFromDiscardsForeignRelay(t *testing.T) {
++	relay := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 43210}
++	for name, sender := range map[string]net.Addr{
++		"wrong-port": &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 43211},
++		"wrong-IP":   &net.UDPAddr{IP: net.IPv4(127, 0, 0, 2), Port: 43210},
++		"nil-sender": nil,
++	} {
++		t.Run(name, func(t *testing.T) {
++			pc := &socksPacketConn{
++				PacketConn: &scriptedPacketConn{queue: []queuedDatagram{
++					{regressionPacket(t, "injected"), sender},
++					{regressionPacket(t, "expected"), relay},
++				}},
++				rAddr: relay,
++			}
++			b := make([]byte, 1024)
++			n, addr, err := pc.ReadFrom(b)
++			if err != nil || n != len("expected") || !bytes.Equal(b[:max(n, 0)], []byte("expected")) || addr.String() != "192.0.2.5:443" {
++				t.Fatalf("foreign relay was not ignored: n=%d, address=%v, err=%v, payload=%q", n, addr, err, b[:max(n, 0)])
++			}
++		})
++	}
++}
++
++func TestReadFromRejectsTruncatedDatagramInReusedBuffer(t *testing.T) {
++	relay := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 43210}
++	for size := 0; size < 10; size++ {
++		t.Run(string(rune('A'+size)), func(t *testing.T) {
++			packet := regressionPacket(t, "old data in reused receive buffer")
++			b := make([]byte, 1024)
++			copy(b, packet)
++			pc := &socksPacketConn{
++				PacketConn: &scriptedPacketConn{queue: []queuedDatagram{{packet[:size], relay}}},
++				rAddr:      relay,
++			}
++			n, _, err := pc.ReadFrom(b)
++			if err == nil || n != 0 {
++				t.Fatalf("truncated datagram accepted using stale bytes: datagram=%d, returned=%d, err=%v", size, n, err)
++			}
++		})
++	}
++}
++
++func TestReadFromUsesCurrentDatagramLength(t *testing.T) {
++	relay := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 43210}
++	pc := &socksPacketConn{
++		PacketConn: &scriptedPacketConn{queue: []queuedDatagram{{regressionPacket(t, "ok"), relay}}},
++		rAddr:      relay,
++	}
++	b := bytes.Repeat([]byte{0x7f}, 128)
++	n, addr, err := pc.ReadFrom(b)
++	if err != nil || n != 2 || addr.String() != "192.0.2.5:443" || string(b[:n]) != "ok" {
++		t.Fatalf("valid datagram failed: n=%d address=%v err=%v", n, addr, err)
++	}
++	// Only the current payload may be copied back; the remaining buffer is
++	// caller-owned scratch space and must not be shifted from stale data.
++	if b[20] != 0x7f {
++		t.Fatal("unrelated buffer contents unexpectedly overwritten")
++	}
++}
++
++func TestSOCKSUDPActualDatagramRoundTrip(t *testing.T) {
++	relay, err := net.ListenPacket("udp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { relay.Close() })
++	client, err := net.ListenPacket("udp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { client.Close() })
++	relay.SetDeadline(time.Now().Add(3 * time.Second))
++	client.SetDeadline(time.Now().Add(3 * time.Second))
++	pc := &socksPacketConn{PacketConn: client, rAddr: relay.LocalAddr()}
++	target := &net.UDPAddr{IP: net.IPv4(192, 0, 2, 5), Port: 443}
++	if _, err := pc.WriteTo([]byte("request"), target); err != nil {
++		t.Fatal(err)
++	}
++	b := make([]byte, 1024)
++	n, from, err := relay.ReadFrom(b)
++	if err != nil {
++		t.Fatal(err)
++	}
++	a, payload, err := wire.DecodeUDPPacket(b[:n])
++	if err != nil || a.String() != target.String() || string(payload) != "request" {
++		t.Fatalf("relay received incorrect request: address=%v payload=%q err=%v", a, payload, err)
++	}
++	if _, err := relay.WriteTo(regressionPacket(t, "response"), from); err != nil {
++		t.Fatal(err)
++	}
++	n, from, err = pc.ReadFrom(b)
++	if err != nil || from.String() != target.String() || string(b[:n]) != "response" {
++		t.Fatalf("client received incorrect response: address=%v n=%d err=%v", from, n, err)
++	}
++}
+--- a/proxy/socks5/socks5.go
++++ b/proxy/socks5/socks5.go
+@@ -7,6 +7,7 @@
+ 	"io"
+ 	"net"
+ 	"net/url"
++	"time"
+ 
+ 	"github.com/xjasonlyu/tun2socks/v2/dialer"
+ 	M "github.com/xjasonlyu/tun2socks/v2/metadata"
+@@ -28,10 +29,13 @@
+ }
+ 
+ func New(addr, user, pass string) (*Socks5, error) {
+-	unix := len(addr) > 0 && addr[0] == '/'
++	if len(addr) < 2 {
++		return nil, errors.New("SOCKS5 proxy address is empty or too short")
++	}
++	unix := addr[0] == '/'
+ 
+ 	// For support Linux abstract namespace
+-	if len(addr) > 2 && addr[1] == '@' || addr[1] == 0x00 {
++	if unix && len(addr) > 2 && (addr[1] == '@' || addr[1] == 0x00) {
+ 		addr = addr[1:]
+ 	}
+ 
+@@ -67,7 +71,7 @@
+ 		}
+ 	}
+ 
+-	_, err = socks5.ClientHandshake(c, utils.SerializeSocksAddr(metadata), socks5.CmdConnect, user)
++	_, err = clientHandshake(ctx, c, utils.SerializeSocksAddr(metadata), socks5.CmdConnect, user)
+ 	return c, err
+ }
+ 
+@@ -113,7 +117,7 @@
+ 	// zeros. RFC1928
+ 	var targetAddr socks5.Addr = []byte{socks5.AtypIPv4, 0, 0, 0, 0, 0, 0}
+ 
+-	addr, err := socks5.ClientHandshake(c, targetAddr, socks5.CmdUDPAssociate, user)
++	addr, err := clientHandshake(ctx, c, targetAddr, socks5.CmdUDPAssociate, user)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("client handshake: %w", err)
+ 	}
+@@ -147,6 +151,41 @@
+ 	return &socksPacketConn{PacketConn: pc, rAddr: bindAddr, tcpConn: c}, nil
+ }
+ 
++// clientHandshake bounds the protocol exchange as well as the TCP dial. The
++// caller's context stops governing the connection after a successful handshake.
++func clientHandshake(ctx context.Context, c net.Conn, addr socks5.Addr, command socks5.Command, user *socks5.User) (socks5.Addr, error) {
++	ctx, cancel := context.WithTimeout(ctx, utils.TCPConnectTimeout)
++	defer cancel()
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	deadline, _ := ctx.Deadline()
++	if err := c.SetDeadline(deadline); err != nil {
++		return nil, err
++	}
++
++	canceled := make(chan struct{})
++	stop := context.AfterFunc(ctx, func() {
++		c.Close()
++		close(canceled)
++	})
++	reply, err := socks5.ClientHandshake(c, addr, command, user)
++	if !stop() {
++		// Do not return a connection while cancellation can still close it.
++		<-canceled
++	}
++	if ctxErr := ctx.Err(); ctxErr != nil {
++		return nil, ctxErr
++	}
++	if err != nil {
++		return nil, err
++	}
++	if err := c.SetDeadline(time.Time{}); err != nil {
++		return nil, err
++	}
++	return reply, nil
++}
++
+ type socksPacketConn struct {
+ 	net.PacketConn
+ 
+@@ -165,28 +204,45 @@
+ 	if err != nil {
+ 		return n, err
+ 	}
+-	return pc.PacketConn.WriteTo(packet, pc.rAddr)
++	written, err := pc.PacketConn.WriteTo(packet, pc.rAddr)
++	// PacketConn reports bytes from the caller's payload, not SOCKS framing.
++	// Preserve an underlying write error and expose any short write explicitly.
++	headerLen := len(packet) - len(b)
++	payloadWritten := min(len(b), max(0, written-headerLen))
++	if err == nil && written != len(packet) {
++		err = io.ErrShortWrite
++	}
++	return payloadWritten, err
+ }
+ 
+ func (pc *socksPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+-	n, _, err := pc.PacketConn.ReadFrom(b)
+-	if err != nil {
+-		return 0, nil, err
+-	}
+-
+-	addr, payload, err := socks5.DecodeUDPPacket(b)
+-	if err != nil {
+-		return 0, nil, err
+-	}
+-
+-	udpAddr := addr.UDPAddr()
+-	if udpAddr == nil {
+-		return 0, nil, fmt.Errorf("convert %s to UDPAddr is nil", addr)
+-	}
+-
+-	// due to DecodeUDPPacket is mutable, record addr length
+-	copy(b, payload)
+-	return n - len(addr) - 3, udpAddr, nil
++	for {
++		n, from, err := pc.PacketConn.ReadFrom(b)
++		if err != nil {
++			return 0, nil, err
++		}
++
++		// A UDP association accepts datagrams only from its negotiated relay.
++		// The encapsulated destination does not authenticate the UDP sender.
++		if from == nil || pc.rAddr == nil || from.String() != pc.rAddr.String() {
++			continue
++		}
++
++		// Limit decoding to this datagram. Bytes beyond n belong to a previous
++		// read and must not complete a truncated SOCKS address or payload.
++		addr, payload, err := socks5.DecodeUDPPacket(b[:n])
++		if err != nil {
++			return 0, nil, err
++		}
++
++		udpAddr := addr.UDPAddr()
++		if udpAddr == nil {
++			return 0, nil, fmt.Errorf("convert %s to UDPAddr is nil", addr)
++		}
++
++		copy(b, payload)
++		return len(payload), udpAddr, nil
++	}
+ }
+ 
+ func (pc *socksPacketConn) Close() error {
+--- /dev/null
++++ b/transport/socks5/gephtun_protocol_test.go
+@@ -0,0 +1,51 @@
++package socks5
++
++import (
++	"bytes"
++	"io"
++	"testing"
++)
++
++type auditHandshakeIO struct {
++	io.Reader
++	io.Writer
++}
++
++func TestGephTunHandshakeServerValidation(t *testing.T) {
++	validReply := []byte{5, 0, 0, 1, 127, 0, 0, 1, 4, 56}
++	cases := []struct {
++		name     string
++		response []byte
++		user     *User
++		valid    bool
++	}{
++		{"valid-no-auth", append([]byte{5, 0}, validReply...), nil, true},
++		{"wrong-reply-version", append([]byte{5, 0}, append([]byte{4, 0, 0}, validReply[3:]...)...), nil, false},
++		{"nonzero-reply-reserved", append([]byte{5, 0}, append([]byte{5, 0, 1}, validReply[3:]...)...), nil, false},
++		{"unoffered-no-auth", append([]byte{5, 0}, validReply...), &User{Username: "user", Password: "password"}, false},
++		{"valid-userpass", append([]byte{5, 2, 1, 0}, validReply...), &User{Username: "user", Password: "password"}, true},
++		{"wrong-userpass-version", append([]byte{5, 2, 5, 0}, validReply...), &User{Username: "user", Password: "password"}, false},
++		{"rejected-auth", []byte{5, 2, 1, 1}, &User{Username: "user", Password: "password"}, false},
++		{"unoffered-auth", []byte{5, 2}, nil, false},
++		{"no-methods", []byte{5, 255}, nil, false},
++		{"wrong-greeting-version", []byte{4, 0}, nil, false},
++		{"short-reply", []byte{5, 0, 5, 0}, nil, false},
++	}
++	target := []byte{1, 192, 0, 2, 5, 1, 187}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			var sent bytes.Buffer
++			addr, err := ClientHandshake(&auditHandshakeIO{bytes.NewReader(tc.response), &sent}, target, CmdConnect, tc.user)
++			if tc.valid {
++				if err != nil || addr.String() != "127.0.0.1:1080" {
++					t.Fatalf("valid handshake failed: address=%v err=%v", addr, err)
++				}
++			} else if err == nil {
++				t.Fatalf("invalid server message was accepted: address=%v", addr)
++			}
++			if tc.name == "unoffered-no-auth" && sent.Len() != 3 {
++				t.Fatalf("connection request followed an unoffered method: %d bytes sent", sent.Len())
++			}
++		})
++	}
++}
+--- a/transport/socks5/socks5.go
++++ b/transport/socks5/socks5.go
+@@ -193,6 +193,11 @@
+ 		return nil, errors.New("socks version mismatched")
+ 	}
+ 
++	// The server may select only a method advertised by this client.
++	if buf[1] != method {
++		return nil, errors.New("server selected an unoffered authentication method")
++	}
++
+ 	if buf[1] == MethodUserPass /* USERNAME/PASSWORD */ {
+ 		if user == nil {
+ 			return nil, errors.New("auth required")
+@@ -225,6 +230,9 @@
+ 			return nil, err
+ 		}
+ 
++		if buf[0] != 0x01 {
++			return nil, errors.New("username/password version mismatched")
++		}
+ 		if buf[1] != 0x00 /* STATUS of SUCCESS */ {
+ 			return nil, errors.New("rejected username/password")
+ 		}
+@@ -251,6 +259,12 @@
+ 		return nil, err
+ 	}
+ 
++	if buf[0] != Version {
++		return nil, errors.New("socks reply version mismatched")
++	}
++	if buf[2] != 0x00 {
++		return nil, errors.New("socks reply reserved field must be zero")
++	}
+ 	if rep := Reply(buf[1]); rep != 0x00 /* SUCCEEDED */ {
+ 		return nil, fmt.Errorf("%s: %s", command, rep)
+ 	}
+--- a/transport/socks5/socks5_test.go
++++ b/transport/socks5/socks5_test.go
+@@ -12,7 +12,7 @@
+ 	// Mock server responses
+ 	readBuffer := &bytes.Buffer{}
+ 	readBuffer.Write([]byte{Version, MethodUserPass})
+-	readBuffer.Write([]byte{Version, 0x00 /* STATUS of SUCCESS */})
++	readBuffer.Write([]byte{0x01 /* RFC1929 subprotocol version */, 0x00 /* STATUS of SUCCESS */})
+ 	readBuffer.Write([]byte{Version, 0x00 /* STATUS of SUCCESS */, 0x00 /* RSV */})
+ 	readBuffer.Write([]byte{AtypIPv4, 0x1, 0x2, 0x3, 0x4, 0x0, 0x0 /* IPv4: 1.2.3.4:0 */})
+ 	reader := bufio.NewReader(bytes.NewReader(readBuffer.Bytes()))

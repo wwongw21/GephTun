@@ -1,0 +1,140 @@
+#Requires -Version 5.1
+# Validate one copied source snapshot. Real connect/sleep/reboot scenarios are excluded.
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$OutputDirectory,
+    [string]$PackageDirectory,
+    [string]$PythonExecutable,
+    [ValidateRange(1,10000)][int]$StressIterations=5000,
+    [switch]$SourceTree,
+    [switch]$BuildPackages,
+    [switch]$PublishReports
+)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference='Stop'
+if(-not $PackageDirectory){$PackageDirectory=Split-Path -Parent $PSScriptRoot}
+. (Join-Path $PSScriptRoot 'Package.Common.ps1')
+$root=Get-GephPackageFullPath $PackageDirectory
+$output=Get-GephPackageFullPath $OutputDirectory
+Assert-GephPackageOutput $output $root -Directory
+$inputFiles=Get-GephPackageInventory $root -SourceTree:$SourceTree
+$run=Join-Path $output ('isolated-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8))
+Assert-GephPackageOutput $run $root -Directory
+$snapshot=Join-Path $run 'source'
+$reports=Join-Path $run 'suite-results'
+[void][IO.Directory]::CreateDirectory($snapshot)
+[void][IO.Directory]::CreateDirectory($reports)
+$initial=@(foreach($relative in @($inputFiles.Keys|Sort-Object)){
+    $source=$inputFiles[$relative]
+    $hash=(Get-FileHash -LiteralPath $source.FullName -Algorithm SHA256).Hash
+    $destination=Join-Path $snapshot $relative
+    [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination))
+    [IO.File]::Copy($source.FullName,$destination,$false)
+    Assert-GephPackageHashMatches $relative $hash (Get-GephPackageInventory $snapshot)
+    [pscustomobject]@{Path=$relative;Sha256=$hash}
+})
+$summary=[ordered]@{
+    Kind='GephTunIsolatedValidation';StartedUtc=[DateTime]::UtcNow.ToString('o');CompletedUtc=$null
+    SourceRoot=$root;Snapshot=$snapshot;Status='RUNNING';Reason='';ProductionQualified=$false;NativeWindowsAcceptance='NOT_RUN'
+    Suites=@();Totals=$null;Packages=@();Scope='Isolated fixtures, parser/compiler and loopback mocks only; no real tunnel, system trust changes, native application UI, sleep or reboot.'
+}
+$suiteRows=[Collections.Generic.List[object]]::new()
+function Save-IsolatedSummary {
+    $summary.Suites=$suiteRows.ToArray()
+    [IO.File]::WriteAllText((Join-Path $run 'SUMMARY.json'),($summary|ConvertTo-Json -Depth 12),(New-Object Text.UTF8Encoding($false)))
+}
+Save-IsolatedSummary
+try{
+    if([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT){throw 'This runner uses Windows PowerShell 5.1; invoke the portable suites directly on other hosts.'}
+    $shell=(Get-Command powershell.exe -CommandType Application -ErrorAction Stop).Source
+    if(-not $PythonExecutable){$PythonExecutable=(Get-Command python.exe -CommandType Application -ErrorAction Stop).Source}
+    $python=(Get-Command $PythonExecutable -CommandType Application -ErrorAction Stop).Source
+    $specs=@(
+        @{Name='Controller';File='Controller.Tests.ps1';Report='controller-results.json';Args=@('-ModulePath',(Join-Path $snapshot 'GephTun.Core.psm1'))},
+        @{Name='UI';File='UI.Tests.ps1';Report='ui-results.json';Args=@('-PackageRoot',$snapshot,'-StressIterations',[string]$StressIterations)},
+        @{Name='Package';File='Package.Tests.ps1';Report='package-results.json';Args=@('-PackageDirectory',$snapshot)},
+        @{Name='Acceptance';File='Acceptance.Tests.ps1';Report='acceptance-results.json';Args=@('-PackageDirectory',$snapshot)},
+        @{Name='Diagnostics';File='Diagnostics.Tests.ps1';Report='diagnostic-results.json';Args=@('-PackageDirectory',$snapshot)},
+        @{Name='Source';File='Validate-Source.ps1';Report='parser-compile-results.json';Args=@('-PackageDirectory',$snapshot)}
+    )
+    foreach($spec in $specs){
+        $reportPath=Join-Path $reports $spec.Report
+        $arguments=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path (Join-Path $snapshot 'tests') $spec.File))+$spec.Args+@('-ResultJson',$reportPath)
+        & $shell @arguments *> (Join-Path $run ($spec.Name+'.log'))
+        $exitCode=$LASTEXITCODE
+        if($exitCode -ne 0){throw ($spec.Name+' exited with '+$exitCode+'; inspect the preserved log and result.')}
+        $report=Get-Content -LiteralPath $reportPath -Raw -Encoding UTF8|ConvertFrom-Json
+        $counts=Get-GephPackageSuiteSummary $report $spec.Name
+        if($counts.Failed -ne 0){throw ($spec.Name+' has failed cases.')}
+        $suiteRows.Add([pscustomobject]@{Name=$spec.Name;Total=$counts.Total;Passed=$counts.Passed;Failed=$counts.Failed;Skipped=$counts.Skipped;Report=$reportPath})
+        [IO.File]::Copy($reportPath,(Join-Path (Join-Path $snapshot 'tests') $spec.Report),$true)
+        Save-IsolatedSummary
+        Write-Output ($spec.Name+': '+$counts.Passed+' passed, '+$counts.Skipped+' skipped.')
+    }
+    $networkPath=Join-Path $reports 'proxy-helper-results.json'
+    & $python -B (Join-Path (Join-Path $snapshot 'tests') 'proxy-helper-tests.py') --pwsh $shell --source (Join-Path $snapshot 'GephTun.Network.cs') --relay-port 15353 --output $networkPath *> (Join-Path $run 'Network.log')
+    if($LASTEXITCODE -ne 0){throw ('Network exited with '+$LASTEXITCODE+'; inspect the preserved log and result.')}
+    $network=Get-Content -LiteralPath $networkPath -Raw -Encoding UTF8|ConvertFrom-Json
+    $counts=Get-GephPackageSuiteSummary $network 'Network'
+    if($counts.Failed -ne 0){throw 'Network has failed cases.'}
+    $suiteRows.Add([pscustomobject]@{Name='Network';Total=$counts.Total;Passed=$counts.Passed;Failed=$counts.Failed;Skipped=$counts.Skipped;Report=$networkPath})
+    [IO.File]::Copy($networkPath,(Join-Path (Join-Path $snapshot 'tests') 'proxy-helper-results.json'),$true)
+    Write-Output ('Network: '+$counts.Passed+' passed, '+$counts.Skipped+' skipped.')
+    $summary.Totals=Get-GephPackageTotals $suiteRows.ToArray()
+    $collected=& (Join-Path (Join-Path $snapshot 'tests') 'Collect-Validation.ps1') -PackageDirectory $snapshot -Replace
+    $validation=Get-Content -LiteralPath (Join-Path (Join-Path $snapshot 'tests') 'current-validation.json') -Raw -Encoding UTF8|ConvertFrom-Json
+    $release=Get-Content -LiteralPath (Join-Path $snapshot 'RELEASE.json') -Raw -Encoding UTF8|ConvertFrom-Json
+    $evidence=@(foreach($relative in @('tests/current-validation.json')+@($validation.Suites|ForEach-Object{$_.Path})+@($validation.SupplementalSuites|ForEach-Object{$_.Path})){
+        [pscustomobject]@{Path=$relative;Sha256=(Get-FileHash -LiteralPath (Join-Path $snapshot $relative) -Algorithm SHA256).Hash.ToLowerInvariant()}
+    })
+    $qualification=[ordered]@{
+        Package='GephTun';Version=$release.Version;CapturedUtc=[DateTime]::UtcNow.ToString('o')
+        Disposition='ISOLATED_VALIDATION_COMPLETE_LIVE_WINDOWS_ACCEPTANCE_PENDING'
+        ProductionQualified=$false;NativeWindowsAcceptance='NOT_RUN'
+        NativeExecutionBlock='Real tunnel, sleep, reboot and native application acceptance are outside this isolated run.'
+        InputArchiveSha256=$release.InputArchiveSha256
+        PortableRequiredSuitePassed=$validation.RequiredTotals.Passed;PortableSupplementalPassed=$validation.SupplementalTotals.Passed
+        PortableFailed=$validation.Totals.Failed;PortableSkipped=$validation.Totals.Skipped
+        RequiredTotals=$validation.RequiredTotals;SupplementalTotals=$validation.SupplementalTotals;Totals=$validation.Totals
+        Sources=$validation.Sources;Evidence=$evidence
+    }
+    [IO.File]::WriteAllText((Join-Path $snapshot 'QUALIFICATION.json'),($qualification|ConvertTo-Json -Depth 12),(New-Object Text.UTF8Encoding($false)))
+    $manifest=[ordered]@{
+        Package=$release.Package;Version=$release.Version;Status=$release.Status;Date=$release.Date
+        InputArchiveSha256=$release.InputArchiveSha256;Validation='tests/current-validation.json';NativeWindowsAcceptance='NOT_RUN'
+        Files=@(foreach($relative in @((Get-GephPackageInventory $snapshot).Keys|Sort-Object)){
+            if($relative -eq 'PACKAGE-MANIFEST.json'){continue}
+            $path=Join-Path $snapshot $relative
+            [pscustomobject]@{Path=$relative;Bytes=[long]([IO.FileInfo]$path).Length;Sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
+        })
+    }
+    [IO.File]::WriteAllText((Join-Path $snapshot 'PACKAGE-MANIFEST.json'),($manifest|ConvertTo-Json -Depth 10),(New-Object Text.UTF8Encoding($false)))
+    $verified=& (Join-Path $snapshot 'Verify-GephTun.ps1') -PackageDirectory $snapshot -Quiet
+    if(-not $verified.Success){throw 'Strict snapshot verification did not pass.'}
+    if($BuildPackages){
+        $engineering=& (Join-Path (Join-Path $snapshot 'tests') 'build-package.ps1') -SourceDirectory $snapshot -OutputDirectory (Join-Path $run 'engineering-build')
+        $runtime=& (Join-Path (Join-Path $snapshot 'tests') 'build-package.ps1') -SourceDirectory $snapshot -OutputDirectory (Join-Path $run 'runtime-build') -RuntimeOnly
+        $summary.Packages=@($engineering,$runtime)
+    }
+    # Publishing is optional and explicit. Prove that the original inputs have
+    # not changed since copying before replacing generated repository reports.
+    $after=Get-GephPackageInventory $root -SourceTree:$SourceTree
+    if($after.Count -ne $inputFiles.Count){throw 'Original input set changed during validation.'}
+    foreach($entry in $initial){Assert-GephPackageHashMatches $entry.Path $entry.Sha256 $after}
+    if($PublishReports){
+        $publish=@('PACKAGE-MANIFEST.json','QUALIFICATION.json','tests/current-validation.json')+@($validation.Suites|ForEach-Object{$_.Path})+@($validation.SupplementalSuites|ForEach-Object{$_.Path})
+        foreach($relative in $publish){[IO.File]::Copy((Join-Path $snapshot $relative),(Join-Path $root $relative),$true)}
+        $null=& (Join-Path $root 'Verify-GephTun.ps1') -PackageDirectory $root -SourceTree:$SourceTree -Quiet
+    }
+    $summary.Status='PASS'
+    $summary.Reason='All isolated suites completed with zero failures; skips are explicit. Changed bytes remain pending live qualification.'
+}catch{
+    $summary.Status='FAIL'
+    $summary.Reason=$_.Exception.Message
+}finally{
+    $summary.CompletedUtc=[DateTime]::UtcNow.ToString('o')
+    Save-IsolatedSummary
+    Write-Output ('Summary: '+(Join-Path $run 'SUMMARY.json'))
+}
+if($summary.Status -ne 'PASS'){Write-Error $summary.Reason;exit 1}
+$summary

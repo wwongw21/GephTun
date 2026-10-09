@@ -1,0 +1,214 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$OutputDirectory,
+    [string]$PythonExecutable,
+    [ValidateRange(1,10000)][int]$StressIterations = 5000,
+    [switch]$SourceTree
+)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'Package.Common.ps1')
+$root = Get-GephPackageFullPath $root
+$output = Get-GephPackageFullPath $OutputDirectory
+Assert-GephPackageOutput $output $root -Directory
+$release = Get-Content -LiteralPath (Join-Path $root 'RELEASE.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert-GephPackageRelease $release
+$run = Join-Path $output ('run-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+Assert-GephPackageOutput $run $root -Directory
+[void][IO.Directory]::CreateDirectory($run)
+$summaryPath = Join-Path $run 'SUMMARY.json'
+$results = New-Object 'Collections.Generic.List[object]'
+$summary = [ordered]@{
+    Kind = 'GephTunWindowsSuiteRun'; Schema = 1; Version = $release.Version
+    StartedUtc = [DateTime]::UtcNow.ToString('o'); CompletedUtc = $null
+    Platform = [Environment]::OSVersion.Platform.ToString()
+    PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+    Status = 'RUNNING'; Reason = ''; ProductionQualified = $false
+    Scope = 'Native-host fixture suites, parser/compiler, loopback protocol tests and isolated desktop harness. Live connection, engine-death recovery, packet enforcement, power, migration and endurance scenarios require WINDOWS-ACCEPTANCE.md.'
+    PackageManifestSha256 = ''; Suites = @()
+}
+function Save-RunSummary {
+    $summary.Suites = $results.ToArray()
+    $temporary = Join-Path $run ('summary-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    Write-GephPackageNewJson $temporary $summary
+    if ([IO.File]::Exists($summaryPath)) {
+        $backup = $temporary + '.previous'
+        try { [IO.File]::Replace($temporary,$summaryPath,$backup) }
+        finally { if ([IO.File]::Exists($backup)) { [IO.File]::Delete($backup) } }
+    } else { [IO.File]::Move($temporary,$summaryPath) }
+}
+function Assert-RunReportSources($Report,[string]$Name) {
+    # The initial package verifier has already established each canonical
+    # report's exact source contract. New runs must cover that same contract,
+    # with hashes of the actual files, before their counts can be accepted.
+    $reports = @{
+        Controller='controller-results.json'; UI='ui-results.json'; Source='parser-compile-results.json'
+        Package='package-results.json'; Acceptance='acceptance-results.json'; Network='proxy-helper-results.json'; Diagnostics='diagnostic-results.json'
+    }
+    if (-not $reports.ContainsKey($Name)) { throw 'Unknown suite source contract.' }
+    $reference = Get-Content -LiteralPath (Join-Path $PSScriptRoot $reports[$Name]) -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-GephPackageCaseCoverage $Report $reference $Name
+    Assert-GephPackageArray $reference 'Sources'
+    Assert-GephPackageArray $Report 'Sources'
+    $files = Get-GephPackageInventory $root -SourceTree:$SourceTree
+    $expected = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $reference.Sources) {
+        if (-not $expected.Add([string]$entry.Path)) { throw 'Duplicate packaged source contract.' }
+    }
+    $seen = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $Report.Sources) {
+        $path = [string]$entry.Path
+        if (-not $expected.Contains($path) -or -not $seen.Add($path)) { throw 'Unexpected or duplicate suite source binding.' }
+        Assert-GephPackageHashMatches $path $entry.Sha256 $files
+    }
+    if ($expected.Count -eq 0 -or $seen.Count -ne $expected.Count) { throw 'Suite report does not bind its complete source set.' }
+    if ($Name -eq 'Controller') { Assert-GephPackageHashMatches 'GephTun.Core.psm1' $Report.ModuleSha256 $files }
+    if ($Name -eq 'Network') {
+        if ($Report.complete -isnot [bool] -or -not $Report.complete) { throw 'Network suite must complete before its result is accepted.' }
+        Assert-GephPackageHashMatches 'GephTun.Network.cs' $Report.sourceSha256 $files
+        Assert-GephPackageHashMatches 'tests/proxy-helper-tests.py' $Report.testScriptSha256 $files
+        Assert-GephPackageHashMatches 'tests/proxy-helper-driver.ps1' $Report.driverSha256 $files
+    }
+    if ($Name -eq 'Source') {
+        $parseFiles = @($files.Keys | Where-Object { [IO.Path]::GetExtension($_) -in @('.ps1','.psm1','.cs') })
+        $checked = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+        foreach ($test in $Report.Tests) {
+            $path = [string]$test.File
+            if ($path -notin $parseFiles -or -not $checked.Add($path)) { throw 'Unexpected or duplicate parser/compile source record.' }
+            Assert-GephPackageHashMatches $path $test.Sha256 $files
+        }
+        if ($checked.Count -ne $parseFiles.Count) { throw 'Parser/compile report does not cover every current source.' }
+    }
+}
+function Invoke-RecordedSuite([string]$Name,[string]$Executable,[string[]]$Arguments,[string]$ResultFile) {
+    $log = Join-Path $run ($Name + '.log')
+    $started = [DateTime]::UtcNow.ToString('o')
+    $status = 'FAIL'; $reason = ''; $code = $null
+    $total = $null; $passed = $null; $failed = $null; $skipped = $null
+    try {
+        $application = (Get-Command $Executable -CommandType Application -ErrorAction Stop).Source
+        & $application @Arguments *> $log
+        $code = $LASTEXITCODE
+        if ($Name -eq 'Desktop' -and [IO.File]::Exists($ResultFile)) {
+            $report = Get-Content -LiteralPath $ResultFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $value = Get-GephPackageProperty $report 'Result'
+            $passed = Get-GephPackageProperty $report 'Passed'
+            $failed = Get-GephPackageProperty $report 'Failed'
+            if ($value -ceq 'PASS' -and $code -eq 0) {
+                Assert-GephPackageCount $passed 'Desktop Passed' 1
+                Assert-GephPackageCount $failed 'Desktop Failed'
+                Assert-GephPackageDesktopCoverage $report
+                Assert-GephPackageArray $report 'Failures'
+                if ($report.Kind -cne 'GephTunNativeLayoutAndTrayHarness' -or $failed -ne 0 -or
+                    @($report.Failures).Count -ne 0 -or $report.NativeControlsExecuted -isnot [bool] -or
+                    -not $report.NativeControlsExecuted -or $report.NativeApplicationAcceptance -cne 'NOT_RUN') {
+                    throw 'Desktop result does not establish a completed isolated native harness run.'
+                }
+                foreach ($binding in @(@{Field='UiSha256';Path='GephTun.UI.ps1'},@{Field='HarnessSha256';Path='tests/tray-harness.ps1'})) {
+                    $hash = Get-GephPackageProperty $report $binding.Field
+                    Assert-GephPackageHash $hash ('Desktop ' + $binding.Field)
+                    if ($hash -ne (Get-FileHash -LiteralPath (Join-Path $root $binding.Path) -Algorithm SHA256).Hash) {
+                        throw 'Desktop evidence does not match the package sources.'
+                    }
+                }
+                $status = 'PASS'
+            }
+            elseif ($value -cin @('BLOCKED_BY_HOST','NOT_RUN','UNSUPPORTED')) {
+                $reason = [string](Get-GephPackageProperty $report 'Reason')
+                if ($code -ne 2 -or [string]::IsNullOrWhiteSpace($reason)) {
+                    throw 'Desktop block requires the documented exit code 2 and an explicit reason.'
+                }
+                $status = 'BLOCKED_BY_HOST'
+            }
+            else { $reason = 'Desktop harness did not report PASS with a successful exit.' }
+        }
+        elseif ($code -ne 0) { $reason = 'Process exited with code ' + $code + '; preserve and inspect the log and any result file.' }
+        elseif (-not $ResultFile) { $status = 'PASS' }
+        elseif (-not [IO.File]::Exists($ResultFile)) { $reason = 'Process returned success without the expected result file.' }
+        else {
+            $report = Get-Content -LiteralPath $ResultFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $counts = Get-GephPackageSuiteSummary $report $Name
+            Assert-RunReportSources $report $Name
+            $total = $counts.Total; $passed = $counts.Passed; $failed = $counts.Failed; $skipped = $counts.Skipped
+            if ($failed -ne 0) { $reason = 'One or more test cases failed.' }
+            elseif ($skipped -gt 0) { $status = 'PARTIAL'; $reason = 'Skipped cases remain explicit in the result file.' }
+            else { $status = 'PASS' }
+        }
+    } catch { $reason = $_.Exception.Message }
+    $results.Add([pscustomobject]@{
+        Name=$Name; Status=$status; ExitCode=$code; Reason=$reason
+        StartedUtc=$started; CompletedUtc=[DateTime]::UtcNow.ToString('o')
+        Total=$total; Passed=$passed; Failed=$failed; Skipped=$skipped
+        Log=[IO.Path]::GetFileName($log); Report=$(if($ResultFile){[IO.Path]::GetFileName($ResultFile)}else{''})
+    })
+    Save-RunSummary
+    Write-Output ($Name + ': ' + $status)
+}
+Save-RunSummary
+try {
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or
+        $PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSEdition -ne 'Desktop' -or
+        -not [Environment]::Is64BitProcess) {
+        $summary.Status = 'BLOCKED_BY_HOST'
+        $summary.Reason = 'Run from 64-bit Windows PowerShell 5.1 on the target Windows machine.'
+    } elseif (-not (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        $summary.Status = 'BLOCKED_BY_HOST'
+        $summary.Reason = 'Open one Windows PowerShell window as administrator, then run this command there. The runner does not request or retry elevation.'
+    } else {
+        $shell = Join-Path $PSHOME 'powershell.exe'
+        $prefix = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File')
+        $verificationArgs=@((Join-Path $root 'Verify-GephTun.ps1'))
+        if($SourceTree){$verificationArgs+=@('-SourceTree')}
+        Invoke-RecordedSuite 'Verify' $shell ($prefix + $verificationArgs) ''
+        if ($results[0].Status -ne 'PASS') { throw 'Package verification failed; no suites were started.' }
+        $summary.PackageManifestSha256 = (Get-FileHash -LiteralPath (Join-Path $root 'PACKAGE-MANIFEST.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $specs = @(
+            @{Name='Controller';File='Controller.Tests.ps1';Args=@('-ModulePath',(Join-Path $root 'GephTun.Core.psm1'))},
+            @{Name='UI';File='UI.Tests.ps1';Args=@('-PackageRoot',$root,'-StressIterations',[string]$StressIterations)},
+            @{Name='Source';File='Validate-Source.ps1';Args=@('-PackageDirectory',$root)},
+            @{Name='Package';File='Package.Tests.ps1';Args=@('-PackageDirectory',$root)},
+            @{Name='Acceptance';File='Acceptance.Tests.ps1';Args=@('-PackageDirectory',$root)}
+        )
+        if($SourceTree){($specs|Where-Object{$_.Name -eq 'Source'}).Args+=@('-SourceTree')}
+        if([IO.File]::Exists((Join-Path $PSScriptRoot 'Diagnostics.Tests.ps1'))){
+            $specs+=@(@{Name='Diagnostics';File='Diagnostics.Tests.ps1';Args=@('-PackageDirectory',$root)})
+        }
+        foreach ($spec in $specs) {
+            $reportPath = Join-Path $run ($spec.Name + '.json')
+            Invoke-RecordedSuite $spec.Name $shell ($prefix + @((Join-Path $PSScriptRoot $spec.File)) + $spec.Args + @('-ResultJson',$reportPath)) $reportPath
+        }
+        if ($PythonExecutable) {
+            $reportPath = Join-Path $run 'Network.json'
+            Invoke-RecordedSuite 'Network' $PythonExecutable @((Join-Path $PSScriptRoot 'proxy-helper-tests.py'),'--pwsh',$shell,'--source',(Join-Path $root 'GephTun.Network.cs'),'--relay-port','15353','--output',$reportPath) $reportPath
+        } else {
+            $results.Add([pscustomobject]@{
+                Name='Network';Status='BLOCKED_BY_HOST';ExitCode=$null
+                Reason='Supply -PythonExecutable with an installed Python 3 executable to run the loopback protocol suite.'
+                StartedUtc=[DateTime]::UtcNow.ToString('o');CompletedUtc=[DateTime]::UtcNow.ToString('o')
+                Total=$null;Passed=$null;Failed=$null;Skipped=$null;Log='';Report=''
+            })
+            Save-RunSummary
+        }
+        $reportPath = Join-Path $run 'Desktop.json'
+        Invoke-RecordedSuite 'Desktop' $shell (@('-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'tray-harness.ps1'),'-ResultJson',$reportPath,'-ScreenshotDirectory',(Join-Path $run 'desktop-bitmaps'))) $reportPath
+        Invoke-RecordedSuite 'VerifyAfter' $shell ($prefix + $verificationArgs) ''
+        if ((Get-FileHash -LiteralPath (Join-Path $root 'PACKAGE-MANIFEST.json') -Algorithm SHA256).Hash -ne $summary.PackageManifestSha256) {
+            throw 'Package manifest identity changed during this run; results cannot qualify one unchanged package.'
+        }
+        if (@($results | Where-Object {$_.Status -eq 'FAIL'}).Count) { $summary.Status = 'FAIL' }
+        elseif (@($results | Where-Object {$_.Status -ne 'PASS'}).Count) { $summary.Status = 'PARTIAL' }
+        else { $summary.Status = 'PASS' }
+        $summary.Reason = 'This summary covers only the listed suites; complete the live scenario matrix separately.'
+    }
+} catch {
+    $summary.Status = 'FAIL'; $summary.Reason = $_.Exception.Message
+} finally {
+    $summary.CompletedUtc = [DateTime]::UtcNow.ToString('o')
+    Save-RunSummary
+    Write-Output ('Saved ' + $summaryPath)
+}
+if ($summary.Status -eq 'PASS') { exit 0 }
+if ($summary.Status -in @('PARTIAL','BLOCKED_BY_HOST')) { exit 2 }
+exit 1

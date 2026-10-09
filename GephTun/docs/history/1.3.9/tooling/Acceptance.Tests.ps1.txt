@@ -1,0 +1,645 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param([string]$PackageDirectory,[Parameter(Mandatory=$true)][string]$ResultJson)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference='Stop'
+if (-not $PackageDirectory) { $PackageDirectory=Split-Path -Parent $PSScriptRoot }
+$inputRoot=[IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($PackageDirectory))
+foreach($relative in @('Acceptance.Tests.ps1','Package.Common.ps1','Test-NrptConflict.ps1')) {
+    $candidate=Join-Path (Join-Path $inputRoot 'tests') $relative
+    $running=Join-Path $PSScriptRoot $relative
+    if (-not [IO.File]::Exists($candidate) -or
+        (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $running -Algorithm SHA256).Hash) {
+        throw ('The executing acceptance tooling differs from the source-bound package: '+$relative)
+    }
+}
+. (Join-Path $PSScriptRoot 'Package.Common.ps1')
+$nrptHelper=Join-Path $PSScriptRoot 'Test-NrptConflict.ps1'
+. $nrptHelper -LibraryOnly
+$root=Get-GephPackageFullPath $PackageDirectory
+$sourceSnapshot=@(foreach($relative in @('tests/Collect-WindowsAcceptance.ps1','tests/Test-NrptConflict.ps1','tests/Acceptance.Tests.ps1','tests/Package.Common.ps1')){
+    [pscustomobject]@{Path=$relative;Sha256=(Get-FileHash -LiteralPath (Join-Path $root $relative) -Algorithm SHA256).Hash.ToLowerInvariant()}
+})
+$reportPath=Get-GephPackageFullPath $ResultJson
+Assert-GephPackageOutput $reportPath $root
+$collector=Join-Path $root 'tests/Collect-WindowsAcceptance.ps1'
+$tokens=$null;$parseErrors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile($collector,[ref]$tokens,[ref]$parseErrors)
+if ($parseErrors.Count) { throw 'Collector source does not parse.' }
+foreach ($definition in $ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst]},$true)) {
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+$results=New-Object 'Collections.Generic.List[object]'
+$temp=Join-Path ([IO.Path]::GetTempPath()) ('gephtun-acceptance-tests-'+[guid]::NewGuid().ToString('N'))
+$null=[IO.Directory]::CreateDirectory($temp)
+function Test-Case([string]$Name,[scriptblock]$Body) {
+    try { & $Body; $results.Add([pscustomobject]@{Name=$Name;Result='PASS';Detail=''}) }
+    catch { $results.Add([pscustomobject]@{Name=$Name;Result='FAIL';Detail=$_.Exception.Message}) }
+}
+function Assert-True([bool]$Condition,[string]$Detail) { if (-not $Condition) { throw $Detail } }
+function Assert-Throws([scriptblock]$Body,[string]$Expected) {
+    $caught=$false
+    try { $null=& $Body } catch { $caught=$true; if ($_.Exception.Message -notlike ('*'+$Expected+'*')) { throw } }
+    if (-not $caught) { throw ('Expected failure: '+$Expected) }
+}
+function New-Snapshot([string]$Stage) {
+    $names=@('Target host and administrator access','Package integrity','Package identity','Package unchanged during capture','Physical adapter identities','No saved session','No remaining containment rule','No remaining DNS rule',
+        'Read Adapters','Read IPv6Bindings','Read Addresses','Read Routes','Read DnsServers','Read FirewallProfiles','Read LocalFirewallProfiles','Read Session','Read Status',
+        'Read ContainmentRules','Read LocalContainmentRules','Read FirewallProviderShapes','Firewall provider shape queries','Read CommandContracts','Native command metadata observations','Read DnsRules','Read EffectiveDnsPolicy','Read ConnectionProfiles','Read FirewallServices','Read LocalDnsListenersTcp','Read LocalDnsListenersUdp','Read DriverSignature','Wintun Authenticode trust')
+    $when='2026-09-17T01:00:00Z';if($Stage -eq 'Recovered') {$when='2026-09-17T02:00:00Z'}
+    [pscustomobject]@{
+        Kind='GephTunWindowsAcceptanceSnapshot';Schema=2;Version='1.3.2';Stage=$Stage;ComputerName='TEST-PC';CapturedUtc=$when;CaptureStatus='CAPTURED'
+        PackageIdentity=[pscustomobject]@{Version='1.3.2';ManifestSha256=('a'*64);CollectorSha256=('b'*64);CommonSha256=('c'*64);VerifierSha256=('d'*64)}
+        Checks=@($names | ForEach-Object {[pscustomobject]@{Name=$_;Result='PASS';Detail='Synthetic comparison fixture only.'}})
+        Captures=[pscustomobject]@{
+            Adapters=@([pscustomobject]@{Name='Ethernet';InterfaceIndex=7;InterfaceGuid='11111111-2222-3333-4444-555555555555';HardwareInterface=$true})
+            DnsServers=@([pscustomobject]@{InterfaceIndex=7;AddressFamily='IPv4';ServerAddresses=@('192.0.2.53')},[pscustomobject]@{InterfaceIndex=7;AddressFamily='IPv6';ServerAddresses=@()})
+            FirewallProfiles=@('Domain','Private','Public' | ForEach-Object {[pscustomobject]@{Name=$_;Enabled='True';AllowLocalFirewallRules='True';DisabledInterfaceAliases=[pscustomobject]@{Present=$true;Kind='EMPTY_ARRAY';Type='System.String[]';Value=@();Display=''}}})
+            LocalFirewallProfiles=@('Domain','Private','Public' | ForEach-Object {[pscustomobject]@{Name=$_;Enabled='True';DisabledInterfaceAliases=[pscustomobject]@{Present=$true;Kind='EMPTY_ARRAY';Type='System.String[]';Value=@();Display=''}}})
+        }
+    }
+}
+function Initialize-ProviderFixture {
+    $script:ProviderFixture=@{ThrowFilter='';DuplicateFilter='';Package=$null;OmitPackage=$false;FailStore='';OwnedCount=1}
+}
+function Get-FixtureFilter([string]$Name) {
+    if($script:ProviderFixture.ThrowFilter -eq $Name){throw ('Provider access denied: '+$Name)}
+    $value=switch($Name){
+        'Address' {[pscustomobject]@{LocalAddress='Any';RemoteAddress=@('::2-fe7f:ffff:ffff:ffff:ffff:ffff:ffff:ffff')}}
+        'Application' {if($script:ProviderFixture.OmitPackage){[pscustomobject]@{Program='Any'}}else{[pscustomobject]@{Program='Any';Package=$script:ProviderFixture.Package}}}
+        'Service' {[pscustomobject]@{Service='Any'}}
+        'Port' {[pscustomobject]@{Protocol='Any';LocalPort='Any';RemotePort='Any';IcmpType='Any';DynamicTransport='Any'}}
+        'Interface' {[pscustomobject]@{InterfaceAlias='Any'}}
+        'InterfaceType' {[pscustomobject]@{InterfaceType='Any'}}
+        'Security' {[pscustomobject]@{Authentication='NotRequired';Encryption='NotRequired';OverrideBlockRules=$false;LocalUser='Any';RemoteUser='Any';RemoteMachine='Any'}}
+    }
+    $value
+    if($script:ProviderFixture.DuplicateFilter -eq $Name){$value}
+}
+# These explicit test doubles shadow only read-only commands in this test
+# process; no Windows provider is invoked by the supplemental test suite.
+function Get-NetFirewallAddressFilter {[CmdletBinding()]param($AssociatedNetFirewallRule) Get-FixtureFilter 'Address'}
+function Get-NetFirewallApplicationFilter {[CmdletBinding()]param($AssociatedNetFirewallRule) Get-FixtureFilter 'Application'}
+function Get-NetFirewallServiceFilter {[CmdletBinding()]param($AssociatedNetFirewallRule) Get-FixtureFilter 'Service'}
+function Get-NetFirewallPortFilter {[CmdletBinding()]param($AssociatedNetFirewallRule) Get-FixtureFilter 'Port'}
+function Get-NetFirewallInterfaceFilter {[CmdletBinding()]param($AssociatedNetFirewallRule) Get-FixtureFilter 'Interface'}
+function Get-NetFirewallInterfaceTypeFilter {[CmdletBinding()]param($AssociatedNetFirewallRule) Get-FixtureFilter 'InterfaceType'}
+function Get-NetFirewallSecurityFilter {[CmdletBinding()]param($AssociatedNetFirewallRule) Get-FixtureFilter 'Security'}
+function Get-NetFirewallRule {
+    [CmdletBinding()]param([string]$PolicyStore)
+    if($PolicyStore -eq $script:ProviderFixture.FailStore){throw ('Store unavailable: '+$PolicyStore)}
+    for($i=0;$i -lt $script:ProviderFixture.OwnedCount;$i++){[pscustomobject]@{Name=('GephTun-IPv6-Contain-'+$i);Direction='Outbound';Action='Block';Enabled='True';Profile='Any'}}
+    [pscustomobject]@{Name='Existing-sample';Direction='Outbound';Action='Block';Enabled='True';Profile='Any'}
+}
+function Initialize-MetadataFixture {
+    $script:MetadataFixture=@{QueryError=$false;Duplicate=$false;Missing='';BadType=''}
+}
+function Get-Command {
+    [CmdletBinding()]param([string]$Name)
+    if ($script:MetadataFixture.QueryError) { throw ('Native metadata unavailable: '+$Name) }
+    $parameters=@{}
+    foreach ($entry in @(
+        @{Name='Name';Type=[string[]]},@{Name='Enabled';Type=[IO.FileMode]},@{Name='OverrideBlockRules';Type=[bool]},
+        @{Name='ArrayMode';Type=[IO.FileMode[]]},@{Name='OptionalMode';Type=[Nullable[IO.FileMode]]}
+    )) {
+        if ($entry.Name -eq $script:MetadataFixture.Missing) { continue }
+        $type=$entry.Type
+        if ($entry.Name -eq $script:MetadataFixture.BadType) { $type='Unknown parameter type' }
+        $parameters[$entry.Name]=[pscustomobject]@{ParameterType=$type}
+    }
+    $metadata=[pscustomobject]@{Name=$Name;CommandType='Function';ModuleName='SyntheticReadOnlyFixture';Parameters=$parameters}
+    $metadata
+    if ($script:MetadataFixture.Duplicate) { $metadata }
+}
+function New-NrptMock {
+    $script:NrptMockRules=New-Object 'Collections.Generic.List[object]'
+    $script:NrptMockRemoved=New-Object 'Collections.Generic.List[string]'
+    $script:NrptMockAdded=0
+    [pscustomobject]@{
+        GetRules={ @($script:NrptMockRules.ToArray()) }
+        AddRule={ param($Namespace,$NameServers,$Comment)
+            $script:NrptMockAdded++
+            $script:NrptMockRules.Add([pscustomobject]@{Name='fixture-'+[guid]::NewGuid().ToString('N');Namespace=@($Namespace);NameServers=@($NameServers);Comment=$Comment})
+        }
+        RemoveRule={ param($Name)
+            $script:NrptMockRemoved.Add([string]$Name)
+            $found=@($script:NrptMockRules | Where-Object {$_.Name -eq [string]$Name})
+            if($found.Count -ne 1){throw ('Mock rule not found: '+$Name)}
+            foreach($item in $found){[void]$script:NrptMockRules.Remove($item)}
+        }
+    }
+}
+try {
+    Test-Case 'NRPT fixture helper cannot be supplied a catch-all namespace' {
+        $tokens=$null;$errors=$null
+        $helperAst=[Management.Automation.Language.Parser]::ParseFile($nrptHelper,[ref]$tokens,[ref]$errors)
+        Assert-True ($errors.Count -eq 0) 'NRPT helper source does not parse.'
+        $parameters=@($helperAst.ParamBlock.Parameters | ForEach-Object {$_.Name.VariablePath.UserPath})
+        Assert-True ($parameters -notcontains 'Namespace') 'Namespace must be generated internally by the helper.'
+        Assert-True (-not ([IO.File]::ReadAllText($nrptHelper).Contains("-Namespace '.'"))) 'The helper must never install the catch-all namespace.'
+    }
+    Test-Case 'NRPT fixture refuses a preexisting baseline before mutation' {
+        $mock=New-NrptMock
+        $script:NrptMockRules.Add([pscustomobject]@{Name='foreign-rule';Namespace=@('.corp.example');NameServers=@('10.0.0.1');Comment='foreign'})
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $mock.RemoveRule -Check { }
+        Assert-True ($result.Status -eq 'BLOCKED_BY_BASELINE_CONFLICT' -and $result.FeatureResult -eq 'NOT_RUN' -and $result.CleanupResult -eq 'NOT_NEEDED' -and $result.Halted) 'Baseline conflict must block before mutation.'
+        Assert-True ($script:NrptMockAdded -eq 0 -and $script:NrptMockRemoved.Count -eq 0 -and $script:NrptMockRules.Count -eq 1) 'Baseline fixture changed state.'
+    }
+    Test-Case 'NRPT fixture uses a scoped namespace and exact cleanup without broad removal' {
+        $mock=New-NrptMock
+        $script:NrptMockChecked=0
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $mock.RemoveRule -Check {
+            param($identity)
+            $script:NrptMockChecked++
+            if($identity.Namespace -notmatch '^\.gephtun-[0-9a-f]{32}\.invalid$' -or $identity.Namespace -eq '.') { throw 'Unsafe namespace generated.' }
+            $script:NrptMockRules.Add([pscustomobject]@{Name='foreign-rule';Namespace=@('.');NameServers=@('10.0.0.1');Comment='foreign'})
+        }
+        Assert-True ($result.Status -eq 'PASS' -and $result.FeatureResult -eq 'PASS' -and $result.CleanupResult -eq 'PASS' -and -not $result.Halted) 'Scoped fixture did not complete cleanly.'
+        Assert-True ($script:NrptMockRemoved.Count -eq 1 -and $script:NrptMockRemoved[0] -eq $result.RuleName) 'Cleanup did not use the captured exact Name/GUID.'
+        Assert-True (@($script:NrptMockRules | Where-Object {$_.Comment -eq 'foreign'}).Count -eq 1) 'Cleanup removed an unrelated rule.'
+        Assert-True ($script:NrptMockChecked -eq 1) 'Product conflict callback was not invoked exactly once.'
+    }
+    Test-Case 'NRPT fixture rejects a product check that fails for the wrong reason' {
+        $mock=New-NrptMock
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $mock.RemoveRule -Check {
+            throw 'Unexpected binary or host failure.'
+        }
+        Assert-True ($result.Status -eq 'FAIL' -and $result.FeatureResult -eq 'FAIL' -and $result.CleanupResult -eq 'PASS') 'Unexpected product refusal was accepted as a conflict pass.'
+    }
+    Test-Case 'NRPT fixture cleans up when the product conflict check throws' {
+        $mock=New-NrptMock
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $mock.RemoveRule -Check { throw 'Synthetic conflict rejection.' }
+        Assert-True ($result.Status -eq 'FAIL' -and $result.FeatureResult -eq 'FAIL' -and $result.CleanupResult -eq 'PASS') 'Feature failure must remain distinct from cleanup.'
+        Assert-True ($script:NrptMockRules.Count -eq 0 -and $script:NrptMockRemoved.Count -eq 1) 'Feature exception bypassed cleanup.'
+    }
+    Test-Case 'NRPT fixture halts and preserves evidence when exact removal fails' {
+        $mock=New-NrptMock
+        $remove={ param($Name) $script:NrptMockRemoved.Add([string]$Name); throw 'Synthetic removal denial.' }
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $remove -Check { }
+        Assert-True ($result.Status -eq 'HALTED' -and $result.Halted -and $result.CleanupResult -eq 'FAIL') 'Removal failure must halt qualification.'
+        Assert-True ($result.RemainingRules.Count -eq 1 -and $result.RuleName -eq $script:NrptMockRemoved[0]) 'Failed cleanup evidence lost exact ownership.'
+    }
+    Test-Case 'NRPT fixture cleans a partial add through the own-comment fallback' {
+        $mock=New-NrptMock
+        $partialAdd={ param($Namespace,$NameServers,$Comment)
+            $script:NrptMockAdded++
+            $script:NrptMockRules.Add([pscustomobject]@{Name='partial-'+[guid]::NewGuid().ToString('N');Namespace=@($Namespace);NameServers=@($NameServers);Comment=$Comment})
+            throw 'Synthetic provider failure after partial add.'
+        }
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $partialAdd -RemoveRule $mock.RemoveRule -Check { }
+        Assert-True ($result.Status -eq 'FAIL' -and $result.CleanupResult -eq 'PASS' -and $script:NrptMockRules.Count -eq 0) 'Partial add was not cleaned through the unique own-comment fallback.'
+        Assert-True ($script:NrptMockRemoved.Count -eq 1 -and $script:NrptMockRemoved[0] -notlike '*empty*') 'Partial add cleanup did not use its observed Name.'
+    }
+    Test-Case 'NRPT fixture uses the own-comment fallback when identity query fails' {
+        $mock=New-NrptMock
+        $script:NrptGetCalls=0
+        $getWithIdentityFailure={
+            $script:NrptGetCalls++
+            if ($script:NrptGetCalls -eq 2) { throw 'Synthetic identity query failure.' }
+            @($script:NrptMockRules.ToArray())
+        }
+        $result=Invoke-NrptConflictFixture -GetRules $getWithIdentityFailure -AddRule $mock.AddRule -RemoveRule $mock.RemoveRule -Check { }
+        Assert-True ($result.Status -eq 'FAIL' -and $result.CleanupResult -eq 'PASS' -and $script:NrptMockRules.Count -eq 0) 'Identity query failure did not use the unique own-comment fallback.'
+        Assert-True ([string]::IsNullOrWhiteSpace($result.RuleName) -and $script:NrptMockRemoved.Count -eq 1) 'Fallback cleanup fabricated or lost an exact identity.'
+    }
+    Test-Case 'NRPT fixture refuses a blank duplicate Name without an empty removal' {
+        $mock=New-NrptMock
+        $removeSafe={ param($Name)
+            if ([string]::IsNullOrWhiteSpace([string]$Name)) { throw 'Empty removal target must be rejected.' }
+            & $mock.RemoveRule $Name
+        }
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $removeSafe -Check {
+            param($identity)
+            $script:NrptMockRules.Add([pscustomobject]@{Name='';Namespace=@($identity.Namespace);NameServers=@('127.0.0.1');Comment=$identity.Comment})
+        }
+        Assert-True ($result.Status -eq 'HALTED' -and $result.CleanupResult -eq 'FAIL' -and $script:NrptMockRemoved.Count -eq 1) 'Blank duplicate Name did not halt cleanup safely.'
+        Assert-True ($script:NrptMockRemoved[0] -eq $result.RuleName) 'Cleanup attempted a non-exact or empty removal target.'
+    }
+    Test-Case 'NRPT fixture rejects package-root output before AddRule' {
+        $mock=New-NrptMock
+        $unsafe=Join-Path $root ('tests/nrpt-unsafe-'+[guid]::NewGuid().ToString('N')+'.json')
+        Assert-Throws { Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $mock.RemoveRule -Check { } -OutputPath $unsafe } 'outside the complete package tree'
+        Assert-True ($script:NrptMockAdded -eq 0) 'Unsafe output validation happened after AddRule.'
+    }
+    Test-Case 'NRPT fixture journals intent and captured identity outside the package' {
+        $mock=New-NrptMock
+        $output=Join-Path $temp ('nrpt-receipt-'+[guid]::NewGuid().ToString('N')+'.json')
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $mock.AddRule -RemoveRule $mock.RemoveRule -Check { } -OutputPath $output
+        $checkpoint=$output+'.progress.json';$identityRecord=$output+'.identity.json'
+        Assert-True ([IO.File]::Exists($checkpoint) -and [IO.File]::Exists($identityRecord) -and -not [IO.File]::Exists($output)) 'Fixture did not retain external immutable checkpoints before receipt writing.'
+        $journal=Get-Content -LiteralPath $checkpoint -Raw | ConvertFrom-Json
+        $captured=Get-Content -LiteralPath $identityRecord -Raw | ConvertFrom-Json
+        Assert-True ($journal.Phase -eq 'INTENT_RECORDED' -and $journal.MutationAttempted -and $journal.Namespace -eq $result.Namespace -and $captured.Phase -eq 'IDENTITY_CAPTURED' -and $captured.MutationAttempted -and $captured.RuleName -eq $result.RuleName -and $captured.Namespace -eq $result.Namespace) 'Immutable checkpoints did not retain the scoped intent and exact identity.'
+    }
+    Test-Case 'NRPT identity checkpoint failure still removes and independently re-queries' {
+        $mock=New-NrptMock
+        $output=Join-Path $temp ('nrpt-disk-failure-'+[guid]::NewGuid().ToString('N')+'.json')
+        $identityPath=$output+'.identity.json'
+        $addThenBreakCheckpoint={ param($Namespace,$NameServers,$Comment)
+            $script:NrptMockAdded++
+            $script:NrptMockRules.Add([pscustomobject]@{Name='checkpoint-'+[guid]::NewGuid().ToString('N');Namespace=@($Namespace);NameServers=@($NameServers);Comment=$Comment})
+            [IO.Directory]::CreateDirectory($identityPath)|Out-Null
+        }
+        $result=Invoke-NrptConflictFixture -GetRules $mock.GetRules -AddRule $addThenBreakCheckpoint -RemoveRule $mock.RemoveRule -Check { } -OutputPath $output -IdentityPath $identityPath
+        Assert-True ($result.Status -eq 'FAIL' -and $result.FeatureResult -eq 'FAIL' -and $result.CleanupResult -eq 'PASS' -and $script:NrptMockRules.Count -eq 0) 'Identity checkpoint failure bypassed exact cleanup or independent re-query.'
+        Assert-True ($script:NrptMockRemoved.Count -eq 1 -and @($result.Actions | Where-Object {$_.Name -eq 'CleanupVerification' -and $_.Result -eq 'PASS'}).Count -eq 1) 'Checkpoint failure did not leave cleanup evidence.'
+    }
+    Test-Case 'Matching selected facts explicitly retain manual native acceptance scope' {
+        $detail=Compare-AcceptanceBaseline (New-Snapshot Baseline) (New-Snapshot Recovered)
+        Assert-True ($detail -like '*still require operator review*') 'Comparison must not claim live acceptance.'
+    }
+    Test-Case 'JSON roundtrip snapshots remain comparable without property-order dependence' {
+        $before=New-Snapshot Baseline | ConvertTo-Json -Depth 12 | ConvertFrom-Json
+        $now=New-Snapshot Recovered | ConvertTo-Json -Depth 12 | ConvertFrom-Json
+        $now.Captures.DnsServers=@($now.Captures.DnsServers | Sort-Object AddressFamily -Descending)
+        $null=Compare-AcceptanceBaseline $before $now
+    }
+    Test-Case 'Reused interface index cannot impersonate an original physical adapter' {
+        $now=New-Snapshot Recovered;$now.Captures.Adapters[0].InterfaceGuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'GUIDs differ'
+    }
+    Test-Case 'Changed index with the same GUID correctly follows current DNS mapping' {
+        $now=New-Snapshot Recovered;$now.Captures.Adapters[0].InterfaceIndex=12
+        foreach($row in $now.Captures.DnsServers){$row.InterfaceIndex=12}
+        $null=Compare-AcceptanceBaseline (New-Snapshot Baseline) $now
+    }
+    Test-Case 'A virtual adapter at the old index cannot hide missing physical DNS' {
+        $now=New-Snapshot Recovered;$now.Captures.Adapters[0].InterfaceIndex=12
+        $now.Captures.Adapters+=@([pscustomobject]@{Name='Virtual';InterfaceIndex=7;InterfaceGuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';HardwareInterface=$false})
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'missing a physical adapter'
+    }
+    Test-Case 'Empty physical adapter captures cannot compare as empty equal DNS' {
+        $before=New-Snapshot Baseline;$now=New-Snapshot Recovered
+        $before.Captures.Adapters=@();$now.Captures.Adapters=@()
+        Assert-Throws {Compare-AcceptanceBaseline $before $now} 'adapter capture is missing'
+    }
+    Test-Case 'Missing current adapter provider output refuses comparison' {
+        $now=New-Snapshot Recovered;$now.Captures.Adapters=$null
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'adapter capture is missing'
+    }
+    Test-Case 'Duplicate physical adapter identities are rejected' {
+        $now=New-Snapshot Recovered;$now.Captures.Adapters+=@($now.Captures.Adapters[0])
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'duplicated'
+    }
+    Test-Case 'String hardware flags cannot be mistaken for boolean physical identity' {
+        $now=New-Snapshot Recovered;$now.Captures.Adapters[0].HardwareInterface='false'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'boolean'
+    }
+    Test-Case 'Changed physical DNS is detected' {
+        $now=New-Snapshot Recovered;$now.Captures.DnsServers[0].ServerAddresses=@('203.0.113.53')
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'DNS differs'
+    }
+    Test-Case 'Missing DNS server fields cannot silently become empty configuration' {
+        $now=New-Snapshot Recovered;$now.Captures.DnsServers[1].PSObject.Properties.Remove('ServerAddresses')
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'missing its server address field'
+    }
+    Test-Case 'Duplicate DNS family rows cannot hide a missing capture' {
+        $now=New-Snapshot Recovered;$now.Captures.DnsServers+=@($now.Captures.DnsServers[0])
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'DNS row is duplicated'
+    }
+    Test-Case 'Identically missing DNS families cannot claim complete physical DNS restoration' {
+        $before=New-Snapshot Baseline;$now=New-Snapshot Recovered
+        $before.Captures.DnsServers=@($before.Captures.DnsServers | Where-Object {$_.AddressFamily -eq 'IPv4'})
+        $now.Captures.DnsServers=@($now.Captures.DnsServers | Where-Object {$_.AddressFamily -eq 'IPv4'})
+        Assert-Throws {Compare-AcceptanceBaseline $before $now} 'missing a physical adapter address family'
+    }
+    Test-Case 'Firewall profile edits and missing profiles are rejected' {
+        $now=New-Snapshot Recovered;$now.Captures.FirewallProfiles[0].Enabled='False'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'FirewallProfiles differs'
+        $now=New-Snapshot Recovered;$now.Captures.LocalFirewallProfiles=@($now.Captures.LocalFirewallProfiles[0])
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'All three'
+    }
+    Test-Case 'Changed excluded-interface policy cannot hide behind matching profile enablement' {
+        $now=New-Snapshot Recovered;$now.Captures.FirewallProfiles[0].DisabledInterfaceAliases.Value=@('Ethernet')
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'FirewallProfiles differs'
+        $now=New-Snapshot Recovered;$now.Captures.FirewallProfiles[0].PSObject.Properties.Remove('DisabledInterfaceAliases')
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'excluded-interface capture is missing'
+    }
+    Test-Case 'An absent excluded-interface value cannot impersonate a captured empty array' {
+        $before=New-Snapshot Baseline
+        foreach ($profile in $before.Captures.FirewallProfiles) {$profile.DisabledInterfaceAliases.PSObject.Properties.Remove('Value')}
+        Assert-Throws {Compare-AcceptanceBaseline $before (New-Snapshot Recovered)} 'excluded-interface capture is missing'
+    }
+    Test-Case 'Genuine null and empty excluded-interface observations retain equivalent unrestricted meaning' {
+        $before=New-Snapshot Baseline
+        foreach ($profile in $before.Captures.FirewallProfiles) {$profile.DisabledInterfaceAliases=Get-AcceptanceFieldObservation ([pscustomobject]@{DisabledInterfaceAliases=$null}) 'DisabledInterfaceAliases'}
+        $null=Compare-AcceptanceBaseline $before (New-Snapshot Recovered)
+    }
+    Test-Case 'A snapshot must establish that package identity survived its provider capture' {
+        $now=New-Snapshot Recovered
+        $now.Checks=@($now.Checks | Where-Object {$_.Name -ne 'Package unchanged during capture'})
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'Package unchanged during capture'
+    }
+    Test-Case 'Package mutation during provider capture is detected against its initial source identity' {
+        $packageRoot=Join-Path $temp 'changing-package';$null=[IO.Directory]::CreateDirectory($packageRoot)
+        $file=Join-Path $packageRoot 'source.ps1';[IO.File]::WriteAllText($file,'original')
+        $snapshot=@([pscustomobject]@{Path='source.ps1';Sha256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash})
+        Assert-AcceptanceStablePackage $packageRoot $snapshot
+        [IO.File]::WriteAllText($file,'changed')
+        Assert-Throws {Assert-AcceptanceStablePackage $packageRoot $snapshot} 'Source changed since validation'
+    }
+    Test-Case 'Provider observations distinguish absent null empty-string and empty-array values through JSON' {
+        $values=@(
+            (Get-AcceptanceFieldObservation ([pscustomobject]@{}) 'Package'),
+            (Get-AcceptanceFieldObservation ([pscustomobject]@{Package=$null}) 'Package'),
+            (Get-AcceptanceFieldObservation ([pscustomobject]@{Package=''}) 'Package'),
+            (Get-AcceptanceFieldObservation ([pscustomobject]@{Package=@()}) 'Package')
+        )
+        $roundtrip=ConvertTo-Json -InputObject $values -Depth 8 | ConvertFrom-Json
+        Assert-True (($roundtrip.Kind -join ',') -eq 'MISSING,NULL,EMPTY_STRING,EMPTY_ARRAY') 'Provider distinctions were collapsed.'
+        Assert-True (-not $roundtrip[0].Present -and $roundtrip[1].Present -and $null -eq $roundtrip[1].Value) 'Null and absence must remain different.'
+    }
+    Test-Case 'Provider observations retain zero false enum and array values without truthiness conversion' {
+        $obj=[pscustomobject]@{Enabled=$false;Count=0;Mode=[IO.FileMode]::Open;Aliases=@('Ethernet','Wi-Fi')}
+        Assert-True ((Get-AcceptanceFieldObservation $obj 'Enabled').Value -is [bool]) 'False must retain its type.'
+        Assert-True ((Get-AcceptanceFieldObservation $obj 'Count').Value -eq 0) 'Zero must remain present.'
+        Assert-True ((Get-AcceptanceFieldObservation $obj 'Mode').Kind -eq 'ENUM') 'Enum shape should be explicit.'
+        Assert-True (((Get-AcceptanceFieldObservation $obj 'Aliases').Value -join ',') -eq 'Ethernet,Wi-Fi') 'Array values changed.'
+    }
+    Test-Case 'Firewall rule capture records all seven related provider filters and null Package' {
+        Initialize-ProviderFixture
+        $shape=Get-AcceptanceFirewallRuleShape ([pscustomobject]@{Name='fixture'}) 'OwnedContainment'
+        Assert-True ($shape.Complete -and $shape.Filters.Count -eq 7) 'Expected seven completed provider queries.'
+        $application=@($shape.Filters | Where-Object {$_.Command -eq 'Get-NetFirewallApplicationFilter'})[0]
+        Assert-True ($application.Objects[0].Fields.Package.Kind -eq 'NULL' -and $application.Objects[0].Fields.Package.Present) 'Actual null Package was lost.'
+    }
+    Test-Case 'Missing and restricted Package fields remain inspectable without being called unrestricted' {
+        Initialize-ProviderFixture;$script:ProviderFixture.OmitPackage=$true
+        $shape=Get-AcceptanceFirewallRuleShape ([pscustomobject]@{Name='fixture'}) 'ExistingRuleSample'
+        $application=@($shape.Filters | Where-Object {$_.Command -eq 'Get-NetFirewallApplicationFilter'})[0]
+        Assert-True ($application.Objects[0].Fields.Package.Kind -eq 'MISSING' -and -not $application.Objects[0].Fields.Package.Present) 'Missing field became null.'
+        Initialize-ProviderFixture;$script:ProviderFixture.Package='S-1-15-2-1234'
+        $shape=Get-AcceptanceFirewallRuleShape ([pscustomobject]@{Name='fixture'}) 'ExistingRuleSample'
+        $application=@($shape.Filters | Where-Object {$_.Command -eq 'Get-NetFirewallApplicationFilter'})[0]
+        Assert-True ($shape.Role -eq 'ExistingRuleSample' -and $application.Objects[0].Fields.Package.Value -eq 'S-1-15-2-1234') 'Sample must preserve restrictions without an enforcement claim.'
+    }
+    Test-Case 'Associated-provider error preserves successful sibling observations and the exact failed query' {
+        Initialize-ProviderFixture;$script:ProviderFixture.ThrowFilter='Application'
+        $shape=Get-AcceptanceFirewallRuleShape ([pscustomobject]@{Name='fixture'}) 'OwnedContainment'
+        $failed=@($shape.Filters | Where-Object {$_.Result -eq 'FAIL'})
+        Assert-True (-not $shape.Complete -and $failed.Count -eq 1 -and $failed[0].Command -eq 'Get-NetFirewallApplicationFilter') 'Associated read error did not remain attributable.'
+        Assert-True (@($shape.Filters | Where-Object {$_.Result -eq 'PASS'}).Count -eq 6) 'Unrelated successful observations should survive.'
+    }
+    Test-Case 'Ambiguous associated filter results preserve both rows but mark the capture incomplete' {
+        Initialize-ProviderFixture;$script:ProviderFixture.DuplicateFilter='Address'
+        $shape=Get-AcceptanceFirewallRuleShape ([pscustomobject]@{Name='fixture'}) 'OwnedContainment'
+        $address=@($shape.Filters | Where-Object {$_.Command -eq 'Get-NetFirewallAddressFilter'})[0]
+        Assert-True (-not $shape.Complete -and $address.Result -eq 'FAIL' -and $address.ObjectCount -eq 2 -and $address.Objects.Count -eq 2) 'Ambiguous provider result must not look complete.'
+    }
+    Test-Case 'Store failures stay distinct from a clean machine with no owned rule' {
+        Initialize-ProviderFixture;$script:ProviderFixture.OwnedCount=0
+        $stores=@(Get-AcceptanceFirewallProviderShapes)
+        Assert-True ($stores.Count -eq 2 -and @($stores | Where-Object {$_.Result -ne 'PASS'}).Count -eq 0) 'Clean stores should be readable.'
+        Assert-True ($stores[0].OwnedRulesObserved -eq 0 -and $stores[0].SampleRulesCaptured -eq 1 -and $stores[0].Rules[0].Role -eq 'ExistingRuleSample') 'Existing sample must not impersonate owned state.'
+        $script:ProviderFixture.FailStore='PersistentStore';$stores=@(Get-AcceptanceFirewallProviderShapes)
+        Assert-True ($stores[1].Result -eq 'FAIL' -and $stores[1].Error -like '*Store unavailable*' -and $stores[0].Result -eq 'PASS') 'Store error was mistaken for no matching rules.'
+    }
+    Test-Case 'Excess owned-rule diagnostics are bounded and explicitly marked truncated' {
+        Initialize-ProviderFixture;$script:ProviderFixture.OwnedCount=18
+        $stores=@(Get-AcceptanceFirewallProviderShapes)
+        Assert-True ($stores[0].OwnedRulesObserved -eq 18 -and $stores[0].OwnedRulesCaptured -eq 16 -and $stores[0].Rules.Count -eq 17 -and $stores[0].Truncated -and $stores[0].Result -eq 'FAIL') 'Capture bound must retain counts and forbid a false complete result.'
+    }
+    Test-Case 'Current metadata specifications cover seven filters and security creation parameters' {
+        $contracts=Get-AcceptanceCommandSpecifications
+        foreach ($name in @('Address','Application','Service','Port','Interface','InterfaceType','Security')) {
+            Assert-True (@($contracts['Get-NetFirewall'+$name+'Filter']) -contains 'AssociatedNetFirewallRule') ('Missing associated-filter parameter metadata: '+$name)
+        }
+        foreach ($name in @('Authentication','Encryption','OverrideBlockRules')) {
+            Assert-True (@($contracts['New-NetFirewallRule']) -contains $name) ('Missing current security creation parameter: '+$name)
+        }
+        foreach ($name in @('Set-NetFirewallRule','Remove-NetFirewallRule','Set-NetFirewallProfile')) {
+            Assert-True (@($contracts[$name]) -contains 'PolicyStore') ('Missing policy store parameter: '+$name)
+        }
+    }
+    Test-Case 'Declared enum and Boolean parameter types remain distinct through JSON' {
+        Initialize-MetadataFixture
+        $result=Get-AcceptanceCommandContract 'Set-NetFirewallProfile' @('Name','Enabled','OverrideBlockRules','ArrayMode','OptionalMode')
+        $roundtrip=$result | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+        $enabled=@($roundtrip.Parameters | Where-Object {$_.Name -eq 'Enabled'})[0]
+        $boolean=@($roundtrip.Parameters | Where-Object {$_.Name -eq 'OverrideBlockRules'})[0]
+        Assert-True ($roundtrip.Result -eq 'PASS' -and $roundtrip.CommandCount -eq 1) 'Readable metadata should be retained.'
+        Assert-True ($enabled.Type -eq 'System.IO.FileMode' -and $enabled.EnumType -eq 'System.IO.FileMode' -and $enabled.EnumNames -contains 'Open') 'Declared enum names were lost or treated as Boolean.'
+        Assert-True ($boolean.Type -eq 'System.Boolean' -and $null -eq $boolean.EnumType -and @($boolean.EnumNames).Count -eq 0) 'Boolean must not acquire enum names.'
+        foreach ($name in @('ArrayMode','OptionalMode')) {
+            $parameter=@($roundtrip.Parameters | Where-Object {$_.Name -eq $name})[0]
+            Assert-True ($parameter.EnumType -eq 'System.IO.FileMode' -and $parameter.EnumNames -contains 'Open') ('Wrapped enum metadata was lost: '+$name)
+        }
+    }
+    Test-Case 'Missing native parameters preserve successful sibling metadata and fail the contract' {
+        Initialize-MetadataFixture;$script:MetadataFixture.Missing='Enabled'
+        $result=Get-AcceptanceCommandContract 'Set-NetFirewallProfile' @('Name','Enabled')
+        Assert-True ($result.Result -eq 'FAIL' -and $result.Parameters[0].Result -eq 'PASS') 'A missing field must not discard a successful sibling.'
+        Assert-True ($result.Parameters[1].Observation -eq 'MISSING' -and $result.Parameters[1].Present -eq $false -and $result.Parameters[1].Error -like '*Missing required parameter*') 'Missing parameter must be distinguishable from a failed command read.'
+    }
+    Test-Case 'Command metadata provider failure remains unread rather than missing or accepted' {
+        Initialize-MetadataFixture;$script:MetadataFixture.QueryError=$true
+        $result=Get-AcceptanceCommandContract 'Set-NetFirewallProfile' @('Enabled')
+        Assert-True ($result.Result -eq 'FAIL' -and $result.Error -like '*Native metadata unavailable*' -and $result.CommandCount -eq 0) 'Metadata failure was swallowed.'
+        Assert-True ($result.Parameters[0].Observation -eq 'NOT_READ' -and $null -eq $result.Parameters[0].Present -and $result.Parameters[0].Result -eq 'NOT_READ') 'Unread parameter metadata must not become confirmed absence.'
+    }
+    Test-Case 'Present parameters with unreadable declared types cannot claim metadata success' {
+        Initialize-MetadataFixture;$script:MetadataFixture.BadType='Enabled'
+        $result=Get-AcceptanceCommandContract 'Set-NetFirewallProfile' @('Name','Enabled')
+        Assert-True ($result.Result -eq 'FAIL' -and $result.Parameters[1].Present -and $result.Parameters[1].Observation -eq 'PRESENT' -and $result.Parameters[1].Result -eq 'FAIL') 'Malformed type must remain an explicit failed present observation.'
+    }
+    Test-Case 'Ambiguous native command metadata refuses to select an arbitrary contract' {
+        Initialize-MetadataFixture;$script:MetadataFixture.Duplicate=$true
+        $result=Get-AcceptanceCommandContract 'Set-NetFirewallProfile' @('Enabled')
+        Assert-True ($result.Result -eq 'FAIL' -and $result.CommandCount -eq 2 -and $result.Parameters[0].Observation -eq 'NOT_READ') 'Multiple command records must not produce a false parameter pass.'
+    }
+    Test-Case 'Missing current command metadata prerequisites block baseline comparison' {
+        foreach ($missing in @('Read CommandContracts','Native command metadata observations')) {
+            $now=New-Snapshot Recovered;$now.Checks=@($now.Checks | Where-Object {$_.Name -ne $missing})
+            Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} $missing
+        }
+    }
+    Test-Case 'Same version with different package bytes is rejected' {
+        $now=New-Snapshot Recovered;$now.PackageIdentity.ManifestSha256='e'*64
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'ManifestSha256'
+    }
+    Test-Case 'Different release versions and executing collector tooling are rejected' {
+        $now=New-Snapshot Recovered;$now.PackageIdentity.Version='1.3.3';$now.Version='1.3.3'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'Version'
+        $now=New-Snapshot Recovered;$now.PackageIdentity.CollectorSha256='e'*64
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'CollectorSha256'
+    }
+    Test-Case 'Wrong computer and reversed capture order are rejected' {
+        $now=New-Snapshot Recovered;$now.ComputerName='OTHER-PC'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'this computer'
+        $now=New-Snapshot Recovered;$now.CapturedUtc='2026-09-17T00:00:00Z'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'before the recovered'
+    }
+    Test-Case 'Unknown schemas and non-Recovered stage are rejected' {
+        $now=New-Snapshot Recovered;$now.Schema='2'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'schema-2'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) (New-Snapshot Connected)} 'Recovered snapshots'
+    }
+    Test-Case 'Failed, unknown and missing prerequisite results cannot produce a comparison pass' {
+        foreach($result in @('FAIL','NOT_RUN','UNKNOWN')) {
+            $now=New-Snapshot Recovered;$now.Checks[0].Result=$result
+            Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'unsuccessful checks'
+        }
+        $now=New-Snapshot Recovered;$now.Checks=@($now.Checks | Where-Object {$_.Name -ne 'Read Routes'})
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'Read Routes'
+    }
+    Test-Case 'Failed-capture status blocks comparison even if selected fields happen to match' {
+        $now=New-Snapshot Recovered;$now.CaptureStatus='CAPTURE_FAILED'
+        Assert-Throws {Compare-AcceptanceBaseline (New-Snapshot Baseline) $now} 'without failed checks'
+    }
+    Test-Case 'Provider failure discards partial rows and records a failed capture' {
+        $script:checks=New-Object 'Collections.Generic.List[object]';$script:captures=[ordered]@{}
+        Read-AcceptanceCapture 'Fixture' { [pscustomobject]@{Partial=$true};throw 'provider unavailable' }
+        Assert-True ($null -eq $captures.Fixture -and $checks.Count -eq 1 -and $checks[0].Result -eq 'FAIL') 'Partial rows must not be accepted.'
+    }
+    Test-Case 'A confirmed empty provider result is distinguishable from a failed read' {
+        $script:checks=New-Object 'Collections.Generic.List[object]';$script:captures=[ordered]@{}
+        Read-AcceptanceCapture 'Fixture' { }
+        Assert-True ($checks.Count -eq 1 -and $checks[0].Result -eq 'PASS' -and @($captures.Fixture).Count -eq 0) 'Empty successful query should retain a success receipt.'
+    }
+    Test-Case 'State JSON reader handles absence, valid content, malformed input and limits' {
+        $path=Join-Path $temp 'state.json'
+        Assert-True ($null -eq (Read-AcceptanceJson $path)) 'Absent state should be observed as absent.'
+        [IO.File]::WriteAllText($path,'{"Value":7}')
+        Assert-True ((Read-AcceptanceJson $path).Value -eq 7) 'Valid JSON should be read.'
+        [IO.File]::WriteAllText($path,'{broken')
+        Assert-Throws {Read-AcceptanceJson $path} ''
+        [IO.File]::WriteAllText($path,('x'*2097153))
+        Assert-Throws {Read-AcceptanceJson $path} 'unexpectedly large'
+    }
+    Test-Case 'A persistently locked state file remains a failed read after bounded retries' {
+        $path=Join-Path $temp 'locked.json';[IO.File]::WriteAllText($path,'{"Value":1}')
+        $lock=[IO.FileStream]::new($path,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+        try { Assert-Throws {Read-AcceptanceJson $path} '' } finally { $lock.Dispose() }
+    }
+    Test-Case 'A directory at the journal path cannot masquerade as an absent session' {
+        $path=Join-Path $temp 'directory-state.json';$null=[IO.Directory]::CreateDirectory($path)
+        Assert-Throws {Read-AcceptanceJson $path} 'State path must be a regular file'
+    }
+    Test-Case 'State reads do not depend on cached PowerShell provider attributes' {
+        $path=Join-Path $temp 'raw-attributes.json';[IO.File]::WriteAllText($path,'{"Value":17}')
+        function Get-Item {throw 'Cached provider must not determine state-file attributes.'}
+        Assert-True ((Read-AcceptanceJson $path).Value -eq 17) 'A valid state file must remain readable.'
+    }
+    Test-Case 'An attribute access error remains a failed capture rather than successful absence' {
+        function Get-GephPackageRawAttributes([string]$Path) {throw [UnauthorizedAccessException]::new('Synthetic attribute access denied.')}
+        $script:checks=New-Object 'Collections.Generic.List[object]';$script:captures=[ordered]@{}
+        Read-AcceptanceCapture 'Session' {Read-AcceptanceJson (Join-Path $temp 'denied.json')}
+        Assert-True ($checks.Count -eq 1 -and $checks[0].Result -eq 'FAIL' -and $checks[0].Detail -like '*Synthetic attribute access denied*') 'Access denial must not produce a successful absent-session receipt.'
+    }
+    Test-Case 'Transient missing attributes recover to a present object without false absence' {
+        $path=Join-Path $temp 'transient-stat.json';[IO.File]::WriteAllText($path,'{"Value":23}')
+        $script:AcceptanceAttributeReads=0
+        function Get-GephPackageRawAttributes([string]$Path) {
+            $script:AcceptanceAttributeReads++
+            if($script:AcceptanceAttributeReads -lt 3){throw [IO.FileNotFoundException]::new('Synthetic replacement race.')}
+            return [IO.File]::GetAttributes($Path)
+        }
+        Assert-True ((Read-AcceptanceJson $path).Value -eq 23) 'A transient metadata gap must not become an absent-session observation.'
+    }
+    Test-Case 'One reparse observation cannot be cleared by a later normal or unavailable attribute read' {
+        $script:AcceptanceAttributeReads=0
+        function Get-GephPackageRawAttributes([string]$Path) {
+            $script:AcceptanceAttributeReads++
+            if($script:AcceptanceAttributeReads -eq 1){return [IO.FileAttributes]::ReparsePoint}
+            throw [IO.FileNotFoundException]::new('Synthetic disappearing link.')
+        }
+        Assert-Throws {Read-AcceptanceJson (Join-Path $temp 'one-reparse.json')} 'Redirected filesystem path'
+        Assert-True ($script:AcceptanceAttributeReads -eq 1) 'A raw reparse point must be refused on first observation.'
+    }
+    Test-Case 'Present null, array and scalar journals cannot masquerade as absent state' {
+        $path=Join-Path $temp 'nonobject.json'
+        foreach($json in @('null','[]','7','"value"')) {
+            [IO.File]::WriteAllText($path,$json)
+            Assert-Throws {Read-AcceptanceJson $path} 'must contain one object'
+        }
+    }
+    Test-Case 'Concurrent atomic replacement yields valid state without transient false failures' {
+        $path=Join-Path $temp 'replacing.json';[IO.File]::WriteAllText($path,'{"Sequence":0}')
+        $writer=[PowerShell]::Create()
+        $pending=$null
+        try {
+            $null=$writer.AddScript({
+                param($path)
+                for($i=1;$i -le 1000;$i++) {
+                    # Use a unique same-directory temporary file and no shared
+                    # backup name. A fixed .tmp/.bak pair made this test fail
+                    # because the fixture raced with its own stale backup (and
+                    # antivirus), obscuring the reader behavior under test.
+                    $suffix=[guid]::NewGuid().ToString('N')
+                    $tmp=$path+'.'+$suffix+'.tmp'
+                    $backup=$path+'.'+$suffix+'.bak'
+                    $replaced=$false
+                    try {
+                        [IO.File]::WriteAllText($tmp,('{"Sequence":'+$i+'}'))
+                        for($attempt=0;$attempt -lt 8 -and -not $replaced;$attempt++) {
+                            try { [IO.File]::Replace($tmp,$path,$backup);$replaced=$true }
+                            catch [IO.IOException] {
+                                if($attempt -eq 7){throw}
+                                Start-Sleep -Milliseconds 5
+                            }
+                        }
+                        if(-not $replaced){throw 'Atomic replacement did not complete.'}
+                    } finally {
+                        if([IO.File]::Exists($tmp)){[IO.File]::Delete($tmp)}
+                        if([IO.File]::Exists($backup)){[IO.File]::Delete($backup)}
+                    }
+                    Start-Sleep -Milliseconds 2
+                }
+            }).AddArgument($path)
+            $pending=$writer.BeginInvoke()
+            for($i=0;$i -lt 500;$i++) { $value=Read-AcceptanceJson $path;Assert-True ($null -ne $value -and $value.Sequence -ge 0 -and $value.Sequence -le 1000) 'Reader returned invalid or absent state.' }
+            $null=$writer.EndInvoke($pending)
+            Assert-True (-not $writer.HadErrors) ('Concurrent writer failed: '+($writer.Streams.Error -join ' | '))
+            Assert-True (@(Get-ChildItem -LiteralPath (Split-Path $path) -Filter ((Split-Path $path -Leaf)+'.*.tmp') -File).Count -eq 0) 'Writer left a temporary file behind.'
+            Assert-True (@(Get-ChildItem -LiteralPath (Split-Path $path) -Filter ((Split-Path $path -Leaf)+'.*.bak') -File).Count -eq 0) 'Writer left a backup file behind.'
+        } finally {
+            if($null -ne $pending -and -not $pending.IsCompleted){$writer.Stop();try{$null=$writer.EndInvoke($pending)}catch{} }
+            $writer.Dispose()
+        }
+    }
+    Test-Case 'Collector has no network mutation, controller import or remote probe invocation' {
+        $prohibited=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst]},$true) | ForEach-Object {$_.GetCommandName()} | Where-Object {$_ -match '^(Set|New|Remove|Disable|Enable)-(Net|Dns)' -or $_ -in @('Start-Process','Stop-Process','Import-Module','Invoke-WebRequest','Test-NetConnection')})
+        Assert-True ($prohibited.Count -eq 0) ('Unexpected command invocation: '+($prohibited -join ','))
+    }
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        Test-Case 'A missing release and failed providers still produce a saved failure snapshot' {
+            # This isolated fixture bypasses only the Windows host guard. All
+            # Windows providers are unavailable here and must be recorded as
+            # failures. It is not native collector or network acceptance.
+            $fixture=Join-Path $temp 'broken-package';$fixtureTests=Join-Path $fixture 'tests';$out=Join-Path $temp 'failure-output'
+            $null=[IO.Directory]::CreateDirectory($fixtureTests)
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Package.Common.ps1') -Destination $fixtureTests
+            [IO.File]::WriteAllText((Join-Path $fixture 'Verify-GephTun.ps1'),"throw 'Fixture deliberately lacks package integrity.'")
+            $source=[IO.File]::ReadAllText($collector)
+            $guard='if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {'
+            Assert-True ($source.Contains($guard)) 'Expected exact host guard was not found.'
+            [IO.File]::WriteAllText((Join-Path $fixtureTests 'Collect-WindowsAcceptance.ps1'),$source.Replace($guard,'if ($false) {'))
+            $hostPath=Join-Path $PSHOME 'pwsh'
+            $messages=@(& $hostPath -NoProfile -File (Join-Path $fixtureTests 'Collect-WindowsAcceptance.ps1') -Stage Recovered -OutputDirectory $out 2>&1)
+            Assert-True ($LASTEXITCODE -eq 1) ('Failed capture must return 1: '+($messages -join ' '))
+            $files=@(Get-ChildItem -LiteralPath $out -Filter '*.json')
+            Assert-True ($files.Count -eq 1) 'Expected one preserved failure snapshot.'
+            $failed=Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
+            Assert-True ($failed.Version -eq 'UNVERIFIED' -and $failed.CaptureStatus -eq 'CAPTURE_FAILED' -and $failed.NativeAcceptance -eq 'NOT_RUN') 'Failed snapshot must not claim an identity or acceptance pass.'
+        }
+    } else {
+        $results.Add([pscustomobject]@{Name='A missing release and failed providers still produce a saved failure snapshot';Result='SKIP';Detail='This specific negative fixture depends on Linux having no Windows providers; all other tests remain portable.'})
+    }
+    Test-Case 'Acceptance tooling and collector sources remained unchanged during the suite' {
+        foreach($entry in $sourceSnapshot) {
+            Assert-True ((Get-FileHash -LiteralPath (Join-Path $root $entry.Path) -Algorithm SHA256).Hash -eq $entry.Sha256) ('Source changed during acceptance tests: '+$entry.Path)
+        }
+    }
+} finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
+$failed=@($results | Where-Object {$_.Result -eq 'FAIL'}).Count
+$skipped=@($results | Where-Object {$_.Result -eq 'SKIP'}).Count
+$report=[ordered]@{
+    Suite='Read-only acceptance collector supplemental checks';CapturedUtc=[DateTime]::UtcNow.ToString('o');PowerShellVersion=$PSVersionTable.PSVersion.ToString();Platform=[Environment]::OSVersion.Platform.ToString()
+    Total=$results.Count;Passed=$results.Count-$failed-$skipped;Failed=$failed;Skipped=$skipped;NativeWindowsAcceptance='NOT_RUN'
+    Scope='Extracted production comparison/read functions, real temporary file locking/replacement, static command audit and isolated negative collector fixture. No native Windows providers, network mutations or live acceptance.'
+    Sources=$sourceSnapshot
+    Tests=$results.ToArray()
+}
+Write-GephPackageNewJson $reportPath $report
+Write-Output ('Acceptance collector: '+$report.Passed+' passed, '+$failed+' failed, '+$skipped+' skipped.')
+if($failed){$results | Where-Object {$_.Result -eq 'FAIL'} | Format-List;exit 1}

@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""GephTun 1.4.0 read-only checks, candidate sealing, ZIP build and verification.
+Python 3.10+, standard library. Does not execute PowerShell/C#, binaries or networking.
+Static checks are not parser/compiler/runtime tests. Build never grants qualification.
+"""
+from __future__ import annotations
+import argparse
+import ast
+import base64
+import datetime as dt
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import stat
+import struct
+import sys
+import zipfile
+
+VERSION = '1.4.0'
+INPUT_SHA256 = 'e5a1c373d8bc2893c8dcbde21274003862681919e262d5d1d8fcad49ec2695a4'
+BINARY_PINS = {
+    'tun2socks-windows-amd64.exe': '6435bf99650b47551b46ca1a7b5ac44ff64fdbdf1b13d3ccb0b8c329a5734e8e',
+    'wintun.dll': 'e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce',
+}
+CODE_SUFFIXES = {'.ps1', '.psm1', '.cs', '.py', '.cmd'}
+
+def digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+def valid_path(name: str) -> None:
+    if not name or '\\' in name or name.startswith('/') or re.search(r'[<>:"|?*\x00-\x1f\x7f]', name):
+        raise ValueError(f'Unsafe relative path: {name!r}')
+    for part in name.split('/'):
+        if part in ('', '.', '..') or part[-1:] in (' ', '.') or re.match(r'(?i)^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)', part):
+            raise ValueError(f'Unsafe Windows path segment: {part!r}')
+
+def inventory(root: Path) -> dict[str, bytes]:
+    if not root.is_dir():
+        raise ValueError('Package root is not a directory.')
+    for ancestor in (root, *root.parents):
+        if ancestor.is_symlink():
+            raise ValueError('Redirected package root is not supported.')
+    files: dict[str, bytes] = {}
+    seen = set()
+    for path in sorted(root.rglob('*')):
+        name = path.relative_to(root).as_posix()
+        valid_path(name)
+        if path.is_symlink():
+            raise ValueError(f'Redirected member: {name}')
+        if name.casefold() in seen:
+            raise ValueError(f'Case-colliding member: {name}')
+        seen.add(name.casefold())
+        if path.is_file():
+            files[name] = path.read_bytes()
+    return files
+
+def is_source(name: str) -> bool:
+    return PurePosixPath(name).suffix.lower() in CODE_SUFFIXES or name in ('RELEASE.json', 'DEPENDENCIES.json')
+
+def sources(files: dict[str, bytes]) -> list[dict]:
+    return [{'Path': n, 'Sha256': digest(b)} for n, b in sorted(files.items()) if is_source(n)]
+
+def decode_json(data: bytes):
+    return json.loads(data.decode('utf-8-sig'))
+
+def write_json(path: Path, value) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=True) + '\n', encoding='utf-8')
+
+def function(text: str, name: str) -> str:
+    match = re.search(r'(?m)^function ' + re.escape(name) + r'\b', text)
+    if not match:
+        raise ValueError(f'Function not found: {name}')
+    tail = text[match.end():]
+    following = re.search(r'(?m)^function ', tail)
+    return text[match.start(): match.end() + following.start()] if following else text[match.start():]
+
+def lexical_check(text: str, csharp: bool = False) -> None:
+    """Basic quote/comment/delimiter framing ONLY; not a language parser.
+    PowerShell quoted interpolation is treated as opaque quoted text.
+    """
+    i = 0
+    stack = []
+    pairs = {')': '(', ']': '[', '}': '{'}
+    length = len(text)
+    while i < length:
+        if (csharp and text.startswith('//', i)) or (not csharp and text[i] == '#'):
+            end = text.find('\n', i)
+            i = length if end < 0 else end + 1
+            continue
+        opening, closing = ('/*', '*/') if csharp else ('<#', '#>')
+        if text.startswith(opening, i):
+            end = text.find(closing, i+2)
+            if end < 0:
+                raise ValueError(f'Unterminated block comment at offset {i}')
+            i = end+2
+            continue
+        # PowerShell here strings terminate at the start of a new line.
+        if not csharp and text[i:i+2] in ('@"', "@'") and text[i+2:i+3] in ('\r', '\n'):
+            quote = text[i+1]
+            match = re.search(r'(?m)^' + re.escape(quote+'@'), text[i+2:])
+            if not match:
+                raise ValueError(f'Unterminated here string at offset {i}')
+            i = i+2+match.end()
+            continue
+        verbatim = csharp and text.startswith('@"', i)
+        if verbatim or text[i] in ('"', "'"):
+            if verbatim:
+                i += 1
+            quote = text[i]
+            begin = i
+            i += 1
+            while i < length:
+                if text[i] == quote:
+                    if (verbatim or (not csharp and quote == "'")) and text[i:i+2] == quote*2:
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                escape = '\\' if csharp and not verbatim else '`' if not csharp and quote == '"' else None
+                if escape and text[i] == escape:
+                    i += 2
+                else:
+                    i += 1
+            else:
+                raise ValueError(f'Unterminated quoted literal at offset {begin}')
+            continue
+        if not csharp and text[i] == '`':
+            i += 2
+            continue
+        char = text[i]
+        if char in '([{':
+            stack.append((char, i))
+        elif char in ')]}':
+            if not stack or stack[-1][0] != pairs[char]:
+                raise ValueError(f'Unbalanced delimiter {char!r} at offset {i}')
+            stack.pop()
+        i += 1
+    if stack:
+        raise ValueError(f'Unclosed delimiter at offset {stack[-1][1]}')
+
+def inspect_dns_input(case: dict) -> None:
+    """Validate wire framing only; intentionally invalid SvcParams remain fixtures."""
+    data = base64.b64decode(case['WireBase64'], validate=True)
+    if len(data) < 12:
+        raise ValueError('Short DNS header')
+    _, _, qd, an, ns, ar = struct.unpack_from('!6H', data)
+    if qd != 1 or ns != 0 or ar != 0 or an < 1:
+        raise ValueError('Unexpected fixture record counts')
+    def skip_name(offset: int) -> int:
+        while offset < len(data):
+            size = data[offset]
+            if size == 0:
+                return offset+1
+            if size & 0xc0 == 0xc0:
+                if offset+2 > len(data):
+                    raise ValueError('Truncated name pointer')
+                target = ((size & 0x3f) << 8) | data[offset+1]
+                if target >= offset:
+                    raise ValueError('Non-backward compression pointer')
+                return offset+2
+            if size > 63 or offset+1+size > len(data):
+                raise ValueError('Invalid label framing')
+            offset += 1+size
+        raise ValueError('Unterminated name')
+    offset = skip_name(12)+4
+    for _ in range(an):
+        header = skip_name(offset)
+        if header+10 > len(data):
+            raise ValueError('Truncated RR header')
+        typ, _, _, rdlen = struct.unpack_from('!HHIH', data, header)
+        end = header+10+rdlen
+        if end > len(data):
+            raise ValueError('Truncated RDATA')
+        if typ in (64, 65):
+            current = skip_name(header+12)
+            while current < end:
+                if current+4 > end:
+                    raise ValueError('Truncated SvcParam header')
+                _, size = struct.unpack_from('!HH', data, current)
+                current += 4+size
+                if current > end:
+                    raise ValueError('Truncated SvcParam framing')
+        elif typ == 1 and rdlen != 4:
+            raise ValueError('Invalid A record length')
+        offset = end
+    if offset != len(data):
+        raise ValueError('Trailing or missing fixture bytes')
+
+def static_checks(root: Path) -> dict:
+    files = inventory(root)
+    tests = []
+    def check(name: str, action) -> None:
+        try:
+            result = action()
+            if result is False:
+                raise AssertionError('Source invariant not satisfied')
+            tests.append({'Name': name, 'Result': 'PASS', 'Detail': ''})
+        except Exception as exc:
+            tests.append({'Name': name, 'Result': 'FAIL', 'Detail': str(exc)})
+    def text(name: str) -> str:
+        return files[name].decode('utf-8-sig')
+    check('Release identity is this unqualified 1.4.0 candidate', lambda:
+          decode_json(files['RELEASE.json'])['Version'] == VERSION and
+          decode_json(files['RELEASE.json'])['ProductionQualified'] is False and
+          decode_json(files['RELEASE.json'])['InputArchiveSha256'] == INPUT_SHA256)
+    for name, data in files.items():
+        suffix = PurePosixPath(name).suffix.lower()
+        if suffix in ('.ps1', '.psm1', '.cs'):
+            check('Lexical framing only: '+name, lambda n=name, c=suffix == '.cs': lexical_check(text(n), c))
+            if suffix in ('.ps1', '.psm1'):
+                check('Windows PowerShell 5.1-safe text encoding: '+name,
+                      lambda b=data: b.startswith(b'\xef\xbb\xbf') or all(v < 128 for v in b))
+        elif suffix == '.py':
+            check('Python AST parse: '+name, lambda n=name: ast.parse(text(n), filename=n))
+        elif suffix == '.json':
+            check('JSON parse: '+name, lambda b=data: decode_json(b))
+    core, helper, worker, ui, dns, boot = (text(n) for n in (
+        'GephTun.Core.psm1','GephTun.Resilience.ps1','GephTun.Worker.ps1','GephTun.UI.ps1','GephTun.Network.cs','GephTun-BootReconcile.ps1'))
+    monitor = function(core, 'Watch-GephTunCurrentSession')
+    reconnect = function(helper, 'Invoke-GephTunReconnect')
+    peer = function(core, 'Get-GephTunPeerRouteSnapshot')
+    setup = function(core, 'Start-GephTunSession')
+    containment = function(core, 'Install-GephTunContainment')
+    names = re.findall(r'(?m)^function ([\w-]+)', core+'\n'+helper)
+    checks = {
+        'Controller functions have unique names': len(names) == len(set(n.casefold() for n in names)),
+        'Controller loads the new resilience helper': ". (Join-Path $PSScriptRoot 'GephTun.Resilience.ps1')" in core,
+        'Worker establishes intent before first setup': worker.index('Initialize-GephTunConnectionIntent') < worker.index('$result = Start-GephTunSession'),
+        'Worker cleans its intent in finalization': 'Clear-GephTunConnectionIntent' in worker and 'Release-GephTunLock' in worker,
+        'Disconnect latches a worker-lifetime token': "'disconnect-intent.json') @{ Token = $intent.Token }" in core,
+        'Stop reader does not consume the cancellation marker': 'Remove-Item' not in function(helper,'Test-GephTunIntentStopRequested') and '::Delete' not in function(helper,'Test-GephTunIntentStopRequested'),
+        'Active intent preserves operation-cancellation marker': '$null -eq $script:ConnectionIntent -and $cancelPath' in setup,
+        'Clean recovery precedes fresh setup': reconnect.index('Restore-GephTunSession') < reconnect.index('Start-GephTunSession -Port'),
+        'Residual journal blocks automatic reconnect': 'old session is not fully recovered' in reconnect and "'session.json'" in reconnect,
+        'Cancellation is rechecked after old cleanup': reconnect.index('if (Test-GephTunIntentStopRequested) { return $false }', reconnect.index('Restore-GephTunSession')) < reconnect.index('Start-GephTunSession -Port'),
+        'Reconnect uses a monotonic 180-second checkpoint budget': '[Diagnostics.Stopwatch]::StartNew()' in reconnect and 'TotalSeconds -lt 180' in reconnect,
+        'Reconnect limits three attempts and three cycles per ten minutes': '$attempts -lt 3' in reconnect and 'ReconnectHistory.Count -ge 3' in reconnect and 'TotalSeconds -gt 600' in reconnect,
+        'Geph installation path is pinned through reconnect': 'ConnectionIntent.ProxyPath' in reconnect and 'OrdinalIgnoreCase' in reconnect and 'ConnectionIntent.ProxyPath' in setup,
+        'Physical network is observed again after blocking Geph probe': reconnect.index('$afterProbe =') > reconnect.index('$proxy = Get-GephTunProxy'),
+        'Stable physical network includes address and identity': all(n in function(helper,'Get-GephTunNetworkFingerprint') for n in ('IPAddress','InterfaceIndex','InterfaceGuid','Gateway')),
+        'Peer failures retry complete observations at most three times': '$attempt -le 3' in function(helper,'Get-GephTunPeerRoutes') and 'Get-GephTunPeerRouteSnapshot' in function(helper,'Get-GephTunPeerRoutes'),
+        'Peer diagnostics log socket and failure context': all(n in function(helper,'Write-GephTunPeerDiagnostic') for n in ('LocalAddress','RemoteAddress','OwningProcess','Detail')),
+        'Peer address/adapter reads are not silently ignored': 'Get-NetIPAddress' in peer and '-IncludeHidden -ErrorAction Stop' in peer and 'PEER_SNAPSHOT' in peer,
+        'Missing saved physical route requests a fresh session': 'NETWORK_CHANGED' in peer,
+        'Grace checks firewall/route/DNS invariants before continuing': all(monitor.index(n) < monitor.index('if ($null -ne $peerFailure)') for n in ('Test-GephTunContainment','Test-GephTunInstalledRoutes','Test-GephTunDnsPolicy')),
+        'Peer and DNS grace are both bounded': monitor.count('$outage.Elapsed.TotalSeconds -ge 45') == 2,
+        'Grace only declares Connected after a successful probe': monitor.index("Set-GephTunStatus 'Connected'") > monitor.index('if (-not $probeVerified)'),
+        'DNS heartbeat logs relay pressure and error timestamp': all(n in monitor for n in ('RejectedRequests','HighWaterRequests','LastErrorUtc','UpstreamFailures')),
+        'Fresh sessions do not enable global firewall profiles': 'Set-NetFirewallProfile' not in containment and 'Test-GephTunFirewallBaseline' in containment,
+        'Preflight rejects disabled global firewall profiles': 'Test-GephTunFirewallBaseline' in function(core,'Test-GephTunPreflight') and "@('True','NotConfigured')" in helper,
+        'Legacy global-profile recovery remains available': 'Set-NetFirewallProfile' in function(core,'Remove-GephTunContainment'),
+        'Legacy boot profile residue prevents task deletion': boot.index('A legacy session changed global firewall profiles') < boot.index('try { Unregister-ScheduledTask'),
+        'Boot cleanup verifies remaining owned rules before disarming': 'remainingNrpt.Count -ne 0' in boot and 'remainingFirewall.Count -ne 0' in boot and 'tasks.Count -ne 0' in boot,
+        'UI gates configuration and exit on live intent': ui.count('[IO.File]::Exists($script:IntentPath)') >= 5 and "'Reconnecting'" in ui,
+        'UI displays candidate status and direct-network warning': '(test candidate)' in ui and 'direct internet may be active between sessions' in ui,
+        'DNS incompatible mandatory IPv6 hints are discarded': 'if (required == Ipv6HintSvcParamKey) return false;' in dns,
+        'DNS mandatory references and ordering are validated': all(n in dns for n in ('!keys.Contains(required)','required <= previousMandatory','key <= previousKey','valueLength == 0 || (valueLength & 1) != 0')),
+        'DNS relay maximum concurrency is not increased': 'private const int MaximumWorkers = 16;' in dns,
+        'Runtime claims no general kill switch': 'no general kill switch' in text('README.md').lower(),
+        'Current test runner uses fresh processes and external results': '-NoProfile' in text('tests/Run-UpdateValidation.ps1') and 'Assert-GephPackageOutput' in text('tests/Run-UpdateValidation.ps1'),
+    }
+    expected = {'NETWORK_UNAVAILABLE','NETWORK_CHANGED','PEER_SNAPSHOT','PEER_MISSING','PROXY_UNAVAILABLE','DNS_UNAVAILABLE'}
+    values = set(re.findall(r"'([A-Z_]+)'", function(helper,'Test-GephTunRetryableFailure')))
+    checks['Automatic reconnect uses only the six documented transient codes'] = values == expected
+    for name, passed in checks.items():
+        check('Source invariant: '+name, lambda value=passed: value)
+    fixtures = decode_json(files['tests/dns-mandatory-fixtures.json'])['Tests']
+    check('Twenty distinct DNS INPUT fixtures are present', lambda: len(fixtures) == 20 and len({f['Name'] for f in fixtures}) == 20)
+    for case in fixtures:
+        check('DNS INPUT framing only: '+case['Name'], lambda value=case: inspect_dns_input(value))
+    deps = decode_json(files['DEPENDENCIES.json'])
+    check('Dependency manifest names exactly the retained two binaries', lambda: {b['File'] for b in deps['Binaries']} == set(BINARY_PINS) and len(deps['Binaries']) == 2 and deps['Version'] == VERSION)
+    for name, sha in BINARY_PINS.items():
+        data = files['bin/'+name]
+        check('Retained dependency bytes: '+name, lambda b=data, h=sha: digest(b) == h)
+        def pe_check(b=data):
+            offset = struct.unpack_from('<I', b, 0x3c)[0]
+            return b[:2] == b'MZ' and b[offset:offset+4] == b'PE\0\0' and struct.unpack_from('<H', b, offset+4)[0] == 0x8664
+        check('AMD64 PE header only: '+name, pe_check)
+    failed = sum(t['Result'] != 'PASS' for t in tests)
+    return {'Kind':'StaticSourceChecks','Version':VERSION,'CapturedUtc':dt.datetime.now(dt.timezone.utc).isoformat(),
+            'Scope':'Python AST, lexical framing (NOT PowerShell/C# parse or compile), source assertions, DNS INPUT framing, native SHA/PE checks only.',
+            'PowerShellExecution':'NOT_RUN','CSharpCompilation':'NOT_RUN','NativeWindowsAcceptance':'NOT_RUN',
+            'Total':len(tests),'Passed':len(tests)-failed,'Failed':failed,'Sources':sources(files),'Tests':tests}
+
+def seal(root: Path) -> dict:
+    report = static_checks(root)
+    if report['Failed']:
+        raise ValueError(json.dumps([t for t in report['Tests'] if t['Result'] != 'PASS'], indent=2))
+    write_json(root/'tests/static-results.json', report)
+    current = sources(inventory(root))
+    static_ref = {'Path':'tests/static-results.json','Sha256':digest((root/'tests/static-results.json').read_bytes())}
+    validation = {'Schema':3,'Version':VERSION,'Mode':'STATIC_SOURCE_REVIEW','CapturedUtc':report['CapturedUtc'],
+                  'PowerShellExecution':'NOT_RUN','CSharpCompilation':'NOT_RUN','NativeWindowsAcceptance':'NOT_RUN',
+                  'ProductionQualified':False,'Sources':current,'Evidence':[static_ref],
+                  'StaticChecks':{'Total':report['Total'],'Passed':report['Passed'],'Failed':0},
+                  'PreparedSuitesNotExecuted':['Source','Resilience','Controller','DnsMandatory','BootRecovery','Package']}
+    write_json(root/'tests/current-validation.json', validation)
+    qualification = {'Schema':3,'Version':VERSION,'ProductionQualified':False,'NativeWindowsAcceptance':'NOT_RUN',
+                     'PowerShellExecution':'NOT_RUN','CSharpCompilation':'NOT_RUN','CoverageComplete':False,
+                     'Reason':'Static-checked test candidate. Execute Windows parser/compiler, isolated regressions and live acceptance before production approval.',
+                     'Sources':current,'Evidence':[static_ref,{'Path':'tests/current-validation.json','Sha256':digest((root/'tests/current-validation.json').read_bytes())}]}
+    write_json(root/'QUALIFICATION.json', qualification)
+    files = inventory(root)
+    release = decode_json(files['RELEASE.json'])
+    manifest = {k:release[k] for k in ('Package','Version','Status','Date','InputArchiveSha256')}
+    manifest['Files'] = [{'Path':n,'Bytes':len(b),'Sha256':digest(b)} for n,b in sorted(files.items()) if n != 'PACKAGE-MANIFEST.json']
+    write_json(root/'PACKAGE-MANIFEST.json', manifest)
+    return verify_files(inventory(root))
+
+def verify_files(files: dict[str, bytes]) -> dict:
+    manifest = decode_json(files['PACKAGE-MANIFEST.json'])
+    listed = {}
+    for item in manifest['Files']:
+        name = item['Path']
+        valid_path(name)
+        if name == 'PACKAGE-MANIFEST.json' or name.casefold() in listed:
+            raise ValueError('Duplicate or invalid manifest member')
+        listed[name.casefold()] = name
+        if name not in files or len(files[name]) != item['Bytes'] or digest(files[name]) != item['Sha256'].lower():
+            raise ValueError(f'Manifest mismatch: {name}')
+    if set(listed.values()) | {'PACKAGE-MANIFEST.json'} != set(files):
+        raise ValueError('Manifest coverage is not exact')
+    release = decode_json(files['RELEASE.json'])
+    for key in ('Package','Version','Status','Date','InputArchiveSha256'):
+        if manifest[key] != release[key]:
+            raise ValueError('Manifest/release metadata differ')
+    if release['Version'] != VERSION or release['ProductionQualified'] is not False or release['InputArchiveSha256'] != INPUT_SHA256:
+        raise ValueError('Unexpected candidate identity/qualification')
+    current = sources(files)
+    for name in ('tests/current-validation.json','QUALIFICATION.json'):
+        record = decode_json(files[name])
+        if record['Version'] != VERSION or record['NativeWindowsAcceptance'] != 'NOT_RUN' or record['ProductionQualified'] is not False:
+            raise ValueError('Misrepresented candidate qualification')
+        if record['PowerShellExecution'] != 'NOT_RUN' or record['CSharpCompilation'] != 'NOT_RUN':
+            raise ValueError('Unperformed execution cannot be claimed')
+        if sorted(record['Sources'],key=lambda x:x['Path']) != current:
+            raise ValueError(f'Source binding mismatch: {name}')
+        for item in record['Evidence']:
+            if digest(files[item['Path']]) != item['Sha256']:
+                raise ValueError('Evidence hash mismatch')
+    static = decode_json(files['tests/static-results.json'])
+    if static['Kind'] != 'StaticSourceChecks' or static['Failed'] != 0 or static['Passed'] != static['Total'] or len(static['Tests']) != static['Total'] or static['Total'] < 1 or any(t['Result'] != 'PASS' for t in static['Tests']):
+        raise ValueError('Invalid static evidence totals')
+    if static['Sources'] != current:
+        raise ValueError('Static source evidence has drifted')
+    for name, sha in BINARY_PINS.items():
+        if digest(files['bin/'+name]) != sha:
+            raise ValueError('Retained dependency changed')
+    return {'Version':VERSION,'ManifestEntries':len(listed),'TotalFiles':len(files),'StaticChecks':static['Total'],
+            'ManifestAndSourceEvidence':'PASS','PowerShellExecution':'NOT_RUN','CSharpCompilation':'NOT_RUN',
+            'NativeWindowsAcceptance':'NOT_RUN','ProductionQualified':False}
+
+def read_zip(path: Path) -> dict[str, bytes]:
+    files = {}
+    seen = set()
+    total = 0
+    with zipfile.ZipFile(path) as archive:
+        for item in archive.infolist():
+            if item.is_dir():
+                continue
+            valid_path(item.filename)
+            if not item.filename.startswith('GephTun/') or item.filename.casefold() in seen or stat.S_ISLNK(item.external_attr >> 16):
+                raise ValueError('Unsafe/duplicate archive member or unexpected root')
+            seen.add(item.filename.casefold())
+            total += item.file_size
+            if total > 1024**3 or item.file_size > 100*1024**2:
+                raise ValueError('Archive exceeds the checker size limits')
+            files[item.filename[len('GephTun/'):]] = archive.read(item)
+    return files
+
+def build(root: Path, output: Path) -> dict:
+    root = root.absolute()
+    output = output.absolute()
+    if output.exists() or output.is_relative_to(root):
+        raise ValueError('Use a new ZIP destination outside the package')
+    result = seal(root)
+    files = inventory(root)
+    stamp = dt.date.fromisoformat(decode_json(files['RELEASE.json'])['Date'])
+    output.parent.mkdir(parents=True,exist_ok=True)
+    with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
+        for name,data in sorted(files.items()):
+            member = zipfile.ZipInfo('GephTun/'+name,(stamp.year,stamp.month,stamp.day,0,0,0))
+            member.create_system=3
+            member.external_attr=0o100644 << 16
+            archive.writestr(member,data,compress_type=zipfile.ZIP_DEFLATED,compresslevel=9)
+    loaded=read_zip(output)
+    if files != loaded:
+        raise ValueError('ZIP bytes differ from the source tree')
+    result.update(verify_files(loaded))
+    result.update({'Archive':output.name,'Bytes':output.stat().st_size,'Sha256':digest(output.read_bytes())})
+    return result
+
+def main() -> int:
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action',choices=('check','seal','build','verify'))
+    parser.add_argument('path',type=Path)
+    parser.add_argument('--output',type=Path)
+    args=parser.parse_args()
+    try:
+        if args.action == 'check':
+            result=static_checks(args.path)
+        elif args.action == 'seal':
+            result=seal(args.path)
+        elif args.action == 'build':
+            if args.output is None:
+                raise ValueError('--output is required for build')
+            result=build(args.path,args.output)
+        else:
+            result=verify_files(read_zip(args.path) if args.path.is_file() else inventory(args.path))
+        print(json.dumps(result,indent=2))
+        return 1 if result.get('Failed',0) else 0
+    except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile,struct.error) as exc:
+        print(f'Check/build failed: {exc}',file=sys.stderr)
+        return 2
+
+if __name__ == '__main__':
+    raise SystemExit(main())

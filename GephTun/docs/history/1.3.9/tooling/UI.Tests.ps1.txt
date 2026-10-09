@@ -1,0 +1,1248 @@
+# Portable behavior tests for production UI/launcher/worker logic.
+# Production WinForms startup and real controller/network commands are never run.
+# Run: pwsh -NoProfile -File tests/UI.Tests.ps1 [-ResultJson path]
+[CmdletBinding()]
+param([string]$PackageRoot, [string]$ResultJson, [ValidateRange(1,10000)][int]$StressIterations = 500)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+# $PSScriptRoot is still empty while a param() default is evaluated on Windows
+# PowerShell 5.1 -File runs, so the default is resolved in the script body.
+if (-not $PackageRoot) { $PackageRoot = Split-Path -Parent $PSScriptRoot }
+$script:Cases = New-Object 'System.Collections.Generic.List[object]'
+$script:TestRoot = Join-Path ([IO.Path]::GetTempPath()) ('GephTun-ui-' + [guid]::NewGuid().ToString('N'))
+[void][IO.Directory]::CreateDirectory($script:TestRoot)
+$uiNames = @('Get-StateProperty', 'ConvertTo-UiUtc', 'Enter-UiMutex', 'Write-UiRequest', 'Get-UiRequestAction', 'Read-UiTextSnapshot', 'Invoke-DeferredUiAction',
+    'Test-OperationPending', 'Request-PendingConnectCancellation', 'Test-DisconnectCanStart',
+    'Test-WorkerIdentity', 'Read-TunnelStatus', 'Start-WorkerAction', 'Complete-WorkerResult',
+    'Read-OneWorkerResult', 'Read-WorkerResults', 'Read-UiRequests', 'Request-AppExit', 'Continue-Close', 'Get-UiWrapWidth', 'Get-SelectedProxyPort', 'Get-UiBuildLabel', 'Initialize-UiInputEvents', 'ConvertTo-ProcessArgument')
+$script:SourceAsts = @{}
+$script:AtomicSnapshotReplacements = 0; $script:AtomicSnapshotReads = 0
+foreach ($file in @('GephTun.UI.ps1', 'GephTun.Worker.ps1', 'GephTun.WorkerHost.ps1', 'Launch-GephTun.ps1', 'tests/tray-harness.ps1')) {
+    $tokens = $null; $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PackageRoot $file), [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+    $script:SourceAsts[$file] = $ast
+}
+foreach ($spec in @(
+    @{ File = 'GephTun.UI.ps1'; Names = $uiNames },
+    @{ File = 'GephTun.Worker.ps1'; Names = @('Get-ValidatedWorkerResultPath') },
+    @{ File = 'Launch-GephTun.ps1'; Names = @('Test-ElevationCancelled', 'Assert-UiScriptReadable') },
+    @{ File = 'tests/tray-harness.ps1'; Names = @('Get-HarnessFullPath', 'Assert-HarnessNewPath', 'New-HarnessOutputFile', 'New-HarnessScreenshotDirectory') }
+)) {
+    foreach ($name in $spec.Names) {
+        $matches = @($script:SourceAsts[$spec.File].FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) | Where-Object Name -eq $name)
+        if ($matches.Count -ne 1) { throw "Expected one production function: $name" }
+        . ([scriptblock]::Create($matches[0].Extent.Text))
+    }
+}
+function Assert-True($Condition, [string]$Message = 'Expected true') { if (-not $Condition) { throw $Message } }
+function Assert-Equal($Actual, $Expected, [string]$Message = '') {
+    if ($Actual -cne $Expected) { throw "$Message Expected <$Expected>; got <$Actual>." }
+}
+function Assert-Throws([scriptblock]$Body) {
+    $caught = $false
+    try { & $Body | Out-Null } catch { $caught = $true }
+    if (-not $caught) { throw 'Expected an exception.' }
+}
+function Add-Activity { param([string]$Message, [string]$Kind = 'Info') $script:ActivityMessages.Add($Message) }
+function Update-Controls { }
+function Bring-WindowForward { $script:Reopens++ }
+function Show-Status {
+    param([string]$Status, [string]$Message, $State = $null)
+    $script:UiStatus = $Status
+    $script:DisplayedMessage = $Message
+}
+function Write-GephTunJson {
+    param([string]$Path, $Value)
+    $script:Writes++
+    [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 12))
+}
+function New-Operation {
+    param([string]$Action = 'Connect', [bool]$Received = $false, [bool]$Success = $false, [bool]$Exited = $false)
+    $process = [pscustomobject]@{ HasExited = $Exited; ExitCode = 1; Disposed = $false }
+    $process | Add-Member ScriptMethod Dispose { $this.Disposed = $true }
+    $token = [guid]::NewGuid().ToString('N')
+    return [pscustomobject]@{
+        Action = $Action; Process = $process; Token = $token
+        ResultFile = Join-Path $script:ResultDirectory ($token + '.json')
+        CancelFile = Join-Path $script:ResultDirectory ($token + '.cancel.json')
+        CaptureFile = Join-Path $script:TestRoot ($token + '.log')
+        ResultReceived = $Received; ResultSuccess = $Success; CancelRequested = $false
+        StartedUtc = [DateTime]::UtcNow; SlowNoticeShown = $false; LastResultError = ''; LastCancelError = ''
+    }
+}
+function Wait-TestChildExit {
+    # Windows PowerShell 5.1 Process.WaitForExit(int) can report false after a
+    # redirected child has already exited when no wait handle was bound first.
+    # Poll HasExited instead so a released fixture child is never misreported
+    # as stuck (1.3.8 harness repair for the D-005 family).
+    param([Parameter(Mandatory=$true)]$Process, [int]$TimeoutMilliseconds = 15000)
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
+    while (-not $Process.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+        [Threading.Thread]::Sleep(20)
+    }
+    return $Process.HasExited
+}
+function New-TestChildProcess {
+    param([Parameter(Mandatory=$true)][string]$File, [string]$Arguments = '')
+    $process = [Diagnostics.Process]::new()
+    $hostPath = (Get-Process -Id $PID).Path
+    # 1.3.8 harness repair (D-005 family): the previous Windows branch wrapped
+    # the child in `cmd /c ""exe" ... -LastArg "path"""`. cmd.exe strips the
+    # first and last quotes of that form, appending a stray quote to the LAST
+    # argument, so the lock holder polled a file name that could never exist
+    # and every native Windows run failed these cases. A .NET child process
+    # with UseShellExecute=$false performs no cmd interpretation at all: %, &,
+    # ^ and ! stay literal and each quoted argument round-trips verbatim.
+    $childArguments = '-NoProfile -NonInteractive -File "' + $File + '"'
+    if ($Arguments) { $childArguments += ' ' + $Arguments }
+    $process.StartInfo.FileName = $hostPath
+    $process.StartInfo.Arguments = $childArguments
+    # PowerShell 7 fixtures must remain offline; Windows PowerShell 5.1 ignores these.
+    $process.StartInfo.EnvironmentVariables['POWERSHELL_TELEMETRY_OPTOUT'] = '1'
+    $process.StartInfo.EnvironmentVariables['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1'
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.CreateNoWindow = $true
+    $process.StartInfo.RedirectStandardOutput = $true
+    $process.StartInfo.RedirectStandardError = $true
+    return $process
+}
+function Reset-Fixture {
+    $script:FixtureRoot = Join-Path $script:TestRoot ([guid]::NewGuid().ToString('N'))
+    $script:ResultDirectory = Join-Path $script:FixtureRoot 'results'
+    $script:RequestDirectory = Join-Path $script:FixtureRoot 'requests'
+    [void][IO.Directory]::CreateDirectory($script:ResultDirectory)
+    [void][IO.Directory]::CreateDirectory($script:RequestDirectory)
+    $script:StatusPath = Join-Path $script:FixtureRoot 'status.json'
+    $script:SessionPath = Join-Path $script:FixtureRoot 'session.json'
+    $script:Operations = New-Object 'System.Collections.Generic.List[object]'
+    $script:ActivityMessages = New-Object 'System.Collections.Generic.List[string]'
+    $script:RequestSessionId = 17
+    $script:UiStartedUtc = [DateTime]::UtcNow.AddMinutes(-1)
+    $script:Writes = 0; $script:Reopens = 0
+    $script:UiInputEventsConnected = $false
+    $script:InitialActionPending = 'Show'; $script:StartupFinished = $true
+    $script:StartupState = $null; $script:LastState = $null; $script:LastPollError = ''
+    $script:LastStateLogKey = ''
+    $script:UiRequestHistory = @{}
+    $script:UiRequestSequence = 0
+    $script:LastActionFailure = $null; $script:DisplayedMessage = ''
+    $script:DisconnectQueued = $false; $script:ClosingRequested = $false; $script:AllowClose = $false
+    $script:Form = [pscustomobject]@{ Closed = $false }
+    $script:Form | Add-Member ScriptMethod Close { $this.Closed = $true }
+    $script:UiStatus = 'Disconnected'
+    $script:Palette = @{ Green = 'green'; Red = 'red' }
+    $script:ManualPort = [pscustomobject]@{ Checked = $false }
+    $script:PortNumber = [pscustomobject]@{ Value = 9909 }
+    $script:ProxyHint = [pscustomobject]@{ Text = ''; ForeColor = '' }
+    $script:toolTips = [pscustomobject]@{}
+    $script:toolTips | Add-Member ScriptMethod SetToolTip { param($Control, $Text) }
+}
+function Test-Case {
+    param([string]$Name, [scriptblock]$Body)
+    Reset-Fixture
+    try { & $Body; $script:Cases.Add([pscustomobject]@{ Name = $Name; Passed = $true; Error = '' }); Write-Output "PASS $Name" }
+    catch { $script:Cases.Add([pscustomobject]@{ Name = $Name; Passed = $false; Error = $_.Exception.Message }); Write-Output ("FAIL " + $Name + ': ' + $_.Exception.Message) }
+}
+try {
+    Test-Case 'Production scripts parse without executing native startup' { Assert-Equal $script:SourceAsts.Count 5 }
+    Test-Case 'Layout widths account for content padding and scrollbar space at narrow sizes' {
+        Assert-Equal (Get-UiWrapWidth 940 52 17) 871
+        Assert-Equal (Get-UiWrapWidth 640 104 34) 502
+        Assert-Equal (Get-UiWrapWidth 40 52 17) 16
+        Assert-Equal (Get-UiWrapWidth 0) 16
+        foreach ($width in @(320, 460, 640, 820, 940, 1920)) {
+            $result = Get-UiWrapWidth $width 52 17
+            Assert-True ($result -gt 0 -and $result -le $width)
+        }
+    }
+    Test-Case 'Production layout defers automatic scaling until font and complete control tree exist' {
+        $layout = @($script:SourceAsts['GephTun.UI.ps1'].FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) | Where-Object Name -eq 'Initialize-UiWindow')[0].Extent.Text
+        $suspend = $layout.IndexOf('$script:Form.SuspendLayout()')
+        $font = $layout.IndexOf('$script:Form.Font =')
+        $controls = $layout.IndexOf('$script:Form.Controls.Add($header)')
+        $dimensions = $layout.IndexOf('$script:Form.AutoScaleDimensions =')
+        $scale = $layout.IndexOf('$script:Form.AutoScaleMode =')
+        $resume = $layout.IndexOf('$script:Form.ResumeLayout($true)')
+        Assert-True ($suspend -ge 0 -and $suspend -lt $font -and $font -lt $controls -and $controls -lt $dimensions -and $dimensions -lt $scale -and $scale -lt $resume)
+    }
+    Test-Case 'Production text rows and long messages have no fixed-height or ellipsis clipping policy' {
+        $layout = @($script:SourceAsts['GephTun.UI.ps1'].FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) | Where-Object Name -eq 'Initialize-UiWindow')[0].Extent.Text
+        Assert-Equal ($layout -match 'SizeType\]::Absolute') $false
+        Assert-Equal ($layout -match 'AutoEllipsis = \$true') $false
+        Assert-True ($layout.Contains('$script:BodyViewport.AutoScroll = $true'))
+        Assert-True ($layout.Contains('$proxyOptions.WrapContents = $true'))
+        Assert-True ($layout.Contains('$actions.WrapContents = $true'))
+        Assert-True ($layout.Contains('$script:AutoPort, $script:ManualPort, $script:PortNumber')) 'Both radio buttons must share the flow panel so selection remains exclusive.'
+    }
+    Test-Case 'Proxy port selection preserves manual values and switches back to auto-detect' {
+        $script:ManualPort = [pscustomobject]@{ Checked = $false }
+        $script:PortNumber = [pscustomobject]@{ Value = 9909 }
+        Assert-Equal (Get-SelectedProxyPort) 0
+        $script:ManualPort.Checked = $true
+        Assert-Equal (Get-SelectedProxyPort) 9909
+        $script:PortNumber.Value = 65535
+        Assert-Equal (Get-SelectedProxyPort) 65535
+        $script:ManualPort.Checked = $false
+        Assert-Equal (Get-SelectedProxyPort) 0
+        Assert-Equal $script:PortNumber.Value 65535
+    }
+    Test-Case 'Build identity uses bounded validated release metadata and remains available without it' {
+        $releasePath = Join-Path $script:FixtureRoot 'RELEASE.json'
+        Assert-Equal (Get-UiBuildLabel $releasePath) 'version unavailable'
+        foreach ($version in @('1.3.4', '12.34.56-rc.1')) {
+            [IO.File]::WriteAllText($releasePath, (@{ Version = $version } | ConvertTo-Json))
+            Assert-Equal (Get-UiBuildLabel $releasePath) $version
+        }
+        foreach ($invalid in @('{bad json', '{}', '{"Version":123}', '{"Version":"1.3.4\n"}',
+            '{"Version":"<release>"}', ('{"Version":"1.3.4","Notes":"' + ('x' * 8200) + '"}'), ('x' * 32769))) {
+            [IO.File]::WriteAllText($releasePath, $invalid)
+            Assert-Equal (Get-UiBuildLabel $releasePath) 'version unavailable'
+        }
+    }
+    Test-Case 'Production input handlers bind once and dispatch the selected action and port' {
+        function New-InputFixture {
+            $control = [pscustomobject]@{
+                Checked = $false; Value = 9909
+                CheckedHandlers = New-Object 'Collections.Generic.List[scriptblock]'
+                ValueHandlers = New-Object 'Collections.Generic.List[scriptblock]'
+                ClickHandlers = New-Object 'Collections.Generic.List[scriptblock]'
+            }
+            $control | Add-Member ScriptMethod Add_CheckedChanged { param([scriptblock]$Handler) $this.CheckedHandlers.Add($Handler) }
+            $control | Add-Member ScriptMethod Add_ValueChanged { param([scriptblock]$Handler) $this.ValueHandlers.Add($Handler) }
+            $control | Add-Member ScriptMethod Add_Click { param([scriptblock]$Handler) $this.ClickHandlers.Add($Handler) }
+            return $control
+        }
+        $script:AutoPort = New-InputFixture; $script:ManualPort = New-InputFixture
+        $script:PortNumber = New-InputFixture; $script:CheckButton = New-InputFixture
+        $script:ConnectButton = New-InputFixture; $script:DisconnectButton = New-InputFixture
+        $script:LogsButton = New-InputFixture
+        $script:InputDispatch = New-Object 'Collections.Generic.List[string]'
+        $script:HintResets = 0; $script:ControlUpdates = 0
+        function Start-WorkerAction { param([string]$Action) $script:InputDispatch.Add($Action + ':' + (Get-SelectedProxyPort)) }
+        function Open-LogFolder { $script:InputDispatch.Add('Logs') }
+        function Reset-ProxyHint { $script:HintResets++ }
+        function Update-Controls { $script:ControlUpdates++ }
+        Initialize-UiInputEvents
+        Initialize-UiInputEvents
+        foreach ($button in @($script:CheckButton, $script:ConnectButton, $script:DisconnectButton, $script:LogsButton)) {
+            Assert-Equal $button.ClickHandlers.Count 1
+        }
+        Assert-Equal $script:AutoPort.CheckedHandlers.Count 1
+        Assert-Equal $script:ManualPort.CheckedHandlers.Count 1
+        Assert-Equal $script:PortNumber.ValueHandlers.Count 1
+        $script:ManualPort.Checked = $true; $script:PortNumber.Value = 12345
+        & $script:ManualPort.CheckedHandlers[0]
+        & $script:PortNumber.ValueHandlers[0]
+        & $script:CheckButton.ClickHandlers[0]
+        & $script:ConnectButton.ClickHandlers[0]
+        & $script:DisconnectButton.ClickHandlers[0]
+        & $script:LogsButton.ClickHandlers[0]
+        $script:ManualPort.Checked = $false
+        & $script:AutoPort.CheckedHandlers[0]
+        & $script:CheckButton.ClickHandlers[0]
+        Assert-Equal ($script:InputDispatch -join ',') 'Check:12345,Connect:12345,Disconnect:12345,Logs,Check:0'
+        Assert-Equal $script:HintResets 3
+        Assert-Equal $script:ControlUpdates 1
+    }
+    Test-Case 'Native harness output reservation preserves source files and earlier evidence' {
+        $sourcePath = Join-Path $script:FixtureRoot 'source.ps1'
+        [IO.File]::WriteAllText($sourcePath, '# retain source')
+        $reportPath = Join-Path $script:FixtureRoot 'native.json'
+        $stream = New-HarnessOutputFile $reportPath @($sourcePath)
+        try {
+            $bytes = [Text.Encoding]::UTF8.GetBytes('{"Result":"FAIL"}')
+            $stream.Write($bytes, 0, $bytes.Length); $stream.Flush()
+            Assert-Throws { New-HarnessOutputFile $reportPath @($sourcePath) }
+        } finally { $stream.Dispose() }
+        Assert-Throws { New-HarnessOutputFile $reportPath @($sourcePath) }
+        Assert-Equal ([IO.File]::ReadAllText($reportPath)) '{"Result":"FAIL"}'
+        Assert-Throws { New-HarnessOutputFile $sourcePath @($sourcePath) }
+        Assert-Equal ([IO.File]::ReadAllText($sourcePath)) '# retain source'
+        $screenshots = New-HarnessScreenshotDirectory (Join-Path $script:FixtureRoot 'screenshots') @($sourcePath)
+        $screenshot = Join-Path $screenshots 'case.png'
+        [IO.File]::WriteAllText($screenshot, 'previous image')
+        Assert-Throws { New-HarnessScreenshotDirectory $screenshots @($sourcePath) }
+        Assert-Throws { New-HarnessOutputFile $screenshot @($sourcePath) }
+        Assert-Equal ([IO.File]::ReadAllText($screenshot)) 'previous image'
+    }
+    Test-Case 'Existing unowned UI mutex is acquired' {
+        $name = 'GephTun-test-' + [guid]::NewGuid().ToString('N')
+        $existing = [Threading.Mutex]::new($false, $name)
+        $instance = $null
+        try {
+            $instance = Enter-UiMutex $name
+            Assert-True $instance.Acquired
+        }
+        finally {
+            if ($null -ne $instance) { if ($instance.Acquired) { $instance.Mutex.ReleaseMutex() }; $instance.Mutex.Dispose() }
+            $existing.Dispose()
+        }
+    }
+    Test-Case 'Live successful Connect supervisor does not block operations' {
+        $script:Operations.Add((New-Operation Connect $true $true))
+        Assert-Equal (Test-OperationPending) $false
+    }
+    Test-Case 'Failed Connect in recovery does not block Disconnect' {
+        $script:Operations.Add((New-Operation Connect $true $false))
+        Assert-Equal (Test-OperationPending) $false
+        Assert-Equal (Test-DisconnectCanStart) $true
+    }
+    Test-Case 'Check still waits for process exit after its result' {
+        $script:Operations.Add((New-Operation Check $true $false))
+        Assert-Equal (Test-OperationPending) $true
+    }
+    Test-Case 'Pending Connect cancellation is written once and scoped to its token' {
+        $operation = New-Operation
+        $script:Operations.Add($operation)
+        Request-PendingConnectCancellation
+        Request-PendingConnectCancellation
+        Assert-Equal $script:Writes 1
+        Assert-Equal ((Get-Content -LiteralPath $operation.CancelFile -Raw | ConvertFrom-Json).Token) $operation.Token
+        Assert-True $operation.CancelRequested
+    }
+    Test-Case 'A denied cancellation write keeps safe Disconnect queued and reports the problem once' {
+        $operation = New-Operation
+        $script:Operations.Add($operation)
+        function Write-GephTunJson { throw [UnauthorizedAccessException]::new('Cancellation file is locked by policy.') }
+        Start-WorkerAction Disconnect
+        $count = $script:ActivityMessages.Count
+        Start-WorkerAction Disconnect
+        Assert-True $script:DisconnectQueued
+        Assert-Equal $operation.CancelRequested $false
+        Assert-Equal $script:ActivityMessages.Count $count
+        Assert-True (($script:ActivityMessages -join ' ') -match 'locked by policy')
+    }
+    Test-Case 'Cancellation write recovers after a temporary denial without aborting the pending worker' {
+        $operation = New-Operation
+        $script:Operations.Add($operation)
+        $script:CancelAttempts = 0
+        function Write-GephTunJson {
+            param([string]$Path, $Value)
+            $script:CancelAttempts++
+            if ($script:CancelAttempts -eq 1) { throw [UnauthorizedAccessException]::new('Temporary denial') }
+            [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json))
+        }
+        Request-PendingConnectCancellation
+        Request-PendingConnectCancellation
+        Request-PendingConnectCancellation
+        Assert-Equal $script:CancelAttempts 2
+        Assert-True $operation.CancelRequested
+        Assert-Equal $operation.Process.Disposed $false
+        Assert-Equal (([IO.File]::ReadAllText($operation.CancelFile) | ConvertFrom-Json).Token) $operation.Token
+    }
+    Test-Case 'Completed startup is handled by session Disconnect instead of stale cancellation' {
+        $operation = New-Operation Connect $true $true
+        $script:Operations.Add($operation)
+        Request-PendingConnectCancellation
+        Assert-Equal $script:Writes 0
+    }
+    Test-Case 'Disconnect waits before journal creation and starts as soon as session exists' {
+        $script:Operations.Add((New-Operation))
+        Assert-Equal (Test-DisconnectCanStart) $false
+        [IO.File]::WriteAllText($script:SessionPath, '{}')
+        Assert-Equal (Test-DisconnectCanStart) $true
+    }
+    Test-Case 'Disconnect does not overlap an unfinished Check or another Disconnect' {
+        foreach ($action in @('Check', 'Status', 'Disconnect')) {
+            $script:Operations.Clear(); $script:Operations.Add((New-Operation $action))
+            Assert-Equal (Test-DisconnectCanStart) $false $action
+        }
+    }
+    Test-Case 'Stop during preflight cancels pending auto-Connect and queues safe recovery' {
+        $script:InitialActionPending = 'Connect'
+        $operation = New-Operation
+        $script:Operations.Add($operation)
+        Start-WorkerAction Disconnect
+        Assert-Equal $script:InitialActionPending 'Show'
+        Assert-True $script:DisconnectQueued
+        Assert-True $operation.CancelRequested
+        Assert-Equal $script:UiStatus 'Disconnecting'
+    }
+    Test-Case 'Connect cannot start while recovery is queued or during an active session' {
+        $script:DisconnectQueued = $true
+        Start-WorkerAction Connect
+        $script:DisconnectQueued = $false; $script:UiStatus = 'Connected'
+        Start-WorkerAction Connect
+        Assert-Equal $script:Operations.Count 0
+    }
+    Test-Case 'Check and Connect refuse a saved recovery journal even over a stale disconnected screen' {
+        [IO.File]::WriteAllText($script:SessionPath, '{}')
+        Start-WorkerAction Check
+        Start-WorkerAction Connect
+        Assert-Equal $script:Operations.Count 0
+        Assert-Equal $script:ActivityMessages.Count 2
+        Assert-True (($script:ActivityMessages -join ' ') -match 'Disconnect / Recover')
+    }
+    Test-Case 'Active states without a living supervisor become RecoveryRequired' {
+        function Test-WorkerIdentity { param($State) return $false }
+        foreach ($state in @('Connecting', 'Connected', 'Disconnecting')) {
+            Write-GephTunJson $script:StatusPath @{ Status = $state; Message = 'old' }
+            Read-TunnelStatus
+            Assert-Equal $script:UiStatus 'RecoveryRequired' $state
+        }
+    }
+    Test-Case 'JSON timestamps preserve UTC instead of shifting by the local timezone' {
+        $now = [DateTime]::UtcNow
+        foreach ($value in @($now, [DateTimeOffset]::new($now), $now.ToString('o'))) {
+            Assert-Equal (ConvertTo-UiUtc $value).Ticks $now.Ticks
+        }
+    }
+    Test-Case 'Supervisor identity accepts exact round-trip start time and rejects nearby process lifetimes' {
+        $process = [Diagnostics.Process]::GetProcessById($PID)
+        try {
+            $start = $process.StartTime.ToUniversalTime()
+            foreach ($value in @($start, [DateTimeOffset]::new($start), $start.ToString('o'))) {
+                $state = [pscustomobject]@{ WorkerPid = $PID; WorkerStartUtc = $value }
+                Assert-True (Test-WorkerIdentity $state) 'Exact current-process identity was rejected.'
+            }
+            # Journals write the round-trip string; PS 5.1 reads it as a string
+            # while newer hosts may materialize DateTime. Test that real shape.
+            $roundTrip = [pscustomobject]@{ WorkerPid = $PID; WorkerStartUtc = $start.ToString('o') } | ConvertTo-Json | ConvertFrom-Json
+            Assert-True (Test-WorkerIdentity $roundTrip) 'JSON round-trip changed the exact current-process identity.'
+            foreach ($ticks in @(-10000000L, -1L, 1L, 10000000L)) {
+                $state = [pscustomobject]@{ WorkerPid = $PID; WorkerStartUtc = $start.AddTicks($ticks).ToString('o') }
+                Assert-Equal (Test-WorkerIdentity $state) $false 'A different process start time must never count as a living supervisor.'
+            }
+            Assert-Equal (Test-WorkerIdentity ([pscustomobject]@{ WorkerPid = 0; WorkerStartUtc = $start.ToString('o') })) $false
+            Assert-Equal (Test-WorkerIdentity ([pscustomobject]@{ WorkerPid = $PID; WorkerStartUtc = 'bad' })) $false
+        } finally { $process.Dispose() }
+    }
+    Test-Case 'Running supervisor with stale health confirmation is not shown as connected' {
+        function Test-WorkerIdentity { param($State) return $true }
+        Write-GephTunJson $script:StatusPath @{ Status = 'Connected'; UpdatedUtc = [DateTime]::UtcNow.AddSeconds(-91).ToString('o') }
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'RecoveryRequired'
+        Write-GephTunJson $script:StatusPath @{ Status = 'Connected'; UpdatedUtc = [DateTime]::UtcNow.ToString('o') }
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'Connected'
+    }
+    Test-Case 'Malformed or oversized status produces recovery guidance' {
+        foreach ($text in @('{ bad json', ('x' * 262145), '{"Status":"Invalid"}')) {
+            [IO.File]::WriteAllText($script:StatusPath, $text)
+            Read-TunnelStatus
+            Assert-Equal $script:UiStatus 'RecoveryRequired'
+        }
+    }
+    Test-Case 'Snapshot reader reports missing paths as IO failures and bounds complete content' {
+        $missing = Join-Path $script:FixtureRoot 'missing.json'
+        $caught = $null
+        try { Read-UiTextSnapshot -Path $missing -MaximumBytes 4096 | Out-Null }
+        catch [IO.IOException] { $caught = $_.Exception }
+        Assert-True ($null -ne $caught) 'A disappearing ordinary file must use the IO retry path, not be classified as a redirection.'
+        foreach ($encoding in @([Text.UTF8Encoding]::new($false), [Text.UTF8Encoding]::new($true), [Text.Encoding]::Unicode)) {
+            [IO.File]::WriteAllText($script:StatusPath, '{"Status":"Disconnected"}', $encoding)
+            Assert-Equal (Read-UiTextSnapshot -Path $script:StatusPath -MaximumBytes 4096) '{"Status":"Disconnected"}'
+        }
+        [IO.File]::WriteAllText($script:StatusPath, ('x' * 4097))
+        Assert-Throws { Read-UiTextSnapshot -Path $script:StatusPath -MaximumBytes 4096 }
+    }
+    Test-Case 'Chunked snapshot reads retain complete content at tiny, chunk and maximum bounds' {
+        foreach ($length in @(1, 4095, 4096, 4097, 65536, 262144)) {
+            $expected = 'x' * $length
+            [IO.File]::WriteAllText($script:StatusPath, $expected, [Text.UTF8Encoding]::new($false))
+            Assert-Equal (Read-UiTextSnapshot -Path $script:StatusPath -MaximumBytes $length) $expected
+        }
+        [IO.File]::WriteAllText($script:StatusPath, '', [Text.UTF8Encoding]::new($false))
+        Assert-Equal (Read-UiTextSnapshot -Path $script:StatusPath -MaximumBytes 1) ''
+    }
+    Test-Case 'Chunked snapshots preserve UTF encodings and characters across chunk boundaries' {
+        # A supplementary Unicode character crosses the 4,096-character boundary.
+        # Use numeric construction so this source also parses as UTF-8 without
+        # BOM under Windows PowerShell 5.1.
+        $expected = ('x' * 4095) + [char]::ConvertFromUtf32(0x1F310) + ([string][char]0x7F51 * 4100) + "`r`ncomplete"
+        foreach ($encoding in @([Text.UTF8Encoding]::new($false), [Text.UTF8Encoding]::new($true), [Text.Encoding]::Unicode, [Text.Encoding]::BigEndianUnicode)) {
+            [IO.File]::WriteAllText($script:StatusPath, $expected, $encoding)
+            Assert-Equal (Read-UiTextSnapshot -Path $script:StatusPath -MaximumBytes 65536) $expected
+        }
+    }
+    Test-Case 'Snapshot byte ceilings reject oversized ASCII and multibyte text at every caller limit' {
+        foreach ($limit in @(1, 4096, 65536, 262144)) {
+            [IO.File]::WriteAllText($script:StatusPath, ('x' * ($limit + 1)), [Text.UTF8Encoding]::new($false))
+            Assert-Throws { Read-UiTextSnapshot -Path $script:StatusPath -MaximumBytes $limit }
+            # Character count is within the limit but encoded byte size exceeds it.
+            [IO.File]::WriteAllText($script:StatusPath, ([string][char]0x7F51 * $limit), [Text.UTF8Encoding]::new($false))
+            Assert-Throws { Read-UiTextSnapshot -Path $script:StatusPath -MaximumBytes $limit }
+        }
+    }
+    Test-Case 'A status snapshot that disappears once is retried without a false redirection warning' {
+        function Test-WorkerIdentity { param($State) return $true }
+        Write-GephTunJson $script:StatusPath @{ Status = 'Connected'; UpdatedUtc = [DateTime]::UtcNow.ToString('o') }
+        $script:SnapshotReads = 0
+        $snapshotReader = ${function:Read-UiTextSnapshot}
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            $script:SnapshotReads++
+            if ($script:SnapshotReads -eq 1) { throw [IO.FileNotFoundException]::new('Atomic snapshot was replaced during open.') }
+            & $snapshotReader $Path $MaximumBytes
+        }
+        function Start-Sleep { param([int]$Milliseconds) Assert-Equal $Milliseconds 120 }
+        Read-TunnelStatus
+        Assert-Equal $script:SnapshotReads 2
+        Assert-Equal $script:UiStatus 'Connected'
+        Assert-Equal $script:LastPollError ''
+        Assert-Equal $script:ActivityMessages.Count 0
+    }
+    Test-Case 'A transient status-file collision retries instead of flashing recovery state' {
+        function Test-WorkerIdentity { param($State) return $true }
+        Write-GephTunJson $script:StatusPath @{ Status = 'Connected'; UpdatedUtc = [DateTime]::UtcNow.ToString('o') }
+        # Synchronize a real .NET file lock before reading. Without a ready
+        # handshake this test could pass without ever observing the collision.
+        $readyPath = Join-Path $script:FixtureRoot 'holder-ready'
+        $releasePath = Join-Path $script:FixtureRoot 'holder-release'
+        $holderScript = Join-Path $script:FixtureRoot 'lock-holder.ps1'
+        [IO.File]::WriteAllText($holderScript, @'
+param([string]$Path, [string]$Ready, [string]$Release)
+$ErrorActionPreference = 'Stop'
+$stream = [IO.FileStream]::new($Path, 'Open', 'Read', 'None')
+try {
+    [IO.File]::WriteAllText($Ready, 'locked')
+    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    while (-not [IO.File]::Exists($Release) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 5 }
+}
+finally { $stream.Dispose() }
+'@)
+        $holderArguments = '-Path ' + (ConvertTo-ProcessArgument $script:StatusPath) +
+            ' -Ready ' + (ConvertTo-ProcessArgument $readyPath) + ' -Release ' + (ConvertTo-ProcessArgument $releasePath)
+        $holder = New-TestChildProcess -File $holderScript -Arguments $holderArguments
+        try {
+            [void]$holder.Start()
+            $deadline = [DateTime]::UtcNow.AddSeconds(5)
+            while (-not [IO.File]::Exists($readyPath) -and [DateTime]::UtcNow -lt $deadline -and -not $holder.HasExited) { Start-Sleep -Milliseconds 10 }
+            Assert-True ([IO.File]::Exists($readyPath)) 'The isolated lock holder did not become ready.'
+            Assert-Throws { [IO.File]::ReadAllText($script:StatusPath) }
+            # Release the actual lock only when the production read reaches its
+            # retry boundary. A fixed 140 ms holder delay races host scheduling
+            # and can outlast both 120 ms retries under parallel test load.
+            $script:StatusReadRetries = 0
+            function Start-Sleep {
+                param([int]$Milliseconds)
+                Assert-Equal $Milliseconds 120
+                $script:StatusReadRetries++
+                [IO.File]::WriteAllText($releasePath, 'release at retry boundary')
+                Assert-True (Wait-TestChildExit $holder 15000) 'The isolated lock holder did not release its file.'
+                Assert-Equal $holder.ExitCode 0
+            }
+            Read-TunnelStatus
+            Assert-Equal $script:StatusReadRetries 1 'The real file read must observe one collision before succeeding.'
+            Assert-Equal $script:UiStatus 'Connected' $script:LastPollError
+        } finally {
+            if (-not (Wait-TestChildExit $holder 3000)) { $holder.Kill() }
+            $holder.Dispose()
+        }
+    }
+
+    Test-Case 'UI reads coherent connected states during actual concurrent atomic replacement' {
+        function Test-WorkerIdentity { param($State) return $true }
+        $readyPath = Join-Path $script:FixtureRoot 'snapshot-writer-ready'
+        $startPath = Join-Path $script:FixtureRoot 'snapshot-writer-start'
+        $snapshotCount = [Math]::Max(20, [Math]::Min(1000, $StressIterations))
+        $script:AtomicSnapshotReplacements = $snapshotCount
+        Write-GephTunJson $script:StatusPath @{ Status = 'Connected'; Message = 'snapshot 0'; Generation = 0; UpdatedUtc = [DateTime]::UtcNow.ToString('o') }
+        $writerScript = Join-Path $script:FixtureRoot 'snapshot-writer.ps1'
+        [IO.File]::WriteAllText($writerScript, @'
+param([string]$Path, [string]$Ready, [string]$Start, [int]$Count)
+$ErrorActionPreference = 'Stop'
+[IO.File]::WriteAllText($Ready, 'ready')
+$deadline = [DateTime]::UtcNow.AddSeconds(10)
+while (-not [IO.File]::Exists($Start) -and [DateTime]::UtcNow -lt $deadline) { [Threading.Thread]::Sleep(5) }
+if (-not [IO.File]::Exists($Start)) { throw 'Reader did not begin.' }
+for ($generation = 1; $generation -le $Count; $generation++) {
+    $temporary = $Path + '.replacement'
+    $json = @{ Status = 'Connected'; Message = ('snapshot ' + $generation); Generation = $generation; UpdatedUtc = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json
+    [IO.File]::WriteAllText($temporary, $json, [Text.UTF8Encoding]::new($false))
+    [IO.File]::Replace($temporary, $Path, [System.Management.Automation.Language.NullString]::Value)
+    [Threading.Thread]::Sleep(1)
+}
+'@)
+        $writerArguments = '-Path ' + (ConvertTo-ProcessArgument $script:StatusPath) +
+            ' -Ready ' + (ConvertTo-ProcessArgument $readyPath) + ' -Start ' + (ConvertTo-ProcessArgument $startPath) +
+            ' -Count ' + [string]$snapshotCount
+        $writer = New-TestChildProcess -File $writerScript -Arguments $writerArguments
+        try {
+            [void]$writer.Start()
+            $deadline = [DateTime]::UtcNow.AddSeconds(10)
+            while (-not [IO.File]::Exists($readyPath) -and [DateTime]::UtcNow -lt $deadline -and -not $writer.HasExited) { Start-Sleep -Milliseconds 10 }
+            Assert-True ([IO.File]::Exists($readyPath)) 'The isolated snapshot writer did not become ready.'
+            [IO.File]::WriteAllText($startPath, 'read concurrently')
+            $reads = 0; $intermediateObserved = $false
+            $deadline = [DateTime]::UtcNow.AddSeconds(30)
+            while (-not $writer.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+                Read-TunnelStatus
+                Assert-Equal $script:UiStatus 'Connected' $script:LastPollError
+                Assert-Equal $script:LastState.Message ('snapshot ' + $script:LastState.Generation)
+                if ($script:LastState.Generation -gt 0 -and $script:LastState.Generation -lt $snapshotCount) { $intermediateObserved = $true }
+                $reads++
+            }
+            Assert-True (Wait-TestChildExit $writer 5000) 'The snapshot writer exceeded its finite deadline.'
+            Assert-Equal $writer.ExitCode 0 ($writer.StandardError.ReadToEnd())
+            Assert-True ($reads -gt 0 -and $intermediateObserved) 'At least one intermediate replacement must be read while the writer is active.'
+            Read-TunnelStatus
+            Assert-Equal $script:UiStatus 'Connected' $script:LastPollError
+            Assert-Equal $script:LastState.Generation $snapshotCount
+            $script:AtomicSnapshotReads = $reads + 1
+        }
+        finally {
+            if (-not (Wait-TestChildExit $writer 3000)) { $writer.Kill() }
+            $writer.Dispose()
+        }
+    }
+    Test-Case 'A status snapshot absent during atomic publish is retried before recovery' {
+        function Test-WorkerIdentity { param($State) return $true }
+        $snapshotReader = ${function:Read-UiTextSnapshot}
+        $script:SnapshotReads = 0
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            $script:SnapshotReads++
+            if ($script:SnapshotReads -eq 1) {
+                Write-GephTunJson $Path @{ Status = 'Connected'; UpdatedUtc = [DateTime]::UtcNow.ToString('o') }
+                throw [IO.FileNotFoundException]::new('Atomic publish gap.')
+            }
+            & $snapshotReader $Path $MaximumBytes
+        }
+        function Start-Sleep { param([int]$Milliseconds) Assert-Equal $Milliseconds 120 }
+        Read-TunnelStatus
+        Assert-Equal $script:SnapshotReads 2
+        Assert-Equal $script:UiStatus 'Connected'
+    }
+
+    Test-Case 'A persistent nonmissing status IO failure never reuses disconnected startup state' {
+        function Test-WorkerIdentity { param($State) return $true }
+        $script:StartupState = [pscustomobject]@{ Status = 'Disconnected'; Message = 'stale startup view' }
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            throw [IO.IOException]::new('Persistent status sharing collision.')
+        }
+        function Start-Sleep { param([int]$Milliseconds) Assert-Equal $Milliseconds 120 }
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'RecoveryRequired'
+        Assert-True (($script:ActivityMessages -join ' ') -match 'could not be read')
+    }
+
+    Test-Case 'Snapshot failures hold the last connected presentation while the worker stays alive' {
+        $script:UnreadableSnapshotPolls = 0
+        $script:LastState = [pscustomobject]@{ Status = 'Connected'; Message = 'Tunnel active.'; Worker = [pscustomobject]@{ Id = 4242; StartUtc = 'worker-start' } }
+        $script:UiStatus = 'Connected'
+        function Test-WorkerIdentity { param($State) return $true }
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            throw [IO.IOException]::new('Transient sharing collision while the worker is alive.')
+        }
+        function Start-Sleep { param([int]$Milliseconds) Assert-Equal $Milliseconds 120 }
+        for ($poll = 1; $poll -le 9; $poll++) {
+            Read-TunnelStatus
+            Assert-Equal $script:UiStatus 'Connected' ('poll ' + $poll + ' must hold the last presentation (D-005)')
+        }
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'RecoveryRequired' 'the tenth consecutive failed poll escalates'
+        Assert-True (($script:ActivityMessages -join ' ') -match 'stayed unreadable for ten consecutive')
+    }
+
+    Test-Case 'A dead worker never pins a stale connected presentation' {
+        $script:UnreadableSnapshotPolls = 0
+        $script:LastState = [pscustomobject]@{ Status = 'Connected'; Message = 'Tunnel active.'; Worker = [pscustomobject]@{ Id = 4242; StartUtc = 'worker-start' } }
+        $script:UiStatus = 'Connected'
+        function Test-WorkerIdentity { param($State) return $false }
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            throw [IO.IOException]::new('Sharing collision after worker death.')
+        }
+        function Start-Sleep { param([int]$Milliseconds) Assert-Equal $Milliseconds 120 }
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'RecoveryRequired' 'worker death fails the hold immediately (D-005)'
+    }
+
+    Test-Case 'A status file that stays locked still produces recovery guidance' {
+        function Test-WorkerIdentity { param($State) return $true }
+        Write-GephTunJson $script:StatusPath @{ Status = 'Connected'; UpdatedUtc = [DateTime]::UtcNow.ToString('o') }
+        $hold = [IO.FileStream]::new($script:StatusPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+        try {
+            Read-TunnelStatus
+            Assert-Equal $script:UiStatus 'RecoveryRequired'
+        } finally { $hold.Dispose() }
+    }
+    Test-Case 'Persistent status IO failures stop blocking repeated polls and restore retries after recovery' {
+        Write-GephTunJson $script:StatusPath @{ Status = 'Disconnected'; Message = 'Network restored.' }
+        $snapshotReader = ${function:Read-UiTextSnapshot}
+        $script:SnapshotShouldFail = $true; $script:FailedPollReads = 0; $script:PollRetrySleeps = 0
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            $script:FailedPollReads++
+            if ($script:SnapshotShouldFail) { throw [IO.IOException]::new('Persistent injected sharing denial.') }
+            & $snapshotReader $Path $MaximumBytes
+        }
+        function Start-Sleep {
+            param([int]$Milliseconds)
+            Assert-Equal $Milliseconds 120
+            $script:PollRetrySleeps++
+        }
+        Read-TunnelStatus
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'RecoveryRequired'
+        Assert-Equal $script:FailedPollReads 4 'Only the initial failure gets two immediate retries.'
+        Assert-Equal $script:PollRetrySleeps 2 'Repeated failed polls must leave the UI thread available.'
+        Assert-Equal $script:ActivityMessages.Count 1 'Persistent failure still has one visible explanation.'
+        $script:SnapshotShouldFail = $false
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'Disconnected'
+        Assert-Equal $script:LastPollError ''
+        $script:SnapshotShouldFail = $true
+        Read-TunnelStatus
+        Assert-Equal $script:FailedPollReads 8 'A successful snapshot restores normal collision tolerance.'
+        Assert-Equal $script:PollRetrySleeps 4
+        Assert-Equal $script:UiStatus 'RecoveryRequired'
+    }
+    Test-Case 'Action failure remains visible over a disconnected cached status' {
+        Write-GephTunJson $script:StatusPath @{ Status = 'Disconnected'; Message = 'normal' }
+        $operation = New-Operation Check
+        Complete-WorkerResult $operation $false 'The SOCKS port is closed.'
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'Error'
+        Assert-True ($script:DisplayedMessage -match 'SOCKS port is closed')
+        Assert-True ($script:ProxyHint.Text -match 'Check failed')
+    }
+    Test-Case 'Success clears the previous action failure and reports verified proxy port' {
+        $script:LastActionFailure = @{ Message = 'old error' }
+        Complete-WorkerResult (New-Operation Check) $true 'passed' ([pscustomobject]@{ ProxyPort = 9909 })
+        Assert-Equal $script:LastActionFailure $null
+        Assert-True ($script:ProxyHint.Text -match '9909')
+    }
+    Test-Case 'String success flags are rejected and malformed result warnings are deduplicated' {
+        $operation = New-Operation Check
+        [IO.File]::WriteAllText($operation.ResultFile, '{"Success":"true"}')
+        Read-OneWorkerResult $operation
+        Read-OneWorkerResult $operation
+        Assert-Equal $operation.ResultReceived $false
+        Assert-Equal $script:ActivityMessages.Count 1
+    }
+    Test-Case 'Worker exiting without a valid result becomes an explicit failed operation' {
+        $operation = New-Operation Status $false $false $true
+        $script:Operations.Add($operation)
+        Read-WorkerResults
+        Assert-True $operation.ResultReceived
+        Assert-Equal $operation.ResultSuccess $false
+        Assert-True $operation.Process.Disposed
+        Assert-Equal $script:Operations.Count 0
+        Assert-True ($script:LastActionFailure.Message -match 'without a readable result')
+    }
+    Test-Case 'Unreported slow operation receives one warning without killing its worker' {
+        $operation = New-Operation
+        $operation.StartedUtc = [DateTime]::UtcNow.AddSeconds(-46)
+        $script:Operations.Add($operation)
+        Read-WorkerResults
+        Read-WorkerResults
+        Assert-Equal $script:ActivityMessages.Count 1
+        Assert-Equal $operation.Process.Disposed $false
+        Assert-Equal $operation.ResultReceived $false
+    }
+    Test-Case 'Worker exit removes its result and cancellation files' {
+        $operation = New-Operation Check $false $false $true
+        Write-GephTunJson $operation.ResultFile @{ Success = $true; Message = 'passed'; Details = @{ ProxyPort = 9909 } }
+        Write-GephTunJson $operation.CancelFile @{ Token = $operation.Token }
+        $script:Operations.Add($operation)
+        Read-WorkerResults
+        Assert-Equal ([IO.File]::Exists($operation.ResultFile)) $false
+        Assert-Equal ([IO.File]::Exists($operation.CancelFile)) $false
+        Assert-True $operation.ResultSuccess
+    }
+    Test-Case 'Launcher requests accept only known fresh actions for this desktop session' {
+        $now = [DateTime]::UtcNow
+        $request = [pscustomobject]@{ Action = 'Connect'; SessionId = 17; CreatedUtc = $now.ToString('o') }
+        Assert-Equal (Get-UiRequestAction $request $now) 'Connect'
+        $request.SessionId = 18; Assert-Equal (Get-UiRequestAction $request $now) ''
+        $request.SessionId = 17; $request.Action = 'RunCode'; Assert-Equal (Get-UiRequestAction $request $now) ''
+        $request.Action = 'Disconnect'; $request.CreatedUtc = $now.AddSeconds(-121).ToString('o'); Assert-Equal (Get-UiRequestAction $request $now) ''
+        $request.CreatedUtc = $now.AddSeconds(11).ToString('o'); Assert-Equal (Get-UiRequestAction $request $now) ''
+        $request.CreatedUtc = $script:UiStartedUtc.AddSeconds(-1).ToString('o'); Assert-Equal (Get-UiRequestAction $request $now) ''
+        $request.CreatedUtc = 'bad'; Assert-Equal (Get-UiRequestAction $request $now) ''
+    }
+    Test-Case 'Secondary launcher writes a protected-session command and dispatch consumes it' {
+        $script:Dispatched = ''
+        function Start-WorkerAction { param($Action) $script:Dispatched = $Action }
+        Write-UiRequest Disconnect
+        $requestFile = Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json'
+        $readRequest = Get-Content -LiteralPath $requestFile.FullName -Raw | ConvertFrom-Json
+        Assert-Equal (Get-UiRequestAction $readRequest) 'Disconnect' ($readRequest | ConvertTo-Json -Compress)
+        Read-UiRequests
+        Assert-Equal $script:Dispatched 'Disconnect' ($script:ActivityMessages -join '; ')
+        Assert-Equal $script:Reopens 1
+        Assert-Equal @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json').Count 0
+    }
+    Test-Case 'Queued Connect from a second launcher cannot override a requested Exit' {
+        $script:ClosingRequested = $true
+        $script:Dispatched = ''
+        function Start-WorkerAction { param($Action) $script:Dispatched = $Action }
+        Write-UiRequest Connect
+        Read-UiRequests
+        Assert-Equal $script:Dispatched ''
+        Assert-Equal $script:InitialActionPending 'Show'
+    }
+    Test-Case 'A saved session overrides a cached disconnected status' {
+        Write-GephTunJson $script:StatusPath @{ Status = 'Disconnected'; Message = 'old clean state' }
+        [IO.File]::WriteAllText($script:SessionPath, '{}')
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'RecoveryRequired'
+    }
+    Test-Case 'Failed initial status without a status file is actionable rather than checking forever' {
+        $script:LastActionFailure = @{ Message = 'Status failed: access denied.' }
+        Read-TunnelStatus
+        Assert-Equal $script:UiStatus 'RecoveryRequired'
+        Assert-True ($script:DisplayedMessage -match 'access denied')
+    }
+    Test-Case 'Exit checks the saved session even when the last displayed status is disconnected' {
+        Write-GephTunJson $script:StatusPath @{ Status = 'Disconnected'; Message = 'old' }
+        [IO.File]::WriteAllText($script:SessionPath, '{}')
+        $script:Dispatched = ''
+        function Start-WorkerAction { param($Action) $script:Dispatched = $Action }
+        Request-AppExit
+        Assert-Equal $script:Form.Closed $false
+        Assert-Equal $script:Dispatched 'Disconnect'
+        Assert-True $script:ClosingRequested
+    }
+    Test-Case 'Exit rechecks a connection that changed since the displayed disconnected state' {
+        function Test-WorkerIdentity { param($State) return $true }
+        Write-GephTunJson $script:StatusPath @{ Status = 'Connected'; UpdatedUtc = [DateTime]::UtcNow.ToString('o') }
+        $script:Dispatched = ''
+        function Start-WorkerAction { param($Action) $script:Dispatched = $Action }
+        Request-AppExit
+        Assert-Equal $script:Form.Closed $false
+        Assert-Equal $script:Dispatched 'Disconnect'
+    }
+    Test-Case 'Completed exit refuses to close over a remaining recovery journal' {
+        Write-GephTunJson $script:StatusPath @{ Status = 'Disconnected' }
+        [IO.File]::WriteAllText($script:SessionPath, '{}')
+        $script:ClosingRequested = $true
+        Continue-Close
+        Assert-Equal $script:Form.Closed $false
+        Assert-Equal $script:ClosingRequested $false
+    }
+    Test-Case 'Exit closes after a fresh disconnected status and completed recovery' {
+        Write-GephTunJson $script:StatusPath @{ Status = 'Disconnected' }
+        Request-AppExit
+        Assert-True $script:Form.Closed
+        Assert-True $script:AllowClose
+    }
+    Test-Case 'Exit waits for queued recovery even if cached status says disconnected' {
+        Write-GephTunJson $script:StatusPath @{ Status = 'Disconnected' }
+        $script:DisconnectQueued = $true
+        $script:Operations.Add((New-Operation Check))
+        Request-AppExit
+        Assert-Equal $script:Form.Closed $false
+        Assert-True $script:ClosingRequested
+    }
+    Test-Case 'Repeated stop while preflight is pending does not repeatedly report the same queued action' {
+        $script:Operations.Add((New-Operation))
+        Start-WorkerAction Disconnect
+        $count = $script:ActivityMessages.Count
+        1..50 | ForEach-Object { Start-WorkerAction Disconnect }
+        Assert-Equal $script:ActivityMessages.Count $count
+        Assert-Equal $script:Writes 1
+    }
+    Test-Case 'Successful Status result must include a recognized tunnel state' {
+        foreach ($details in @($null, @{ Status = 'Unknown' }, 'Connected')) {
+            $operation = New-Operation Status
+            Write-GephTunJson $operation.ResultFile @{ Success = $true; Details = $details }
+            Read-OneWorkerResult $operation
+            Assert-Equal $operation.ResultReceived $false
+        }
+    }
+    Test-Case 'Successful Check result must contain a valid verified proxy port' {
+        foreach ($port in @($null, 0, -1, 65536, 'not-a-port', 9909.5)) {
+            $operation = New-Operation Check
+            Write-GephTunJson $operation.ResultFile @{ Success = $true; Details = @{ ProxyPort = $port } }
+            Read-OneWorkerResult $operation
+            Assert-Equal $operation.ResultReceived $false ([string]$port)
+        }
+    }
+    Test-Case 'A numeric verified Check port remains accepted after result validation' {
+        $operation = New-Operation Check
+        Write-GephTunJson $operation.ResultFile @{ Success = $true; Details = @{ ProxyPort = 9909 } }
+        Read-OneWorkerResult $operation
+        Assert-True $operation.ResultReceived
+        Assert-True $operation.ResultSuccess
+    }
+    Test-Case 'Malformed successful Check cannot hide its error after its worker exits' {
+        $operation = New-Operation Check $false $false $true
+        Write-GephTunJson $operation.ResultFile @{ Success = $true; Details = @{ ProxyPort = 'not-a-port' } }
+        $script:Operations.Add($operation)
+        Read-WorkerResults
+        Assert-True $operation.ResultReceived
+        Assert-Equal $operation.ResultSuccess $false
+        Assert-True ($script:LastActionFailure.Message -match 'without a readable result')
+    }
+    Test-Case 'Repeated cancellation and failed-result consumption stays bounded and releases process handles' {
+        for ($iteration = 0; $iteration -lt $StressIterations; $iteration++) {
+            $operation = New-Operation Connect $false $false $true
+            $script:Operations.Add($operation)
+            Request-PendingConnectCancellation
+            Request-PendingConnectCancellation
+            Write-GephTunJson $operation.ResultFile @{ Success = $false; Message = 'Startup cancelled safely.' }
+            Read-WorkerResults
+            Read-WorkerResults
+            Assert-True $operation.Process.Disposed
+            Assert-Equal $script:Operations.Count 0
+            Assert-Equal ([IO.File]::Exists($operation.ResultFile)) $false
+            Assert-Equal ([IO.File]::Exists($operation.CancelFile)) $false
+            Assert-Equal $operation.ResultSuccess $false
+            # Keep fixture logging bounded independently of UI RichTextBox tests.
+            $script:ActivityMessages.Clear()
+        }
+        Assert-Equal $script:Writes ($StressIterations * 2)
+        Assert-Equal @(Get-ChildItem -LiteralPath $script:ResultDirectory -File).Count 0
+    }
+    Test-Case 'Temporarily unreadable launcher requests survive and dispatch once after recovery' {
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        Write-UiRequest Disconnect
+        $requestPath = @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json')[0].FullName
+        $snapshotReader = ${function:Read-UiTextSnapshot}
+        $script:DenyRequestRead = $true
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            if ($script:DenyRequestRead) { throw [IO.IOException]::new('Injected sharing collision.') }
+            & $snapshotReader $Path $MaximumBytes
+        }
+        Read-UiRequests
+        Read-UiRequests
+        Assert-True ([IO.File]::Exists($requestPath)) 'A transient read error must not delete a valid request.'
+        Assert-Equal $script:DispatchedActions.Count 0
+        Assert-Equal $script:ActivityMessages.Count 1 'Repeated identical read errors should not flood Activity.'
+        $script:DenyRequestRead = $false
+        Read-UiRequests
+        Read-UiRequests
+        Assert-Equal ($script:DispatchedActions -join ',') 'Disconnect'
+        Assert-Equal ([IO.File]::Exists($requestPath)) $false
+        Assert-Equal $script:UiRequestHistory.Count 0
+    }
+    Test-Case 'A handled launcher request never replays while its deletion is denied' {
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        Write-UiRequest Disconnect
+        $requestPath = @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json')[0].FullName
+        $script:DenyRequestDelete = $true
+        function Remove-Item {
+            param([string]$LiteralPath, [switch]$Force, [string]$ErrorAction)
+            if ($script:DenyRequestDelete) { throw [IO.IOException]::new('Injected delete sharing denial.') }
+            Microsoft.PowerShell.Management\Remove-Item -LiteralPath $LiteralPath -Force -ErrorAction Stop
+        }
+        Read-UiRequests
+        Assert-Equal ($script:DispatchedActions -join ',') 'Disconnect'
+        Assert-True ([IO.File]::Exists($requestPath))
+        $script:UiStatus = 'Connected' # A later user connection must not be stopped by replay.
+        Read-UiRequests
+        Read-UiRequests
+        Assert-Equal $script:DispatchedActions.Count 1
+        Assert-Equal $script:ActivityMessages.Count 1
+        $script:DenyRequestDelete = $false
+        Read-UiRequests
+        Assert-Equal $script:DispatchedActions.Count 1
+        Assert-Equal ([IO.File]::Exists($requestPath)) $false
+        Assert-Equal $script:UiRequestHistory.Count 0
+    }
+    Test-Case 'Twenty undeletable consumed requests cannot starve a later Disconnect' {
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        foreach ($index in 1..20) { Write-UiRequest Show }
+        $script:BlockedCleanupPaths = @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json' | ForEach-Object FullName)
+        function Remove-Item {
+            param([string]$LiteralPath, [switch]$Force, [string]$ErrorAction)
+            if ($script:BlockedCleanupPaths -contains $LiteralPath) { throw [IO.IOException]::new('Injected old-request cleanup denial.') }
+            Microsoft.PowerShell.Management\Remove-Item -LiteralPath $LiteralPath -Force -ErrorAction Stop
+        }
+        Read-UiRequests
+        Assert-Equal $script:UiRequestHistory.Count 20
+        Write-UiRequest Disconnect
+        # At most two polls: older retries get one final turn, then the newer
+        # request is older than those updated attempt times.
+        Read-UiRequests
+        Read-UiRequests
+        Assert-Equal ($script:DispatchedActions -join ',') 'Disconnect'
+        Assert-Equal @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json').Count 20
+        Read-UiRequests
+        Assert-Equal $script:DispatchedActions.Count 1
+        $script:BlockedCleanupPaths = @()
+        Read-UiRequests
+        Assert-Equal $script:UiRequestHistory.Count 0
+    }
+    Test-Case 'Twenty unreadable requests cannot starve a later readable Disconnect' {
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        foreach ($index in 1..20) { Write-UiRequest Show }
+        $script:BlockedReadPaths = @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json' | ForEach-Object FullName)
+        $snapshotReader = ${function:Read-UiTextSnapshot}
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            if ($script:BlockedReadPaths -contains $Path) { throw [IO.IOException]::new('Injected old-request sharing collision.') }
+            & $snapshotReader $Path $MaximumBytes
+        }
+        Read-UiRequests
+        Assert-Equal $script:DispatchedActions.Count 0
+        Write-UiRequest Disconnect
+        # At most two polls: older retries get one final turn, then the newer
+        # request is older than those updated attempt times.
+        Read-UiRequests
+        Read-UiRequests
+        Assert-Equal ($script:DispatchedActions -join ',') 'Disconnect'
+        Assert-Equal @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json').Count 20
+        $script:BlockedReadPaths = @()
+        Read-UiRequests
+        Assert-Equal $script:UiRequestHistory.Count 0
+        Assert-Equal $script:DispatchedActions.Count 1
+    }
+    Test-Case 'An older readable Stop gets a turn before a stream of later new requests' {
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        Write-UiRequest Disconnect
+        $stopFile = @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json')[0]
+        $snapshotReader = ${function:Read-UiTextSnapshot}
+        $script:DenyOldStop = $true
+        function Read-UiTextSnapshot {
+            param([string]$Path, [int]$MaximumBytes)
+            if ($script:DenyOldStop -and $Path -eq $stopFile.FullName) { throw [IO.IOException]::new('Injected earlier Stop sharing collision.') }
+            & $snapshotReader $Path $MaximumBytes
+        }
+        Read-UiRequests
+        Assert-Equal $script:DispatchedActions.Count 0
+        # Fix relative scheduling times explicitly; no wall-clock sleep/race is
+        # needed to establish that these new requests arrived after the Stop retry.
+        $script:UiRequestHistory[$stopFile.Name].LastAttemptUtc = [DateTime]::UtcNow.AddSeconds(-5)
+        foreach ($index in 1..20) { Write-UiRequest Show }
+        foreach ($file in @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json')) {
+            if ($file.Name -ne $stopFile.Name) { [IO.File]::SetLastWriteTimeUtc($file.FullName, [DateTime]::UtcNow.AddSeconds(-1)) }
+        }
+        $script:DenyOldStop = $false
+        Read-UiRequests
+        Assert-Equal ($script:DispatchedActions -join ',') 'Disconnect' 'Fresh requests cannot permanently outrank an older pending Stop.'
+    }
+    Test-Case 'Consumed request tracking expires and stale requests never dispatch' {
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        $script:UiRequestHistory['old.json'] = @{ Consumed = $true; Error = ''; FirstSeenUtc = [DateTime]::UtcNow.AddSeconds(-131) }
+        Write-UiRequest Connect
+        $file = @(Get-ChildItem -LiteralPath $script:RequestDirectory -Filter '*.json')[0]
+        [IO.File]::SetLastWriteTimeUtc($file.FullName, [DateTime]::UtcNow.AddSeconds(-121))
+        Read-UiRequests
+        Assert-Equal $script:DispatchedActions.Count 0
+        Assert-Equal $script:UiRequestHistory.Count 0
+        Assert-Equal ([IO.File]::Exists($file.FullName)) $false
+    }
+    Test-Case 'A secondary Connect waits for Check or Status completion and dispatches once' {
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        foreach ($action in @('Check', 'Status')) {
+            $script:DispatchedActions.Clear()
+            $operation = New-Operation $action
+            if ($action -eq 'Status') { $operation.ResultReceived = $true }
+            $script:Operations.Add($operation)
+            Write-UiRequest Connect
+            Read-UiRequests
+            Assert-Equal $script:InitialActionPending 'Connect'
+            Invoke-DeferredUiAction
+            Assert-Equal $script:DispatchedActions.Count 0
+            $operation.ResultReceived = $true; $operation.Process.HasExited = $true
+            Invoke-DeferredUiAction
+            Invoke-DeferredUiAction
+            Assert-Equal ($script:DispatchedActions -join ',') 'Connect'
+            Assert-Equal $script:InitialActionPending 'Show'
+            $script:Operations.Clear()
+        }
+    }
+    Test-Case 'Disconnect clears a deferred secondary Connect and later inbox Connect cannot reverse Stop' {
+        $operation = New-Operation Check
+        $script:Operations.Add($operation)
+        Write-UiRequest Connect
+        Read-UiRequests
+        Assert-Equal $script:InitialActionPending 'Connect'
+        Write-UiRequest Disconnect
+        Read-UiRequests
+        Assert-Equal $script:InitialActionPending 'Show'
+        Assert-True $script:DisconnectQueued
+        Write-UiRequest Connect
+        Read-UiRequests
+        Assert-Equal $script:InitialActionPending 'Show'
+        $operation.ResultReceived = $true; $operation.Process.HasExited = $true
+        $script:DispatchedActions = New-Object 'Collections.Generic.List[string]'
+        function Start-WorkerAction { param($Action) $script:DispatchedActions.Add($Action) }
+        Invoke-DeferredUiAction
+        Assert-Equal $script:DispatchedActions.Count 0
+    }
+    Test-Case 'Quoted -File launch round-trips paths containing spaces, apostrophes and command syntax' {
+        $directory = Join-Path $script:FixtureRoot 'odd [name] & ! % ^'
+        [void][IO.Directory]::CreateDirectory($directory)
+        $path = Join-Path $directory ('UI $(throw ''injected'') '' test.ps1')
+        [IO.File]::WriteAllText($path, 'param($InitialAction) "safe:" + $InitialAction')
+        $quoted = ConvertTo-ProcessArgument $path
+        Assert-Equal $quoted ('"' + $path + '"')
+        $process = New-TestChildProcess -File $path -Arguments '-InitialAction Connect'
+        try {
+            [void]$process.Start()
+            Assert-True (Wait-TestChildExit $process 10000) 'Quoted -File child did not exit promptly.'
+            Assert-Equal $process.ExitCode 0 ($process.StandardError.ReadToEnd())
+            Assert-Equal ($process.StandardOutput.ReadToEnd()).Trim() 'safe:Connect'
+        }
+        finally { $process.Dispose() }
+    }
+    Test-Case 'Launcher handles nested UAC cancellation without misclassifying access denied' {
+        $cancelled = [ComponentModel.Win32Exception]::new(1223)
+        Assert-True (Test-ElevationCancelled ([Exception]::new('wrapped', $cancelled)))
+        Assert-Equal (Test-ElevationCancelled ([ComponentModel.Win32Exception]::new(5))) $false
+    }
+    Test-Case 'Launcher validates the UI script before starting a hidden child' {
+        Assert-UiScriptReadable (Join-Path $PackageRoot 'GephTun.UI.ps1')
+    }
+    Test-Case 'Worker result paths reject traversal, sibling directories and cancellation filenames' {
+        $allowed = Join-Path $script:ResultDirectory 'a123.json'
+        Assert-Equal (Get-ValidatedWorkerResultPath $script:FixtureRoot $allowed) $allowed
+        foreach ($path in @((Join-Path $script:FixtureRoot 'outside.json'), (Join-Path $script:ResultDirectory '../escaped.json'), (Join-Path $script:ResultDirectory 'nested/a.json'), (Join-Path $script:ResultDirectory 'token.cancel.json'))) {
+            Assert-Throws { Get-ValidatedWorkerResultPath $script:FixtureRoot $path }
+        }
+    }
+
+    # Execute the real worker in a child PowerShell process against an entirely
+    # fake controller module. This verifies exit codes and finally semantics.
+    $script:WorkerFixture = Join-Path $script:TestRoot 'worker-package'
+    [void][IO.Directory]::CreateDirectory($script:WorkerFixture)
+    Copy-Item -LiteralPath (Join-Path $PackageRoot 'GephTun.Worker.ps1') -Destination (Join-Path $script:WorkerFixture 'GephTun.Worker.ps1')
+    Copy-Item -LiteralPath (Join-Path $PackageRoot 'GephTun.WorkerHost.ps1') -Destination (Join-Path $script:WorkerFixture 'GephTun.WorkerHost.ps1')
+    [IO.File]::WriteAllText((Join-Path $script:WorkerFixture 'GephTun.Core.psm1'), @'
+$script:Root = Join-Path (Join-Path $env:ProgramData 'GephTun') ''
+$script:Mode = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'mode.txt'))
+function Mark([string]$Text) { [IO.File]::AppendAllText((Join-Path $script:Root 'events.txt'), $Text + [Environment]::NewLine) }
+function Initialize-GephTunStorage { [void][IO.Directory]::CreateDirectory((Join-Path $script:Root 'results')) }
+function Get-GephTunRoot { $script:Root }
+function Write-GephTunJson($Path,$Value) { Mark 'result'; [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 10)) }
+function Get-GephTunLock { Mark 'lock'; return 'fake-lock' }
+function Release-GephTunLock($Lock) { Mark 'release' }
+function Write-GephTunLog($Message) { Mark ('log:' + $Message) }
+function Set-GephTunStatus($Status,$Message) { Mark ('status:' + $Status) }
+function Test-GephTunPreflight($Port) { throw 'Injected preflight failure' }
+function Start-GephTunSession($Port,$OwnerProcessId,$OperationToken) {
+    Mark ('token:' + $OperationToken)
+    if ($script:Mode -eq 'stale-session') {
+        [IO.File]::WriteAllText((Join-Path $script:Root 'session.json'), '{}')
+        throw 'Previous session requires recovery'
+    }
+    if ($script:Mode -eq 'connect-failure') { throw 'Injected connect failure' }
+    return @{ Success = $true; Message = 'fake connected' }
+}
+function Watch-GephTunSession { throw 'Injected supervision failure' }
+function Wait-GephTunRecovery { Mark 'recover' }
+function Request-GephTunDisconnect { Mark 'disconnect' }
+function Get-GephTunStatus { @{ Status = 'Disconnected' } }
+Export-ModuleMember -Function *
+'@)
+    function Invoke-FakeWorker {
+        param([string]$Mode, [string]$Action, [bool]$Outside = $false, [bool]$MissingWorker = $false, [bool]$OutsideCapture = $false)
+        $testProgramData = Join-Path $script:WorkerFixture 'program-data'
+        $stateRoot = Join-Path $testProgramData 'GephTun'
+        if (Test-Path -LiteralPath $stateRoot) { Remove-Item -LiteralPath $stateRoot -Force -Recurse }
+        [IO.File]::WriteAllText((Join-Path $script:WorkerFixture 'mode.txt'), $Mode)
+        $result = Join-Path $stateRoot 'results/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json'
+        if ($Outside) { $result = Join-Path $script:WorkerFixture 'forbidden.json' }
+        if (-not $Outside) { [void][IO.Directory]::CreateDirectory((Split-Path -Parent $result)) }
+        $workerHost = Join-Path $script:WorkerFixture 'GephTun.WorkerHost.ps1'
+        $worker = Join-Path $script:WorkerFixture 'GephTun.Worker.ps1'
+        $workerBackup = Join-Path $script:WorkerFixture 'GephTun.Worker.ps1.backup'
+        if ($MissingWorker) { Move-Item -LiteralPath $worker -Destination $workerBackup -Force }
+        $capture = Join-Path $stateRoot 'logs/ui-worker-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $capture))
+        if ($OutsideCapture) {
+            $capture = Join-Path $script:WorkerFixture 'outside/ui-worker-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log'
+            [void][IO.Directory]::CreateDirectory((Split-Path -Parent $capture))
+        }
+        $arguments = '-ResultFile "' + $result + '" -CaptureFile "' + $capture + '"' +
+            ' -Action ' + $Action + ' -OperationToken aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $process = New-TestChildProcess -File $workerHost -Arguments $arguments
+        $process.StartInfo.EnvironmentVariables['ProgramData'] = $testProgramData
+        try {
+            $started = $false
+            foreach ($try in 1..2) {
+                try { [void]$process.Start(); $started = $true; break }
+                catch { if ($try -eq 2) { throw }; Start-Sleep -Milliseconds 250 }
+            }
+            $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
+            if (-not (Wait-TestChildExit $process 15000)) { $process.Kill(); throw 'Isolated test worker timed out.' }
+            $null = $stdout.GetAwaiter().GetResult(); $null = $stderr.GetAwaiter().GetResult()
+            $value = $null
+            if ([IO.File]::Exists($result)) { $value = [IO.File]::ReadAllText($result) | ConvertFrom-Json }
+            $events = @()
+            if ([IO.File]::Exists((Join-Path $stateRoot 'events.txt'))) { $events = [IO.File]::ReadAllLines((Join-Path $stateRoot 'events.txt')) }
+            return [pscustomobject]@{ ExitCode = $process.ExitCode; Result = $value; Events = $events; ResultPath = $result }
+        }
+        finally {
+            $process.Dispose()
+            if ($MissingWorker -and [IO.File]::Exists($workerBackup)) { Move-Item -LiteralPath $workerBackup -Destination $worker -Force }
+        }
+    }
+    Test-Case 'Actual worker reports failed Check with exit 1 and releases its lock' {
+        $result = Invoke-FakeWorker check-failure Check
+        Assert-Equal $result.ExitCode 1
+        Assert-Equal $result.Result.Success $false
+        Assert-Equal $result.Events[-1] 'release'
+    }
+    Test-Case 'Actual worker recovers failed Connect before releasing lock and forwards operation token' {
+        $result = Invoke-FakeWorker connect-failure Connect
+        Assert-Equal $result.ExitCode 1
+        Assert-Equal $result.Result.Success $false
+        Assert-True ($result.Events -contains 'token:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        Assert-True ([Array]::IndexOf($result.Events, 'recover') -lt [Array]::IndexOf($result.Events, 'release'))
+    }
+    Test-Case 'Worker never claims disconnected recovery after preflight leaves an existing journal' {
+        $result = Invoke-FakeWorker stale-session Connect
+        Assert-Equal $result.ExitCode 1
+        Assert-Equal $result.Result.Success $false
+        Assert-True ($result.Events -contains 'status:RecoveryRequired')
+        Assert-Equal ($result.Events -contains 'status:Disconnected') $false
+        Assert-True ([IO.File]::Exists((Join-Path $script:WorkerFixture 'program-data/GephTun/session.json')))
+    }
+    Test-Case 'Supervision failure leaves the consumed startup result intact and recovers before exit' {
+        $result = Invoke-FakeWorker supervision-failure Connect
+        Assert-Equal $result.ExitCode 1
+        Assert-Equal $result.Result.Success $true
+        Assert-Equal @($result.Events | Where-Object { $_ -eq 'result' }).Count 1
+        Assert-True ($result.Events -contains 'status:Error')
+        Assert-True ($result.Events -contains 'recover')
+        Assert-Equal $result.Events[-1] 'release'
+    }
+    Test-Case 'Actual worker refuses to write a result outside its protected results directory' {
+        $result = Invoke-FakeWorker path-failure Check $true
+        Assert-Equal $result.ExitCode 1
+        Assert-Equal ([IO.File]::Exists($result.ResultPath)) $false
+        Assert-Equal @($result.Events | Where-Object { $_ -eq 'lock' }).Count 0
+    }
+    Test-Case 'Worker host refuses an outside result or capture path before fallback publication' {
+        $outsideResult = Invoke-FakeWorker host-outside-result Check $true
+        Assert-Equal $outsideResult.ExitCode 1
+        Assert-Equal ([IO.File]::Exists($outsideResult.ResultPath)) $false
+        $outsideCapture = Invoke-FakeWorker host-outside-capture Check $false $false $true
+        Assert-Equal $outsideCapture.ExitCode 1
+        Assert-Equal ([IO.File]::Exists($outsideCapture.ResultPath)) $false
+    }
+    Test-Case 'Worker host publishes an actionable failure when the worker cannot start' {
+        $result = Invoke-FakeWorker host-start-failure Check $false $true
+        Assert-Equal $result.ExitCode 1
+        Assert-Equal $result.Result.Success $false
+        Assert-True ($result.Result.Message -match 'Worker failed')
+        Assert-True ($result.Result.Details.WorkerLog -match 'logs')
+    }
+}
+finally {
+    Remove-Item -LiteralPath $script:TestRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+$failed = @($script:Cases | Where-Object { -not $_.Passed }).Count
+$report = [pscustomobject]@{
+    Suite = 'UI launcher and isolated worker behavior'; Runtime = $PSVersionTable.PSVersion.ToString()
+    Platform = [Environment]::OSVersion.Platform.ToString(); Total = $script:Cases.Count
+    Passed = $script:Cases.Count - $failed; Failed = $failed
+    NativeWindowsUIVerified = $false; NativeTrayHarness = 'Not run on this host; expanded production-layout and tray harness parsed only'; NetworkMutationsPerformed = $false
+    StressIterations = $StressIterations
+    AtomicSnapshotReplacements = $script:AtomicSnapshotReplacements; AtomicSnapshotReads = $script:AtomicSnapshotReads
+    Scope = 'Production functions extracted without WinForms startup; actual worker child processes use an isolated fake controller module.'
+    Tests = $script:Cases.ToArray()
+    Sources = @(foreach ($source in @('GephTun.UI.ps1', 'GephTun.Worker.ps1', 'GephTun.WorkerHost.ps1', 'Launch-GephTun.ps1', 'Launch-GephTun.cmd', 'Start-GephTun.cmd', 'Stop-GephTun.cmd', 'tests/UI.Tests.ps1', 'tests/tray-harness.ps1')) {
+        [pscustomobject]@{ Path = $source; Sha256 = (Get-FileHash -LiteralPath (Join-Path $PackageRoot $source) -Algorithm SHA256).Hash.ToLowerInvariant() }
+    })
+}
+if ($ResultJson) { [IO.File]::WriteAllText([IO.Path]::GetFullPath($ResultJson), ($report | ConvertTo-Json -Depth 8)) }
+Write-Output ('RESULT: ' + $report.Passed + ' passed; ' + $failed + ' failed; native UI not exercised.')
+if ($failed) { exit 1 }
