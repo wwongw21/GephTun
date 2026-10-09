@@ -1,0 +1,13 @@
+powershell.exe : D:\a\GephTun\GephTun\GephTun\tests\WfpPolicy.Tests.ps1 : Unable to find type 
+[ulong].
+At D:\a\GephTun\GephTun\GephTun\tests\Run-UpdateValidation.ps1:39 char:46
++ ... rrorActionPreference='Continue'; & $engine @arguments *> $log; $code= ...
++                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (D:\a\GephTun\Ge...d type [ulong].:String) [], Remote 
+   Exception
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    + CategoryInfo          : InvalidOperation: (ulong:TypeName) [WfpPolicy.Tests.ps1], RuntimeEx 
+   ception
+    + FullyQualifiedErrorId : TypeNotFound,WfpPolicy.Tests.ps1
+ 

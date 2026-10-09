@@ -1,0 +1,39 @@
+
+[32;1mName                                                                            [0m[32;1m Result[0m[32;1m Detail[0m
+[32;1m----                                                                            [0m [32;1m------[0m [32;1m------[0m
+Repeated snapshots reuse one verified bypass without adding routes or log floods PASS   
+New endpoints produce one periodic summary instead of per-IP normal warnings     PASS   
+Persistent captured socket is escalated but warning is rate-limited              PASS   
+Unused owned routes are retired after the quiet period                           PASS   
+An empty peer snapshot cannot prune owned routes                                 PASS   
+Borrowed routes are never removed by retirement                                  PASS   
+Changed owned route metric is rejected, not overwritten                          PASS   
+Adapter identity changes are rejected before adding a route                      PASS   
+Remembered endpoint is preinstalled on the fresh session gateway                 PASS   
+Wrong image identity cannot seed the endpoint cache                              PASS   
+Old and future endpoint records are ignored                                      PASS   
+Unsafe cache address classes are excluded                                        PASS   
+Cache serialization drops old overflow entries rather than growing unbounded     PASS   
+Actual selected route is required: Competitor                                    PASS   
+Actual selected route is required: WrongGateway                                  PASS   
+Actual selected route is required: Ambiguous                                     PASS   
+Actual selected route is required: Missing                                       PASS   
+Actual selected route is required: QueryFailure                                  PASS   
+Borrowed route metric changes that select another path are refused               PASS   
+Failed retirement preserves route journal and registry for another attempt       PASS   
+Exceptional bypass conditions fail without foreign deletion: Down                PASS   
+Exceptional bypass conditions fail without foreign deletion: NotHardware         PASS   
+Exceptional bypass conditions fail without foreign deletion: RouteQuery          PASS   
+Exceptional bypass conditions fail without foreign deletion: AddFailure          PASS   
+Combined interface and route metrics determine the selected path                 PASS   
+A higher total metric competitor permits the intended physical route             PASS   
+Gateway changes are rejected before installing a stale bypass                    PASS   
+Actual route cleanup retains ownership on uncertainty: AdapterChanged            PASS   
+Actual route cleanup retains ownership on uncertainty: MetricChanged             PASS   
+Actual route cleanup retains ownership on uncertainty: RemovalUnconfirmed        PASS   
+Actual route cleanup retains ownership on uncertainty: RemovalSuccess            PASS   
+Actual route cleanup retains ownership on uncertainty: AlreadyAbsent             PASS   
+Actual route creation journals only newly owned resources: Borrowed              PASS   
+Actual route creation journals only newly owned resources: Added                 PASS   
+Actual route creation journals only newly owned resources: AddFailure            PASS   
+

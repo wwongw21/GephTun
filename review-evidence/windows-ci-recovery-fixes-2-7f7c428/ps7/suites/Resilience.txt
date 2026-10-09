@@ -1,0 +1,38 @@
+
+[32;1mName                                                                                          [0m[32;1m Result[0m[32;1m Detail[0m
+[32;1m----                                                                                          [0m [32;1m------[0m [32;1m------[0m
+Typed failures retain their code through exception wrapping                                    PASS   
+Unknown and security failures are not in the reconnect allow-list                              PASS   
+Only six documented transient classes may reconnect                                            PASS   
+A matching stop request is latched while no session exists                                     PASS   
+A foreign stop token cannot cancel the controller                                              PASS   
+A closed owner cancels retries                                                                 PASS   
+Expired reconnect budget prevents another setup checkpoint                                     PASS   
+The old session is recovered before a fresh connection is attempted                            PASS   
+Cleanup failure cannot start a replacement session                                             PASS   
+Residual session journal prevents reconnect                                                    PASS   
+Disconnect during cleanup prevents a new session                                               PASS   
+Disconnect during the stabilization wait prevents a new session                                PASS   
+An already requested disconnect never starts recovery-driven reconnect                         PASS   
+Geph executable path changes require manual review                                             PASS   
+The network is rechecked after the blocking proxy probe                                        PASS   
+Transient failed starts are bounded and can recover                                            PASS   
+A fourth start is never attempted in one recovery cycle                                        PASS   
+A hard preflight failure is not retried                                                        PASS   
+Rapid reconnect loops trip the circuit breaker                                                 PASS   
+Old reconnect episodes age out of the circuit breaker                                          PASS   
+Peer observation retries take fresh snapshots                                                  PASS   
+Peer observation retries stop after three reads                                                PASS   
+A changed physical gateway is typed for clean-session recovery                                 PASS   
+Disabled firewall baseline is rejected without changing profiles                               PASS   
+Enabled firewall baseline is accepted without mutations                                        PASS   
+Repeated real recovery loop failures stop at three attempts with journal and protection intact PASS   
+Recovery backoff increases and a later successful cleanup ends retries                         PASS   
+Cancellation stops repeated cleanup but preserves incomplete recovery state                    PASS   
+Operator can retry cleanup after the original worker exhausts recovery                         PASS   
+Permission close failure remains an actionable recovery blocker                                PASS   
+Recovery control exception closes permissions and preserves state: CancellationRead            PASS   
+Recovery control exception closes permissions and preserves state: Backoff                     PASS   
+Explicit operator recovery reacquires the mutex after retry exhaustion                         PASS   
+Uncertain controller ownership blocks explicit takeover before cleanup                         PASS   
+

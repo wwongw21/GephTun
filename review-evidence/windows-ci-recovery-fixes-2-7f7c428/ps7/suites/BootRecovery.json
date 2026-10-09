@@ -1,0 +1,226 @@
+{
+  "CapturedUtc": "2026-10-09T18:25:03.8872026Z",
+  "Version": "1.5.0",
+  "Scope": "Actual boot script with isolated filesystem and Windows command doubles; no real boot.",
+  "Total": 43,
+  "Passed": 43,
+  "Failed": 0,
+  "Skipped": 0,
+  "Tests": [
+    {
+      "Result": "PASS",
+      "Test": "Boot confirmed stale recovery succeeds: NoJournal",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot confirmed stale recovery succeeds: Dead",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot confirmed stale recovery succeeds: PidReused",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot confirmed stale recovery succeeds: WrongProcess",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot confirmed stale recovery succeeds: Transient",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot confirmed stale recovery succeeds: Abandoned",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot confirmed stale recovery succeeds: SameNameForeignTask",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot already-clean recovery is idempotent: Empty",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot already-clean recovery is idempotent: TaskAbsent",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: NrptUnreadable",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: FirewallUnreadable",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: ProcessDenied",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: MissingIdentity",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: JournalDenied",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: Malformed",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: Busy",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot uncertain state preserves all recovery: MutexDenied",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot incomplete cleanup preserves recovery: NrptDenied",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot incomplete cleanup preserves recovery: FirewallDenied",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot incomplete cleanup preserves recovery: Remaining",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot incomplete cleanup preserves recovery: VerifyUnreadable",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot task removal failure preserves its script: TaskRemovalDenied",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot task removal failure preserves its script: TaskStillPresent",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot legacy global profile changes retain a path to explicit recovery",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot unreadable task-absence confirmation preserves its script",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot keeps live-session policy and recovery while removing stale foreign-session policy",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Boot failed cleanup can be retried successfully using the retained script",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Live worker JSON round trip preserves exact UTC ticks: LiveOffset",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Live worker JSON round trip preserves exact UTC ticks: LiveFraction",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Live worker JSON round trip preserves exact UTC ticks: LivePwsh",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Uncertain process identity preserves every policy: MalformedTimestamp",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Uncertain process identity preserves every policy: NoZoneTimestamp",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Uncertain process identity preserves every policy: MissingProcessPath",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Uncertain process identity preserves every policy: UnknownTimestampKind",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: ForeignRootTask",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: WrongTaskAction",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: WrongTaskPrincipal",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: WrongTaskLogon",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: WrongTaskRunLevel",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: MissingTaskMetadata",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: MissingPrincipal",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: MultipleActions",
+      "Detail": ""
+    },
+    {
+      "Result": "PASS",
+      "Test": "Unverified task is never unregistered: TaskMetadataDenied",
+      "Detail": ""
+    }
+  ]
+}

@@ -118,7 +118,7 @@ SHA-256:
 Windows execution is unavailable on this Linux host. Actual Windows CI results
 and initial failures are recorded separately in this document; Linux receipts
 and workflow lint are never substituted for Windows CI. Final results for the
-compatibility-corrected revision will be recorded after its new CI run completes.
+compatibility-corrected revision are recorded below with actual uploaded evidence.
 
 Windows-only WFP installation, packet-leak, crash, reboot, physical-network
 acceptance and Windows 11 kill-switch certification are **NOT TESTED**. Native
@@ -149,6 +149,56 @@ There is no broad test-file discovery or invocation of dangerous opt-in scripts.
 Initial Windows CI exercised the launcher/account/ACL logic successfully on both
 engines, including the 5.1 suite failure path and artifact retention. New revision
 results are reported separately below.
+
+## Final GitHub Actions results
+
+Both push run [37973012651](https://github.com/wwongw21/GephTun/actions/runs/37973012651)
+and PR run [37973018026](https://github.com/wwongw21/GephTun/actions/runs/37973018026)
+completed successfully on source commit
+`7f7c4288e0bd986d8ed16e3acdf6ad1dc5275da9`. Subsequent commits containing only
+review evidence/documentation do not alter the tested package bytes.
+The actual push-run uploaded artifacts are committed under
+`review-evidence/windows-ci-recovery-fixes-2-7f7c428/`. Both Windows source-receipt
+hash lists were verified against the current package, not just the GitHub job
+conclusion. The initial failed run remains separately preserved.
+
+| Job | Actual host | Outcome |
+| --- | --- | --- |
+| Linux integrity/static | Ubuntu 24.04 / Python 3.12 | Integrity PASS; 250 static checks passed; package preservation and artifact upload passed. |
+| Windows isolated PowerShell 5.1 | Windows Server 2022, 5.1.20348.5622; Administrator=false | 9/9 suites, 253 passed, 0 failed, 0 skipped; verification and package preservation passed. |
+| Windows isolated PowerShell 7 | Windows Server 2022, 7.6.6; Administrator=false | 9/9 suites, 253 passed, 0 failed, 0 skipped; verification and package preservation passed. |
+
+Each Windows receipt reports Source 40, WfpPolicy 26, Bypasses 35, Protection 30,
+Resilience 34, Controller 18, DnsMandatory 20, BootRecovery 43 and Package 7
+passing checks. All suite processes exited 0. Host receipts, verifier results,
+summary, individual JSON/text logs and launcher logs were retrieved. This verifies
+Windows isolated regression execution and current-host parser/compiler behavior;
+it does **not** certify Windows 11, native WFP installation or packet leaks.
+
+The completed environment supports the isolated development workflow. The
+checksum-verified PowerShell installer and startup instructions are saved in
+environment configuration; Git HTTPS, GitHub API and artifact storage retrieval
+were exercised. The user controls environment publication. No new task is needed
+for the access issue resolved here.
+
+Draft PR: https://github.com/wwongw21/GephTun/pull/1, targeting the original
+candidate branch. No merge, production release, native acceptance, or live
+protection/network testing was performed.
+
+Additional exact commands used for GitHub validation:
+
+```bash
+gh api repos/wwongw21/GephTun/actions/runs/37973012651/jobs
+gh api repos/wwongw21/GephTun/actions/runs/37973018026/jobs
+gh api repos/wwongw21/GephTun/actions/runs/37973012651/artifacts
+python3 /tmp/gephtun-download-ci.py 37973012651 /tmp/gephtun-ci-revision2
+```
+
+The download helper first uses `gh run download` with each artifact's explicit
+name. On the CLI's redirected-blob Forbidden error it uses a normal TLS-verified
+HTTPS request to the authorized temporary storage URL, without forwarding API
+credentials or printing that URL. ZIP paths are validated before extraction.
+Only ordinary run metadata and test receipts/logs are committed.
 
 ## Remaining risks and operator path
 
