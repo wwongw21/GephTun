@@ -1,0 +1,571 @@
+{
+  "repository": "wwongw21/GephTun",
+  "branch": "main",
+  "sha": "98c01ed2a3af3e571a77abb115db1ef664700bd7",
+  "coverage": "Default branch contains only a 9-byte README and no runtime. To avoid missing actual work, inspected code-bearing recovery branch and its documented original candidate context.",
+  "additional_branches": [
+    {
+      "branch": "fix/gephtun-1.5.0-recovery",
+      "sha": "9f8ecdfecab4d7cd7a6884c86bd2d56e99c286ed",
+      "coverage": "Core storage/process identity and recovery, WFP policy/lease C#, worker lifecycle, transport approval, bypass routing, standalone boot cleanup, qualification and packaging checks reviewed; source exported read-only under /workspace/review/gephtun-recovery."
+    },
+    {
+      "branch": "candidate/gephtun-1.5.0-test",
+      "sha": "452180886b43f1faed849c57af18315052e1d755",
+      "coverage": "Fetched and used as documented original-candidate context; earlier findings addressed on recovery branch were not re-reported as current defects."
+    }
+  ],
+  "findings": [],
+  "noted": [
+    {
+      "category": "Noted",
+      "file": "GephTun/QUALIFICATION.json",
+      "lines": [
+        4,
+        5,
+        8
+      ],
+      "evidence": "Recovery package explicitly sets ProductionQualified=false, NativeWindowsAcceptance=NOT_RUN, CoverageComplete=false. The corresponding START-HERE.md warns persistent blocking survives disconnect/reboot. Treat as an unqualified test candidate until live native acceptance; a static pass is not leak, WFP, reboot, crash or restoration certification."
+    }
+  ],
+  "tests": [
+    {
+      "command": "python GephTun/tools/release_tool.py check GephTun",
+      "result": "PASS: exact manifest/source evidence, 126 manifest entries, 127 files, 250 recorded static checks"
+    },
+    {
+      "command": "python GephTun/tools/release_tool.py static GephTun",
+      "result": "PASS: 250/250 current static checks; current output saved /workspace/review/gephtun-static-current.json"
+    },
+    {
+      "command": "Current Windows CI evidence supplied by parent",
+      "result": "Successful run 37973491806 at recovery SHA 9f8ecdfecab4d7cd7a6884c86bd2d56e99c286ed on 2026-10-09; not locally rerun and not native WFP acceptance"
+    }
+  ],
+  "limitations": [
+    "PowerShell executable unavailable in this environment; no PowerShell runtime or C# compile result claimed.",
+    "Windows-only WFP/leak/reboot/crash/NRPT/route/task/physical-network acceptance not run.",
+    "No new confirmed source defect found within reviewed recovery paths; this does not establish production qualification."
+  ],
+  "name": "GephTun",
+  "evidence_file": "report.json",
+  "ci_observation": {
+    "repo": "GephTun",
+    "total_count": 5,
+    "runs": [
+      {
+        "name": "GephTun candidate tests",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "9f8ecdfecab4d7cd7a6884c86bd2d56e99c286ed",
+        "head_branch": "fix/gephtun-1.5.0-recovery",
+        "url": "https://github.com/wwongw21/GephTun/actions/runs/37973491806",
+        "created_at": "2026-10-09T18:28:13Z"
+      },
+      {
+        "name": "GephTun candidate tests",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "7f7c4288e0bd986d8ed16e3acdf6ad1dc5275da9",
+        "head_branch": "fix/gephtun-1.5.0-recovery",
+        "url": "https://github.com/wwongw21/GephTun/actions/runs/37973018026",
+        "created_at": "2026-10-09T18:24:09Z"
+      },
+      {
+        "name": "GephTun candidate tests",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "7f7c4288e0bd986d8ed16e3acdf6ad1dc5275da9",
+        "head_branch": "fix/gephtun-1.5.0-recovery",
+        "url": "https://github.com/wwongw21/GephTun/actions/runs/37973012651",
+        "created_at": "2026-10-09T18:24:06Z"
+      }
+    ]
+  },
+  "inventory": {
+    "repo": "GephTun",
+    "sha": "98c01ed2a3af3e571a77abb115db1ef664700bd7",
+    "files": 1,
+    "source_exts": [
+      [
+        ".md",
+        1
+      ]
+    ],
+    "tests": 0,
+    "ci": []
+  },
+  "handoff": {
+    "repository": "wwongw21/GephTun",
+    "repository_url": "https://github.com/wwongw21/GephTun",
+    "audience": [
+      "Windows networking maintainer",
+      "WFP/security reviewer",
+      "Release qualification engineer",
+      "Maintainer handing the candidate to a local VM operator"
+    ],
+    "outcome": "Preserve the exact candidate and distinguish existing static/isolated evidence from native Windows qualification. No new confirmed source defect was found in the reviewed recovery paths. The handoff defines the remaining evidence gates without claiming they ran or authorizing privileged execution.",
+    "status": "OPEN qualification handoff; not a production-release approval",
+    "reviewed_refs": [
+      {
+        "branch": "main",
+        "sha": "98c01ed2a3af3e571a77abb115db1ef664700bd7",
+        "content": "Only a 9-byte README; no runtime implementation on the default branch",
+        "role": "Default-branch inventory",
+        "finding": "Branch-content fact, not a confirmed source defect"
+      },
+      {
+        "branch": "fix/gephtun-1.5.0-recovery",
+        "sha": "9f8ecdfecab4d7cd7a6884c86bd2d56e99c286ed",
+        "content": "GephTun 1.5.0 recovery-fixes-2 package, tests, CI and review evidence",
+        "role": "Primary reviewed implementation",
+        "local_source_snapshot": "/workspace/review/gephtun-recovery"
+      },
+      {
+        "branch": "candidate/gephtun-1.5.0-test",
+        "sha": "452180886b43f1faed849c57af18315052e1d755",
+        "content": "Original candidate",
+        "role": "Historical context for recovery-branch fixes; earlier findings fixed in recovery were not re-reported as current defects"
+      }
+    ],
+    "qualification_state": {
+      "package_version": "1.5.0",
+      "candidate_revision": "recovery-fixes-2",
+      "channel": "Test candidate",
+      "production_qualified": false,
+      "native_windows_acceptance": "NOT_RUN",
+      "coverage_complete": false,
+      "automatic_crash_recovery": "NOT_IMPLEMENTED; no automatic controller restart is expected",
+      "authoritative_files": [
+        "GephTun/RELEASE.json",
+        "GephTun/QUALIFICATION.json",
+        "GephTun/VALIDATION.md",
+        "GephTun/START-HERE.md",
+        "GephTun/WINDOWS-ACCEPTANCE.md"
+      ],
+      "interpretation": "Bundled qualification metadata describes authoring/package evidence and remains static-only. Separately observed Windows CI success is isolated regression evidence, not permission to change that package metadata or claim native WFP/leak/reboot qualification."
+    },
+    "architecture": {
+      "purpose": "Wrap one separately installed Geph local SOCKS proxy with a Windows IPv4 TCP tunnel, constrained relay DNS, journaled network changes and a persistent WFP direct-egress block.",
+      "components": [
+        {
+          "paths": [
+            "GephTun/Launch-GephTun.cmd",
+            "GephTun/Launch-GephTun.ps1",
+            "GephTun/GephTun.UI.ps1"
+          ],
+          "responsibility": "Launch and show the operator interface; expose connect, disconnect/recover and explicit protection controls."
+        },
+        {
+          "paths": [
+            "GephTun/GephTun.WorkerHost.ps1",
+            "GephTun/GephTun.Worker.ps1",
+            "GephTun/GephTun.Resilience.ps1"
+          ],
+          "responsibility": "Run a dedicated connection controller, own the session mutex/intent, supervise failures, apply bounded reconnect/recovery, publish status and close temporary permissions on exit. No installed restart service is claimed."
+        },
+        {
+          "paths": [
+            "GephTun/GephTun.Core.psm1"
+          ],
+          "responsibility": "Protect ProgramData state, validate process identity and paths, atomically write/read journals, apply and retire owned route/DNS changes, and coordinate recovery without deleting foreign state."
+        },
+        {
+          "paths": [
+            "GephTun/GephTun.Wfp.cs",
+            "GephTun/GephTun.Protection.ps1"
+          ],
+          "responsibility": "Keep persistent/boot blocking independent of the controller process; manage temporary permissions in a dynamic WFP session. Transport permissions name exact reviewed Geph images and physical interfaces; approved files are held open against replacement during a lease."
+        },
+        {
+          "paths": [
+            "GephTun/GephTun.Bypasses.ps1"
+          ],
+          "responsibility": "Observe, validate and journal physical routes to Geph peers, verify the route Windows actually selects, bound the registry/cache and retire only owned stale routes. Cached endpoints are an optimization, not routing authority."
+        },
+        {
+          "paths": [
+            "GephTun/GephTun.Network.cs"
+          ],
+          "responsibility": "Implement bounded SOCKS/network probing and local relay DNS with input framing checks. The supported application tunnel is IPv4 TCP; this is not a claim of general IPv6/UDP forwarding."
+        },
+        {
+          "paths": [
+            "GephTun/GephTun-BootReconcile.ps1"
+          ],
+          "responsibility": "Remove verified stale owned NRPT/firewall leftovers at boot and retire only a verified owned scheduled task. It retains uncertain ownership and does not deliberately remove persistent WFP protection."
+        },
+        {
+          "paths": [
+            "GephTun/Emergency-Unlock-GephTun.ps1",
+            "GephTun/Protection-GephTun.ps1"
+          ],
+          "responsibility": "Provide explicit-consent normal unlock and a standalone local emergency WFP unlock; the emergency path does not repair all routes/DNS or erase a session journal."
+        },
+        {
+          "paths": [
+            "GephTun/bin",
+            "GephTun/third_party",
+            "GephTun/DEPENDENCIES.json"
+          ],
+          "responsibility": "Supply pinned tun2socks/Wintun dependencies and provenance material. Hash pins establish the packaged identities, not a current comprehensive vulnerability screen or independent binary reproducibility."
+        },
+        {
+          "paths": [
+            "GephTun/tools/release_tool.py",
+            "GephTun/tests",
+            ".github/workflows/gephtun-tests.yml",
+            ".github/scripts/Test-GephTunCandidate.ps1"
+          ],
+          "responsibility": "Bind package inventory/source evidence; perform static and isolated regression suites; run separate Windows PowerShell and PowerShell 7 CI without native WFP installation."
+        }
+      ],
+      "invariants_to_preserve": [
+        "Disconnect, tray exit, worker death and reboot do not mean direct-internet unlock.",
+        "Dynamic permissions disappear with the owning session; the persistent blocker remains.",
+        "Unknown process, journal, task, route, adapter or filter ownership is not treated as safely absent.",
+        "Recovery is bounded, reports blockers and preserves uncertain state for an explicit operator retry.",
+        "A matching route's existence is insufficient: the selected route/interface/gateway must satisfy the session contract.",
+        "Only explicit reviewed Geph image identities receive physical transport permission; a general PowerShell/browser/DNS bypass is not an acceptable qualification workaround.",
+        "Manifest integrity is not a publisher signature, a successful API response is not packet-leak evidence, and a green UI is not traffic qualification."
+      ]
+    },
+    "confirmed_findings": [],
+    "noted_items": [
+      {
+        "id": "GEPHTUN-NOTE-1",
+        "status": "OPEN",
+        "category": "Qualification gap, not a newly discovered code defect",
+        "location": "GephTun/QUALIFICATION.json:4-8",
+        "evidence": "ProductionQualified=false, NativeWindowsAcceptance=NOT_RUN, CoverageComplete=false",
+        "impact": "The candidate cannot yet support a production protection claim.",
+        "next_step": "Complete the native evidence gates below for the exact candidate on the supported Windows target."
+      },
+      {
+        "id": "GEPHTUN-NOTE-2",
+        "status": "OPEN",
+        "category": "Repository navigation/release decision",
+        "location": "main README.md versus recovery branch",
+        "evidence": "Default branch contains no runtime while the reviewed recovery code is on a nondefault branch.",
+        "impact": "A maintainer or integrator using only main will not obtain the candidate implementation.",
+        "next_step": "Document the intended candidate ref and artifact explicitly. Consider default-branch or release-channel changes only after review/qualification; none were performed here."
+      }
+    ],
+    "already_observed_evidence": [
+      {
+        "check": "Python release_tool check on exported recovery source",
+        "command": "python /workspace/review/gephtun-recovery/GephTun/tools/release_tool.py check /workspace/review/gephtun-recovery/GephTun",
+        "result": "PASS: 126 manifest entries, 127 files, exact manifest/source evidence; package remains unqualified",
+        "scope": "Inventory/source binding only; no PowerShell runtime, C# compilation or native WFP execution"
+      },
+      {
+        "check": "Current Python static checks",
+        "command": "python /workspace/review/gephtun-recovery/GephTun/tools/release_tool.py static /workspace/review/gephtun-recovery/GephTun",
+        "result": "250 passed, 0 failed",
+        "receipt": "/workspace/review/gephtun-static-current.json",
+        "scope": "Python AST, lexical/source assertions, DNS input fixtures and native dependency hash/PE checks; not actual PowerShell/C# parsing/compilation or traffic acceptance"
+      },
+      {
+        "check": "Separate Windows CI observation supplied by parent reviewer",
+        "run_url": "https://github.com/wwongw21/GephTun/actions/runs/37973491806",
+        "sha": "9f8ecdfecab4d7cd7a6884c86bd2d56e99c286ed",
+        "date": "2026-10-09",
+        "result": "Successful connected GitHub Actions run",
+        "scope": "Workflow uses Windows Server 2022 matrix powershell.exe/pwsh.exe and standard-user isolated validation. Do not interpret run-level success as native Windows 11 WFP/leak/reboot certification or invent uninspected per-suite totals."
+      },
+      {
+        "check": "Review checkout integrity",
+        "result": "No tracked source edits in GephTun checkout. Extra branches were fetched; recovery source was exported to the review directory."
+      }
+    ],
+    "evidence_preservation": {
+      "status": "OPEN for subsequent qualification runs; current review receipts retained",
+      "required_records": [
+        "Exact repository SHA and branch, plus exact tested archive SHA-256",
+        "PACKAGE-MANIFEST.json and RELEASE/QUALIFICATION/source-binding records",
+        "Unique outside-package result directory for every run; do not overwrite a previous receipt",
+        "Windows build, PowerShell engine/version, administrator/token status and local/remote session context",
+        "Exact Geph executable paths, versions and SHA-256 values; Geph must be in local SOCKS mode with its native VPN mode off",
+        "Physical/tunnel interface identities, route selection/LUID generation and WFP state before/during/after each case",
+        "Timestamped controller/boot/helper logs and packet captures from an independent or externally located observation point",
+        "FAIL/BLOCKED/NOT_RUN cases and cleanup outcome, including any preserved session/intent journal",
+        "Foreign route/firewall/task baseline so noninterference can be checked"
+      ],
+      "rules": [
+        "Reuse evidence only for the exact unchanged source/artifact and stated host/test scope.",
+        "Preserve docs/history and original candidate evidence; do not relabel it as current acceptance.",
+        "Do not reseal or rewrite package qualification merely to make a failing integrity check pass; if source changes, regenerate through supported tooling and bind fresh evidence to the new candidate.",
+        "Keep emergency files locally available before native work; deleting the package or rebooting is not an unlock mechanism.",
+        "Retain journals and foreign-state snapshots through recovery and rollback; no blanket firewall reset or unrelated route deletion."
+      ]
+    },
+    "prioritized_sequence": [
+      {
+        "order": 1,
+        "status": "OPEN",
+        "work": "Select the exact recovery SHA/archive as the candidate and preserve a receipt bundle. Keep main, original candidate and recovery refs distinct.",
+        "depends_on": []
+      },
+      {
+        "order": 2,
+        "status": "OPEN",
+        "work": "Provision the documented disposable local-console Windows 11 x64 test target and run the non-mutating default verifier/suites there. Reuse existing unchanged-source static evidence; rerun it only when source/artifact changes warrant a new binding.",
+        "depends_on": [
+          1
+        ]
+      },
+      {
+        "order": 3,
+        "status": "OPEN",
+        "work": "After separately authorized local VM setup and explicit operator consent, execute the standalone native WFP installation/readback/removal smoke gate. Preserve cleanup status.",
+        "depends_on": [
+          2
+        ]
+      },
+      {
+        "order": 4,
+        "status": "OPEN",
+        "work": "Run packet-observed connected/disconnected, existing-flow, peer/network-change, crash, explicit-unlock and reboot/BFE qualification cases.",
+        "depends_on": [
+          3
+        ]
+      },
+      {
+        "order": 5,
+        "status": "OPEN",
+        "work": "Run the documented endpoint-rotation soak and native update/rollback acceptance. Resolve any newly observed failure as a new reviewed candidate with fresh scoped evidence.",
+        "depends_on": [
+          4
+        ]
+      },
+      {
+        "order": 6,
+        "status": "OPEN",
+        "work": "Review all required receipts against the supported compatibility statement, then make an explicit release-channel/qualification decision. No production promotion follows automatically from this handoff.",
+        "depends_on": [
+          5
+        ]
+      }
+    ],
+    "qualification_gates": [
+      {
+        "gate": "1. Target-host non-mutating validation",
+        "status": "OPEN on supported Windows 11 target",
+        "prerequisites": [
+          "Exact pinned GephTun package",
+          "Windows 11 x64 and 64-bit Windows PowerShell 5.1 for the supported target",
+          "Fresh processes and writable result space outside the package",
+          "No source modifications during validation"
+        ],
+        "proposed_commands": [
+          "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Verify-GephTun.ps1",
+          "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\tests\\Run-UpdateValidation.ps1"
+        ],
+        "command_directory": "Extracted GephTun package directory",
+        "acceptance": [
+          "Integrity verifier accepts exact current bytes",
+          "Source parser/current-host C# compiler succeeds",
+          "Nine isolated suites Source, WfpPolicy, Bypasses, Protection, Resilience, Controller, DnsMandatory, BootRecovery and Package produce complete honest receipts",
+          "No native WFP filter installation or network mutation occurs in the default suite",
+          "A parser/compiler failure blocks later deployment rather than being treated as an acceptable skip"
+        ],
+        "limits": "Passing default suites exercises managed plans, fixtures and doubles. It does not validate Windows packet filtering, physical routing, leak prevention or reboot behavior.",
+        "rollback_or_abort": "Keep failure receipts and unchanged package; stop progression to native gates until the failure is understood."
+      },
+      {
+        "gate": "2. Native WFP smoke",
+        "status": "OPEN; NOT_RUN",
+        "authorization_boundary": "Proposed operator test only. This handoff does not authorize execution, administrator elevation, persistent blocking, VM changes or host network changes.",
+        "prerequisites": [
+          "Disposable Windows 11 x64 VM snapshot",
+          "Local console and local administrator account; never remote-only/RDP control",
+          "Complete emergency unlock files retained locally",
+          "Fresh PowerShell process and no existing GephTun WFP policy",
+          "Unique external result path",
+          "Operator reviews WINDOWS-ACCEPTANCE.md and explicitly types TEST BLOCKING"
+        ],
+        "proposed_command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\tests\\Wfp-NativeSmoke.ps1 -AllowNetworkDisruption -ResultJson \"$env:TEMP\\GephTun-150-native-smoke.json\"",
+        "change_surface": "The existing opt-in smoke script installs persistent/boot WFP blocking and attempts owned-policy cleanup in finally. No source repair is proposed here.",
+        "invariants": [
+          "Refuse pre-existing policy and an active session mutex owner",
+          "Install/read back/remove only candidate-owned policy",
+          "An interrupted process may leave persistent blocking; do not promise automatic unlock",
+          "A failed remote connection alone is not accepted as proof of packet blocking"
+        ],
+        "acceptance": [
+          "Baseline transaction is readable and matches expected persistent policy with zero temporary permits",
+          "Direct literal-IP TCP does not succeed under the disconnected baseline",
+          "Explicit cleanup leaves no owned sublayer/filter and ordinary networking is restored",
+          "Partial precommit failure leaves no partial policy",
+          "Foreign policy/session state remains unchanged"
+        ],
+        "regression_cases": [
+          "Clean VM",
+          "Existing GephTun policy refusal",
+          "Active temporary owner refusal",
+          "API error before commit",
+          "Cleanup error with retained diagnostic",
+          "Interrupted process tested only in controlled follow-on failure qualification"
+        ],
+        "risk": "Persistent network blocking can survive process loss or reboot. A smoke pass is not crash/reboot/leak qualification.",
+        "rollback_or_abort": "Use the reviewed explicit local unlock/recovery path or restore the disposable VM snapshot; preserve failure evidence and do not continue release promotion."
+      },
+      {
+        "gate": "3. Packet-observed privacy and recovery matrix",
+        "status": "OPEN; NOT_RUN",
+        "prerequisites": [
+          "Gate 1 and native smoke pass for exact tested artifact",
+          "Separate local VM authorization and packet-capture setup",
+          "Exact reviewed Geph installation in local SOCKS mode",
+          "Baseline and foreign-state snapshots",
+          "Independent packet observation that distinguishes application traffic from allowed maintenance/Geph transport"
+        ],
+        "traffic": [
+          "Ordinary IPv4 TCP",
+          "IPv6",
+          "UDP/QUIC",
+          "Port-53 DNS",
+          "HTTPS DNS",
+          "Long-lived flows established before protection and before route changes",
+          "Allowed narrow DHCP/NDP/Geph TCP traffic identified separately"
+        ],
+        "cases_and_acceptance": [
+          {
+            "case": "Enable protection with existing direct TCP/UDP flows",
+            "acceptance": "Existing ordinary direct flows cease, not just newly opened connections."
+          },
+          {
+            "case": "Protected but disconnected",
+            "acceptance": "No ordinary direct internet; local control and documented narrow maintenance exceptions remain usable."
+          },
+          {
+            "case": "Geph bootstrap and real connection",
+            "acceptance": "Exact approved Geph paths reconnect; a browser or PowerShell using the same relay destination does not inherit physical permission; no broad system DNS fallback."
+          },
+          {
+            "case": "Current tunnel traffic",
+            "acceptance": "IPv4 TCP and relay DNS work; IPv6/UDP/LAN behavior matches the stated policy rather than an implied full-IP tunnel."
+          },
+          {
+            "case": "DNS interruption and peer rotation",
+            "acceptance": "Retries stay bounded, failure is visible, protection remains, and diagnostics/registries stay bounded."
+          },
+          {
+            "case": "Wi-Fi/gateway change and Ethernet insertion",
+            "acceptance": "Old permissions retire; new route, source, adapter GUID and LUID generation are revalidated; no direct fallback."
+          },
+          {
+            "case": "Existing-flow route change and inbound-triggered reauthorization",
+            "acceptance": "An old tunnel source with a physical next hop is not permitted; reply authorization remains scoped to the correct interface."
+          },
+          {
+            "case": "Disconnect and tray Exit",
+            "acceptance": "Temporary permits disappear while persistent blocking remains; ordinary direct internet stays blocked."
+          },
+          {
+            "case": "Worker crash",
+            "acceptance": "Dynamic permits disappear through session rundown, persistent baseline remains, and manual Recover/Connect works. Automatic restart is not expected."
+          },
+          {
+            "case": "Tunnel or DNS helper death",
+            "acceptance": "Failure becomes visible without direct fallback or implicit unlock."
+          },
+          {
+            "case": "Reboot, BFE stop/start and security-software coexistence",
+            "acceptance": "Boot/runtime policy remains correct with no claimed-protected traffic gap; no auto-connect is expected."
+          },
+          {
+            "case": "Filter tampering, duplicate lease, interface replacement",
+            "acceptance": "Uncertainty is reported; temporary permission is closed; the controller does not silently unlock."
+          },
+          {
+            "case": "Changed Geph binary and stale cache",
+            "acceptance": "Trust is refused until explicit review; cache cannot grant routing authority."
+          },
+          {
+            "case": "Normal/emergency explicit unlock",
+            "acceptance": "User consent is required, only owned policy is removed, no active temporary owner is bypassed, and route recovery remains possible."
+          }
+        ],
+        "failure_policy": "Any failed required privacy assertion blocks promotion. Do not obtain a pass by granting powershell.exe, all destinations or generic physical DNS egress.",
+        "rollback_or_abort": "Retain packet captures and state snapshots, complete owned recovery and explicit unlock when deliberately restoring direct internet, or restore the disposable VM snapshot. Do not erase journals or foreign policy to hide an incomplete cleanup."
+      },
+      {
+        "gate": "4. Soak, update and rollback",
+        "status": "OPEN; NOT_RUN",
+        "acceptance": [
+          "At least 24 hours of endpoint rotation with bounded registry/cache and useful aggregate logs",
+          "Owned route retirement does not break still-live transport",
+          "Before an old-version launch, explicitly unlock and verify no orphan policy",
+          "Update/rollback preserves recovery journals and foreign routes/firewall/task state",
+          "Newly changed Geph executable hashes require explicit renewed trust",
+          "Every required supported case has PASS evidence or an explicit unresolved FAIL/BLOCKED that prevents promotion"
+        ],
+        "risk": "A stale or mismatched artifact can make existing receipts inapplicable; changing executable hashes while a lease is active is intentionally refused.",
+        "rollback_or_abort": "Stop/recover, use explicit unlock with its stated consent, verify restoration, and retain both candidate and prior artifacts plus exact receipts. Emergency WFP unlock does not by itself repair orphan routes/DNS."
+      }
+    ],
+    "documented_recovery_commands_for_review_only": [
+      {
+        "purpose": "Normal explicit direct-internet unlock after recovery",
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Protection-GephTun.ps1 -Action Disable -AllowDirectInternet",
+        "prerequisites": "Local administrator context; deliberate operator choice; complete normal recovery and no retained active session journal",
+        "status": "NOT_RUN; no execution authorization implied"
+      },
+      {
+        "purpose": "Standalone emergency WFP unlock",
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Emergency-Unlock-GephTun.ps1 -AllowDirectInternet",
+        "prerequisites": "64-bit Windows administrator context; local GephTun.Wfp.cs; deliberate operator choice; no active temporary owner",
+        "status": "NOT_RUN; removes owned WFP protection only, does not repair all routes/DNS or erase journals"
+      }
+    ],
+    "limits_and_mitigations": [
+      {
+        "limit": "No PowerShell executable on the review host",
+        "mitigation": "Current local evidence is Python-only; separate Windows CI is identified by run/SHA/scope. Do not claim a local PowerShell/C# run."
+      },
+      {
+        "limit": "Native Windows WFP/traffic/reboot acceptance absent",
+        "mitigation": "Keep ProductionQualified=false until explicit native gates have scoped evidence."
+      },
+      {
+        "limit": "Actual Geph compatibility is not established by an archive name",
+        "mitigation": "Record and test exact Geph paths/hashes/version in local SOCKS mode; native VPN mode remains off."
+      },
+      {
+        "limit": "No unattended automatic crash recovery",
+        "mitigation": "Document manual recovery expectations and test fail-closed worker loss; do not add a watchdog/service implicitly as part of qualification."
+      },
+      {
+        "limit": "WSL/VM/vSwitch/raw-driver combinations are excluded by the acceptance document unless separately designed/tested",
+        "mitigation": "Keep support statements narrow; the disposable test VM is the host environment, not a claim to support all host virtualization traffic paths."
+      },
+      {
+        "limit": "No exhaustive line-by-line proof or current comprehensive dependency-vulnerability scan",
+        "mitigation": "Preserve pins/provenance and request a separate scoped dependency/security assessment if needed for release."
+      }
+    ],
+    "evidence_files": [
+      "/workspace/review/vpn.json",
+      "/workspace/review/gephtun-static-current.json",
+      "/workspace/review/gephtun-recovery/GephTun/WINDOWS-ACCEPTANCE.md",
+      "/workspace/review/gephtun-recovery/GephTun/QUALIFICATION.json"
+    ],
+    "completion_boundary": "No source fixes are claimed because no new confirmed defect was found. All proposed qualification/release work is OPEN. No privileged tests, host configuration changes, branch changes, issue writes or production publication were performed."
+  },
+  "handoff_date": "2026-10-22",
+  "all_findings_status": "OPEN",
+  "implementation_status": "No repairs applied; proposed work only.",
+  "delivery_notes": {
+    "destination_repository": "wwongw21/GephTun",
+    "status": "All findings remain OPEN; documentation transfer only.",
+    "portable_evidence": "This JSON retains the complete repository-specific handoff. Historical /workspace paths are evidence references and prerequisites, not portable hyperlinks. Applicable repository-specific diagnostics are included alongside the report.",
+    "diagnostics_included": [
+      "gephtun-static-current.json"
+    ],
+    "not_included": "Original environments, model weights, user data and complete source snapshots are not included. Clone the pinned source and follow the recorded prerequisites. Bug-demonstration scripts intentionally assert pre-fix behavior; they are not a post-fix passing suite."
+  }
+}
