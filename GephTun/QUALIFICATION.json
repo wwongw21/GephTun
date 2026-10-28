@@ -1,0 +1,239 @@
+{
+  "Schema": 3,
+  "Version": "1.5.0",
+  "CandidateRevision": "application-icons-1",
+  "BaseCandidateRevision": "optional-kill-switch-1",
+  "BaseCandidateArchiveSha256": "41E7A3A76DC952623453448F82E81AB6325338011FE9EB68601E32C9AA684F1F",
+  "ProductionQualified": false,
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "PowerShellExecution": "NOT_RUN_FOR_REPAIRED_CANDIDATE",
+  "CSharpCompilation": "PASS_TWO_UNCHANGED_SOURCES_COMPILE_ONLY",
+  "CoverageComplete": false,
+  "Reason": "Second-review repair candidate for runner receipt consistency. Current source identity remains hash-bound; Windows PowerShell execution and verifier/runner/identity tests have not been run. C# compilation evidence is limited to two unchanged sources and compile-only scope. This is not qualification.",
+  "Sources": [
+    {
+      "Path": "Create-GephTunShortcut.ps1",
+      "Sha256": "3A433F1F350530624607DEAD747C188D67FF94435A2DFC40FF0ADE7BF907314F"
+    },
+    {
+      "Path": "DEPENDENCIES.json",
+      "Sha256": "7802252DE9609333062955175029506DE85464F8F8F54DE0725BB44CE968FB2D"
+    },
+    {
+      "Path": "Emergency-Unlock-GephTun.ps1",
+      "Sha256": "67630C0337C73B291AFDA0DEAE1B81C52FB0EA9AA535578C667E5BA2E2155766"
+    },
+    {
+      "Path": "GephTun-BootReconcile.ps1",
+      "Sha256": "22A0A4C9A77D06455828E9216E50FF825174BDA381A86C91174060FF93BD506A"
+    },
+    {
+      "Path": "GephTun.Bypasses.ps1",
+      "Sha256": "413BD87290E9DA9CEF87A1D9ABDABCAC54FF6FBE9286D4ECC84EC693EB44C6EF"
+    },
+    {
+      "Path": "GephTun.Core.psm1",
+      "Sha256": "10923628C400D0E918EEF801AC0F20AB751B6F86753FE76524807A68C3DDCA42"
+    },
+    {
+      "Path": "GephTun.Network.cs",
+      "Sha256": "D5AF45962BA84886E62FA5385304870D46237362722F384D259EA1B00AB34A39"
+    },
+    {
+      "Path": "GephTun.Protection.ps1",
+      "Sha256": "7DA4F53A6FE86F1DEFE5EDB17488B46DF10D07D19837BB5A60046CB17A1FFF89"
+    },
+    {
+      "Path": "GephTun.Resilience.ps1",
+      "Sha256": "CC80808F518CB51FD2673C1F737DBFAEA012DF1358E74E5804E5D841CA17CA9D"
+    },
+    {
+      "Path": "GephTun.UI.ps1",
+      "Sha256": "08D639F7B6AA9DFB8296DBBE7F50B30EFF3A16DBE25CE430EE9EFA962F31C365"
+    },
+    {
+      "Path": "GephTun.Wfp.cs",
+      "Sha256": "4853A984F851C6F6128081AE2CD90D3B34489F81AA4AA9000661EFCE18327BD0"
+    },
+    {
+      "Path": "GephTun.Worker.ps1",
+      "Sha256": "498232D33F5A1B4D3DEAE7751C91101310FA7A8365368A112CF83FBB8AE23E9B"
+    },
+    {
+      "Path": "GephTun.WorkerHost.ps1",
+      "Sha256": "4C22E7A3BEB7A0A4A6BB33E3C5C7B219D5DD8622E530C854D8A79E50D75E3461"
+    },
+    {
+      "Path": "Launch-GephTun.cmd",
+      "Sha256": "C4A8708C6F2F3046620C746AF58C915AFC2DFB829D3E97655FFD516D8834BDBC"
+    },
+    {
+      "Path": "Launch-GephTun.ps1",
+      "Sha256": "92E374AC014DCDB6037F1A60C31BD521502D739056B82708C074FFEBB0AF5A33"
+    },
+    {
+      "Path": "Protection-GephTun.cmd",
+      "Sha256": "5CDBCCE84B1E38E5111E2149AF43EE4EFB3DBF636C6CFF46D8BE1785A888BF12"
+    },
+    {
+      "Path": "Protection-GephTun.ps1",
+      "Sha256": "5C9428D82F34F8B13DECC28B4A79EAFFB09A56E20086554CE98219134E3278C0"
+    },
+    {
+      "Path": "RELEASE.json",
+      "Sha256": "1595A8D12C760D25765EA440660EABF3085F384072F0030DF86A4AFC7BDCF701"
+    },
+    {
+      "Path": "Start-GephTun.cmd",
+      "Sha256": "D36714EB01DB025B7C71D6477C5B12E5A6A7F683DC8262E6F68A9844914B50B2"
+    },
+    {
+      "Path": "Stop-GephTun.cmd",
+      "Sha256": "A0C2DB5C91C7C0F28153CCC4CBCBC011B1A9EA8D0C45362C5D6A33A016CFAA26"
+    },
+    {
+      "Path": "tests/BootRecovery.Tests.ps1",
+      "Sha256": "3D0D75B5D7222C3EA2E7CD4A92872FEEB41954814F5896BE1D541B53C3EC601B"
+    },
+    {
+      "Path": "tests/Bypasses.Tests.ps1",
+      "Sha256": "4C5F97E8443CBE4CE262867997484F736444B868054E9ACE2098990C14D777D0"
+    },
+    {
+      "Path": "tests/Controller.Tests.ps1",
+      "Sha256": "484FB538B59995F1DC77372C948A0B538ECF4DAF486822CA98F8EA5261DFD4F3"
+    },
+    {
+      "Path": "tests/Diagnostics.Tests.ps1",
+      "Sha256": "FDCDA3E739937683531FD3527669099DB5EE85EE9C76CF728BAF4141DDE81FE7"
+    },
+    {
+      "Path": "tests/DnsMandatory.Tests.ps1",
+      "Sha256": "41C36821E061CB40FAF64052A2A3DA19055E0ACF209538D8965CB82794194AE1"
+    },
+    {
+      "Path": "tests/IdentitySafeguards.Tests.ps1",
+      "Sha256": "D7C7B2E754BAD5F1604997204F918102FE74BEFA0C814705517FD63881149292"
+    },
+    {
+      "Path": "tests/Measure-WindowsResources.ps1",
+      "Sha256": "7A373677709DAFC1B734A271F25134E8E00B7E2DB796429112ADDD93AC3D3450"
+    },
+    {
+      "Path": "tests/Package.Common.ps1",
+      "Sha256": "3CC5A1926BCD3FDDA766635715764388438DEF056D1EA624C6845F429AB84DE5"
+    },
+    {
+      "Path": "tests/Package.Tests.ps1",
+      "Sha256": "1005353FFABB5AD55F7F149A0D6FD839C2C94BF0DAA43C5600FE8EF382CBD9E6"
+    },
+    {
+      "Path": "tests/Protection.Tests.ps1",
+      "Sha256": "B4C011A08019E130920570EF18684ED12B66278FBFF0B44AFC29B30DF26AF38C"
+    },
+    {
+      "Path": "tests/proxy-helper-driver.ps1",
+      "Sha256": "2B37A5E015D9E27E7FF7E57276E5E85F236E23F14DFB44D91B02A9722B2EB130"
+    },
+    {
+      "Path": "tests/proxy-helper-tests.py",
+      "Sha256": "91D4298E086D796FF52A791CAEEC5A3A9C9DB7C58798B48413F20C460F0914EB"
+    },
+    {
+      "Path": "tests/Resilience.Tests.ps1",
+      "Sha256": "182435B449F1BAA80B96062665105993BAE545506CBD11782B1676EA8BFDE102"
+    },
+    {
+      "Path": "tests/Run-UpdateValidation.ps1",
+      "Sha256": "D1581CBEE35362CB5EE3D1ED4347CE4042644635A0F8D74ABBFCE402586CFFE7"
+    },
+    {
+      "Path": "tests/Targeted-D001-SvcParamFilter.ps1",
+      "Sha256": "5E869092C59B0162CB48FC11C1122ADE34B96E568109023F28C06FF235BFE4EB"
+    },
+    {
+      "Path": "tests/Test-NrptConflict.ps1",
+      "Sha256": "FA0C4594767F23C5EBB4E86D00B1682FDB11F3A92EBE9DF8317FA168D251C6A5"
+    },
+    {
+      "Path": "tests/tray-harness.ps1",
+      "Sha256": "B2AA7CA70D467B569E29A861C7DB08C7BA755BAFBE976BDCEA0E5EFAD8D479B4"
+    },
+    {
+      "Path": "tests/Validate-Source.ps1",
+      "Sha256": "6F3D8D9B62810632C93988D1ECE7B2E0EFC3DE64817CB71847DCC47E57809C52"
+    },
+    {
+      "Path": "tests/Verify-IdentityCandidate.Tests.ps1",
+      "Sha256": "D298EEA7921C71B521A0981C41101876A8FD12C2D2E4FF0E4F073516C231E9DD"
+    },
+    {
+      "Path": "tests/Wfp-NativeSmoke.ps1",
+      "Sha256": "D3C4BBC478240DA4BEC3479EADF7649158F98227A48C4FA0E0CE58549D6E5E7D"
+    },
+    {
+      "Path": "tests/WfpPolicy.Tests.ps1",
+      "Sha256": "E48E20BECBAC854836F69F50B450EE42111F54F1A6BAD45BC124F80441F3C945"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-BypassQueries.ps1",
+      "Sha256": "0DCAEF571E0591031DECFFFDA2B57EE4105F0F20761979F784A09D41375C997A"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Sha256": "D1A68AF98298C527FBC4A94C807F9517F8159879282039F45AE0FE73CFE69272"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Sha256": "1BD8E8844312D1C64AB1673693854E2F9D6E2BAF3975C0225948946EABF036F8"
+    },
+    {
+      "Path": "tools/build_icons.py",
+      "Sha256": "C49A0CA2C9FB9F82E782C6B6D94918337EA04EF7A2B4D22EA6A0145139D2031C"
+    },
+    {
+      "Path": "tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Sha256": "0C9EE08F87F55CBDBB3F2B252F8C4C5E89B87989D6CB447B3C2DD87BD901181C"
+    },
+    {
+      "Path": "tools/diagnostics/Diagnostics.Common.ps1",
+      "Sha256": "2817BB6EBD4471D35F53FDBB021DF91CCE8078EDE29769AB4B25DC0819C808D6"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Sha256": "19CFD0457CCB67757B11DBC8113915EFD0A24BBFA728F6DABA00382A9AA21598"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Sha256": "218BE09C3F4AEB03CB4CDC58724D9DAFEF4D73D878BA3903A9690C34E45439B6"
+    },
+    {
+      "Path": "tools/diagnostics/Measure-CimWorkload.ps1",
+      "Sha256": "E5F7D397FFF9BDD45BDFC547A9536FBA1015B9C24C1A117FDC2043F34BA29938"
+    },
+    {
+      "Path": "tools/release_tool.py",
+      "Sha256": "8D7A4F84A797C98BDA81C6E10C2A2FBFF128916F38C156A95FE76AB3B8CEC079"
+    },
+    {
+      "Path": "Verify-GephTun.ps1",
+      "Sha256": "5F7D4E6E9339742D1C09140A3EE5CAF6FA626A3D6B4ACDAD9B54706CEDAD3FF5"
+    }
+  ],
+  "Evidence": [
+    {
+      "Path": "tests/current-validation.json",
+      "Sha256": "3BE91E1A069CC7D37E8126BE4FBD1A5FB26B768C35FC36B1C91E8800E43E488E"
+    },
+    {
+      "Path": "tests/static-results.json",
+      "Sha256": "BF3A019034748761890FBB1E25E644887F82FCB32111E27D871DCA7B73FEA986"
+    }
+  ],
+  "ApplicationIcons": {
+    "BaseCandidateRevision": "identity-safeguards-verifier-repair-3",
+    "Scope": "Window/taskbar icon, five tray icons, and shortcut creation only.",
+    "Qualification": "The base preparation fields below remain conservative; icon checks are recorded separately."
+  },
+  "PostPreparationNote": "Historical preparation status is retained. Two isolated test-harness compatibility repairs were applied during2026-10-28 finalization; fresh executed regression receipts are recorded outside the installable package, without a native qualification claim."
+}

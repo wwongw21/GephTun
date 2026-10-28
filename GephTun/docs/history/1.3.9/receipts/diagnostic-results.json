@@ -1,0 +1,144 @@
+{
+    "CapturedUtc":  "2026-10-04T21:24:33.0726651Z",
+    "Total":  20,
+    "Passed":  20,
+    "Failed":  0,
+    "Skipped":  0,
+    "Sources":  [
+                    {
+                        "Path":  "tools/diagnostics/Diagnostics.Common.ps1",
+                        "Sha256":  "3df2f899fdaae6f99304b6ec66287e722b5772df63527e9e016670ceb7fbdeaf"
+                    },
+                    {
+                        "Path":  "tools/diagnostics/Get-GephTunDiagnostics.ps1",
+                        "Sha256":  "e5be64c177e2f58e7ac2acffe21f1470ac115d6a3169c25d7d689b30353bbc7c"
+                    },
+                    {
+                        "Path":  "tools/diagnostics/Compare-GephTunFiles.ps1",
+                        "Sha256":  "c934914eb7b3f32d5d2b162412fc999db852406410b19b8b5cb7f39ba66eef17"
+                    },
+                    {
+                        "Path":  "tools/diagnostics/Measure-CimWorkload.ps1",
+                        "Sha256":  "fa555e4f902d8b8adad2312e6e5951a978414433781b643bde208f124757eb42"
+                    },
+                    {
+                        "Path":  "tools/diagnostics/Get-GephTunCleanupState.ps1",
+                        "Sha256":  "e6fc125bdd63478e810abc1bcfaa34ffe267396b9e44bcc62869fdc0f4a0ca18"
+                    },
+                    {
+                        "Path":  "tests/Diagnostics.Tests.ps1",
+                        "Sha256":  "3c8fbc7f87063f9bf80a6a271d492a3d8eaa64a03ac9fb6483e4e4bf1b9f9c04"
+                    },
+                    {
+                        "Path":  "tests/Measure-WindowsResources.ps1",
+                        "Sha256":  "9a5ab55d793404051232baa62161169d3c179c9f6c0d8d7996ad28062429341b"
+                    },
+                    {
+                        "Path":  "tests/Package.Common.ps1",
+                        "Sha256":  "ff0fe496ac116088460f7204172d07d089b298eece60ed863fd862de7a08cbd3"
+                    }
+                ],
+    "Tests":  [
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Exited diagnostic PIDs remain exited with unavailable measurements",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Invalid diagnostic PIDs produce an explicit partial result",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Confirmed missing state is different from unreadable state",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Malformed state remains unknown rather than clean",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Bounded log tails preserve readable UTF8 text",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Bounded log tails preserve readable Unicode text",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Missing comparison inputs are unknown rather than matching",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "File comparisons report real differences",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Unsafe comparison paths are rejected before access",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Diagnostic outputs cannot overwrite the project or an existing output",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "An event permission failure stays unknown",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Confirmed no matching events is an explicit empty result",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "CIM workload records denied providers and process-local GC without network mutation",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Cleanup gate refuses uncertain or active dependencies: UnreadableCommand",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Cleanup gate refuses uncertain or active dependencies: EncodedCommand",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Cleanup gate refuses uncertain or active dependencies: ActiveEngine",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Cleanup gate refuses uncertain or active dependencies: TaskDenied",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Cleanup gate refuses uncertain or active dependencies: SavedJournal",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Resource sampling binds an explicitly selected PID and writes outside the project",
+                      "Detail":  ""
+                  },
+                  {
+                      "Result":  "PASS",
+                      "Test":  "Diagnostic sources stay byte-identical during tests",
+                      "Detail":  ""
+                  }
+              ],
+    "Scope":  "Isolated diagnostic behavior, bounded temporary files, and sampling this test process; no networking changes or live qualification."
+}

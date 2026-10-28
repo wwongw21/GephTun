@@ -1,0 +1,156 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param([string]$PackageDirectory, [switch]$Quiet)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+if (-not $PackageDirectory) { $PackageDirectory = $PSScriptRoot }
+
+# The runtime verifier is deliberately standalone: running the application or
+# checking its downloaded files does not require the engineering/test archive.
+# A local manifest checks consistency; it is not a publisher signature.
+function Assert-RuntimeRelative([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path) -or $Path.Contains('\') -or $Path.StartsWith('/') -or
+        $Path -match '[<>:"|?*\x00-\x1f\x7f]' -or @($Path.Split('/') | Where-Object {
+            $_ -in @('', '.', '..') -or $_ -match '[. ]$' -or
+            $_ -match '^(CON|PRN|AUX|NUL|COM[1-9\u00B9\u00B2\u00B3]|LPT[1-9\u00B9\u00B2\u00B3])($|\.)'
+        }).Count -gt 0) { throw ('Unsafe runtime path: ' + $Path) }
+}
+function Assert-RuntimeNoRedirect([string]$Path) {
+    $cursor = $Path
+    while ($cursor) {
+        if (([IO.File]::GetAttributes($cursor) -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw ('Redirected runtime path: ' + $cursor)
+        }
+        $parent = [IO.Path]::GetDirectoryName($cursor)
+        if ($parent -eq $cursor) { break }
+        $cursor = $parent
+    }
+}
+function Assert-RuntimeHash($Hash, [string]$Name) {
+    if ($Hash -isnot [string] -or $Hash -cnotmatch '\A[0-9a-fA-F]{64}\z') { throw ('Invalid SHA256: ' + $Name) }
+}
+function Assert-RuntimeCount($Count, [string]$Name) {
+    if (($Count -isnot [int] -and $Count -isnot [long]) -or $Count -lt 0) { throw ('Invalid runtime count: ' + $Name) }
+}
+function Assert-RuntimeArray($Object, [string]$Name) {
+    if ($null -eq $Object.PSObject.Properties[$Name] -or $Object.$Name -isnot [Array]) { throw ('An explicit JSON array is required: ' + $Name) }
+}
+function Read-RuntimeJson([string]$Relative) {
+    if (-not $files.ContainsKey($Relative)) { throw ('Required runtime file is missing: ' + $Relative) }
+    $raw = Get-Content -LiteralPath $files[$Relative].FullName -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($raw) -or -not $raw.TrimStart().StartsWith('{')) { throw ('A JSON object is required: ' + $Relative) }
+    return ConvertFrom-Json -InputObject $raw
+}
+
+$root = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($PackageDirectory))
+if ($root -eq [IO.Path]::GetPathRoot($root)) { throw 'A filesystem root cannot be a runtime folder.' }
+$root = $root.TrimEnd([char[]]@('\','/'))
+Assert-RuntimeNoRedirect $root
+if (-not [IO.Directory]::Exists($root)) { throw 'The runtime folder is missing.' }
+$files = New-Object 'Collections.Generic.Dictionary[string,object]' ([StringComparer]::OrdinalIgnoreCase)
+$entries = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+$queue = New-Object 'Collections.Generic.Queue[string]'
+$queue.Enqueue($root)
+while ($queue.Count -gt 0) {
+    $directory = $queue.Dequeue()
+    Assert-RuntimeNoRedirect $directory
+    foreach ($item in @(Get-ChildItem -LiteralPath $directory -Force)) {
+        $attributes = [IO.File]::GetAttributes($item.FullName)
+        if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Redirected runtime entry: ' + $item.Name) }
+        $relative = $item.FullName.Substring($root.Length + 1).Replace('\','/')
+        Assert-RuntimeRelative $relative
+        if (-not $entries.Add($relative)) { throw ('Duplicate runtime path: ' + $relative) }
+        if (($attributes -band [IO.FileAttributes]::Directory) -ne 0) { $queue.Enqueue($item.FullName) }
+        else { $files.Add($relative, $item) }
+    }
+}
+$manifest = Read-RuntimeJson 'PACKAGE-MANIFEST.json'
+if ($manifest.Package -cne 'GephTun' -or $manifest.Kind -cne 'Runtime' -or
+    $manifest.Version -isnot [string] -or $manifest.Version -cnotmatch '\A[0-9]+\.[0-9]+\.[0-9]+\z' -or
+    $manifest.NativeWindowsAcceptance -cne 'NOT_RUN') { throw 'Invalid runtime package identity or native acceptance status.' }
+Assert-RuntimeArray $manifest 'Files'
+$seen = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($entry in $manifest.Files) {
+    $relative = [string]$entry.Path
+    Assert-RuntimeRelative $relative
+    if ($relative -eq 'PACKAGE-MANIFEST.json' -or -not $seen.Add($relative)) { throw ('Invalid or duplicate runtime manifest entry: ' + $relative) }
+    Assert-RuntimeHash $entry.Sha256 $relative
+    Assert-RuntimeCount $entry.Bytes ($relative + ' Bytes')
+    if (-not $files.ContainsKey($relative)) { throw ('Missing runtime file: ' + $relative) }
+    if ($files[$relative].Length -ne $entry.Bytes -or
+        (Get-FileHash -LiteralPath $files[$relative].FullName -Algorithm SHA256).Hash -ne $entry.Sha256) { throw ('Runtime checksum or size mismatch: ' + $relative) }
+}
+if ($files.Count -ne $seen.Count + 1) { throw 'Unlisted runtime files found. Keep personal files and test output outside the runtime folder.' }
+$required = @(
+    'GephTun.Core.psm1','GephTun-BootReconcile.ps1','GephTun.Network.cs','GephTun.UI.ps1','GephTun.Worker.ps1','GephTun.WorkerHost.ps1',
+    'Launch-GephTun.cmd','Launch-GephTun.ps1','Start-GephTun.cmd','Stop-GephTun.cmd','Verify-GephTun.ps1',
+    'RELEASE.json','DEPENDENCIES.json','QUALIFICATION.json','README.md',
+    'bin/tun2socks-windows-amd64.exe','bin/wintun.dll',
+    'licenses/tun2socks-LICENSE.txt','licenses/Wintun-LICENSE.txt','licenses/tun2socks-THIRD-PARTY-LICENSES.txt'
+)
+if ($seen.Count -ne $required.Count) { throw 'The runtime manifest must contain exactly the supported runtime files.' }
+foreach ($relative in $required) { if (-not $seen.Contains($relative)) { throw ('Required runtime file absent: ' + $relative) } }
+$release = Read-RuntimeJson 'RELEASE.json'
+$dependencies = Read-RuntimeJson 'DEPENDENCIES.json'
+$qualification = Read-RuntimeJson 'QUALIFICATION.json'
+if ($release.Package -cne 'GephTun' -or $release.Version -cne $manifest.Version -or $dependencies.Version -cne $manifest.Version -or
+    $qualification.Package -cne 'GephTun' -or $qualification.Kind -cne 'RuntimeQualification' -or $qualification.Version -cne $manifest.Version) { throw 'Runtime release versions or identities disagree.' }
+foreach ($field in @('Status','Date','InputArchiveSha256')) {
+    if ($manifest.$field -cne $release.$field) { throw ('Runtime release metadata disagree: ' + $field) }
+}
+Assert-RuntimeHash $release.InputArchiveSha256 'InputArchiveSha256'
+if ($qualification.ProductionQualified -isnot [bool] -or $qualification.ProductionQualified -or
+    $qualification.NativeWindowsAcceptance -cne 'NOT_RUN') { throw 'The runtime cannot assert unexecuted native production acceptance.' }
+foreach ($field in @('EngineeringManifestSha256','CurrentValidationSha256','EngineeringQualificationSha256')) {
+    Assert-RuntimeHash $qualification.$field $field
+    if ($manifest.$field -cne $qualification.$field) { throw ('Runtime engineering evidence binding disagrees: ' + $field) }
+}
+# The exact runtime source set is bound back to the checked engineering tree.
+# Full test records stay in that tree; these references are not a substitute for
+# its verifier or a claim that native Windows acceptance has been performed.
+Assert-RuntimeArray $qualification 'Sources'
+$sourcePaths = @($required | Where-Object { [IO.Path]::GetExtension($_) -in @('.ps1','.psm1','.cs','.cmd') -or $_ -in @('RELEASE.json','DEPENDENCIES.json') })
+$bound = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($source in $qualification.Sources) {
+    $relative = [string]$source.Path
+    if ($relative -cnotin $sourcePaths -or -not $bound.Add($relative)) { throw 'Unexpected or duplicate runtime source binding.' }
+    $expectedOrigin = $relative
+    if ($relative -ceq 'Verify-GephTun.ps1') { $expectedOrigin = 'tests/Verify-Runtime.ps1' }
+    if ($source.OriginPath -cne $expectedOrigin) { throw ('Invalid runtime source origin: ' + $relative) }
+    Assert-RuntimeHash $source.Sha256 $relative
+    if ((Get-FileHash -LiteralPath $files[$relative].FullName -Algorithm SHA256).Hash -ne $source.Sha256) { throw ('Runtime source changed since engineering validation: ' + $relative) }
+}
+if ($bound.Count -ne $sourcePaths.Count) { throw 'Runtime qualification omits a source binding.' }
+foreach ($name in @('RequiredTotals','SupplementalTotals','Totals')) {
+    $totals = $qualification.$name
+    foreach ($field in @('Total','Passed','Failed','Skipped')) { Assert-RuntimeCount $totals.$field ($name + '.' + $field) }
+    if ($totals.Failed -ne 0 -or [decimal]$totals.Passed + [decimal]$totals.Skipped -ne $totals.Total) { throw 'Invalid recorded portable qualification totals.' }
+}
+if ($qualification.RequiredTotals.Total -lt 1 -or $qualification.RequiredTotals.Passed -lt 1) { throw 'Recorded required portable qualification totals are empty.' }
+foreach ($field in @('Total','Passed','Failed','Skipped')) {
+    if ([decimal]$qualification.RequiredTotals.$field + [decimal]$qualification.SupplementalTotals.$field -ne $qualification.Totals.$field) { throw 'Runtime qualification totals disagree.' }
+}
+Assert-RuntimeArray $dependencies 'Binaries'
+if ($dependencies.Binaries.Count -ne 2) { throw 'Exactly two runtime binaries are required.' }
+$binaryNames = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($binary in $dependencies.Binaries) {
+    if ($binary.File -cnotin @('tun2socks-windows-amd64.exe','wintun.dll') -or -not $binaryNames.Add($binary.File)) { throw 'Unexpected or duplicate runtime binary.' }
+    Assert-RuntimeHash $binary.Sha256 $binary.File
+    $file = $files['bin/' + $binary.File]
+    if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ne $binary.Sha256) { throw ('Runtime dependency checksum mismatch: ' + $binary.File) }
+    $reader = New-Object IO.BinaryReader([IO.File]::OpenRead($file.FullName))
+    try {
+        if ($reader.ReadUInt16() -ne 0x5a4d) { throw 'Invalid Windows binary.' }
+        $reader.BaseStream.Position = 0x3c
+        $offset = $reader.ReadUInt32()
+        if ($offset -gt $reader.BaseStream.Length - 6) { throw 'Invalid PE header offset.' }
+        $reader.BaseStream.Position = $offset
+        if ($reader.ReadUInt32() -ne 0x4550 -or $reader.ReadUInt16() -ne 0x8664) { throw 'Runtime binary is not AMD64.' }
+    } finally { $reader.Dispose() }
+}
+if (-not $Quiet) { Write-Host ('GephTun {0}: all {1} runtime files match; both binaries are AMD64. Native Windows acceptance is NOT RUN. Full source-bound test evidence is in the separate Engineering package.' -f $manifest.Version, $seen.Count) }
+[pscustomobject]@{
+    Success=$true;Version=$manifest.Version;Files=$seen.Count;Kind='Runtime';ProductionQualified=$false;NativeWindowsAcceptance='NOT RUN'
+    EngineeringManifestSha256=$qualification.EngineeringManifestSha256
+    Scope='Standalone runtime integrity and recorded engineering-source identities only; no network changes or native Windows qualification.'
+}

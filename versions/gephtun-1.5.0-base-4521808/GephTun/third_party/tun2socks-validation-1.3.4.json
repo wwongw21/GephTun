@@ -1,0 +1,477 @@
+{
+  "package_version": "1.3.4",
+  "dependency_version": "2.7.0-gephtun.3",
+  "status": "PASS",
+  "verification_scope": "Fresh tests and localhost resource/race stress on current vendored source plus byte-identical Windows cross-build; no Windows runtime execution.",
+  "tests": {
+    "baseline_regressions_failed_as_expected": true,
+    "current_protocol_failed_before_cases": 4,
+    "current_real_socket_failed_before_cases": 2,
+    "full_native_go_suite_passed": true,
+    "top_level_test_count": 27,
+    "test_entries_including_subtests": 60,
+    "packages_with_tests": 5,
+    "new_top_level_tests_in_gephtun_3": 7,
+    "actual_loopback_tcp_and_udp_exchange_passed": true,
+    "vendored_offline_tests_passed": true,
+    "windows_cross_compile_passed": true,
+    "extracted_source_rebuild_byte_identical": true,
+    "windows_runtime_tested": false,
+    "historical_udp_cancellation_accounting_stress_repetitions": 250,
+    "historical_stress_passed_top_level_tests": 1500,
+    "historical_stress_passed_entries": 6000,
+    "race_full_suite_repetitions": 5,
+    "race_passed_top_level_tests": 135,
+    "race_passed_entries": 300,
+    "go_vet_passed": true,
+    "lifecycle_stress_repetitions": 20,
+    "lifecycle_stress_passed_top_level_tests": 100,
+    "lifecycle_stress_passed_entries": 140,
+    "lifecycle_stress_scenarios": {
+      "canceled_tcp_handshakes": 2560,
+      "successful_tcp_sessions": 1280,
+      "successful_udp_associations": 1280,
+      "udp_round_trips": 10240,
+      "failed_udp_bindings": 2560,
+      "malformed_socket_replies": 40
+    },
+    "failed_udp_binding_resource_check": {
+      "host": "Linux",
+      "rounds": 20,
+      "final_descriptors_each_round": 8,
+      "final_goroutines_each_round": 3,
+      "note": "Initial descriptor counts may include cleanup from the preceding scenario; all post-settle counts were 8/3."
+    },
+    "deterministic_datagram_mutations_per_full_suite": 100000,
+    "source_manifest_verified_files": 1699,
+    "fresh_source_rebuild_byte_identical": true,
+    "baseline_rebuild_byte_identical": true,
+    "source_code_inputs_sha256": "a00b5f8ffce2438bd6a875da6cc425c7337dcbdcb0de579fca8cf9cd0ea0a187",
+    "go_mod_verify_current_status": "NOT_RUN: vendor source and full file manifest are verified; no module version changed from uploaded .2.",
+    "baseline_regressions_note": "Current protocol and real-socket regressions failed against freshly extracted uploaded .2 source. Original .1 and .2 repair evidence remains historical; it is not added to these fresh counts.",
+    "counting_note": "Entries include subtests and repetitions. Counts from separate passes are reported independently, not as distinct user scenarios."
+  },
+  "results": {
+    "repaired-suite": {
+      "name": "repaired-suite",
+      "at_utc": "2026-09-17T03:10:09.528659+00:00",
+      "command": [
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "test",
+        "-mod=vendor",
+        "-json",
+        "./...",
+        "-count=1",
+        "-shuffle=17092026",
+        "-timeout=120s"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3",
+      "source_code_inputs_sha256": "a00b5f8ffce2438bd6a875da6cc425c7337dcbdcb0de579fca8cf9cd0ea0a187",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 0,
+      "status": "PASS",
+      "duration_seconds": 19.164,
+      "log_sha256": "769dd6aac8d1fa65dc61799e1a7ca9191e99c9211415d2593cc0ff2e34589eff",
+      "passed_test_entries": 60,
+      "passed_top_level_tests": 27,
+      "passed_test_packages": 5,
+      "failed_events": []
+    },
+    "repaired-race": {
+      "name": "repaired-race",
+      "at_utc": "2026-09-17T03:11:13.770468+00:00",
+      "command": [
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "test",
+        "-mod=vendor",
+        "-json",
+        "./...",
+        "-count=5",
+        "-shuffle=17092026",
+        "-timeout=120s",
+        "-race"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3",
+      "source_code_inputs_sha256": "a00b5f8ffce2438bd6a875da6cc425c7337dcbdcb0de579fca8cf9cd0ea0a187",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "1",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 0,
+      "status": "PASS",
+      "duration_seconds": 91.207,
+      "log_sha256": "9ebe4dfc54d986ee32fe32371038a9e70cf8c64d7a08fea16030cd6469774200",
+      "passed_test_entries": 300,
+      "passed_top_level_tests": 135,
+      "passed_test_packages": 5,
+      "failed_events": []
+    },
+    "repaired-vet": {
+      "name": "repaired-vet",
+      "at_utc": "2026-09-17T03:11:13.799908+00:00",
+      "command": [
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "vet",
+        "-mod=vendor",
+        "./..."
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3",
+      "source_code_inputs_sha256": "a00b5f8ffce2438bd6a875da6cc425c7337dcbdcb0de579fca8cf9cd0ea0a187",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 0,
+      "status": "PASS",
+      "duration_seconds": 5.297,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "repaired-build": {
+      "name": "repaired-build",
+      "at_utc": "2026-09-17T03:11:13.660060+00:00",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3/build-gephtun.py",
+        "--go",
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "--test",
+        "--output",
+        "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/repaired-build.exe"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3",
+      "source_code_inputs_sha256": "a00b5f8ffce2438bd6a875da6cc425c7337dcbdcb0de579fca8cf9cd0ea0a187",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 0,
+      "status": "PASS",
+      "duration_seconds": 13.786,
+      "log_sha256": "3bb430418e55f28a772d24403d9d6f5d2b306b4cf201a6485e05a3e47d9ecea7",
+      "binary_sha256": "6435bf99650b47551b46ca1a7b5ac44ff64fdbdf1b13d3ccb0b8c329a5734e8e",
+      "binary_size": 12002816
+    },
+    "lifecycle-stress": {
+      "name": "lifecycle-stress",
+      "at_utc": "2026-09-17T03:11:13.770489+00:00",
+      "command": [
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "test",
+        "-mod=vendor",
+        "-json",
+        "./proxy/socks5",
+        "-count=20",
+        "-shuffle=17092026",
+        "-timeout=120s",
+        "-run=TestGephTunConcurrent|TestGephTunInvalidUDPBinding|TestGephTunMalformedReply"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3",
+      "source_code_inputs_sha256": "a00b5f8ffce2438bd6a875da6cc425c7337dcbdcb0de579fca8cf9cd0ea0a187",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 0,
+      "status": "PASS",
+      "duration_seconds": 2.435,
+      "log_sha256": "354441acfd5b4595d2cf5954bd8642592ce98db3fc433f34bf1cbabc070548a4",
+      "passed_test_entries": 140,
+      "passed_top_level_tests": 100,
+      "passed_test_packages": 1,
+      "failed_events": []
+    },
+    "historical-udp-stress": {
+      "name": "historical-udp-stress",
+      "at_utc": "2026-09-17T03:11:13.801543+00:00",
+      "command": [
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "test",
+        "-mod=vendor",
+        "-json",
+        "./proxy/socks5",
+        "-count=250",
+        "-shuffle=17092026",
+        "-timeout=120s",
+        "-run=TestReadFrom|TestSOCKSUDPActualDatagramRoundTrip|TestAuditSOCKSHandshakeRespectsContextCancellation|TestAuditUDPWriteToReportsPayloadBytes"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3",
+      "source_code_inputs_sha256": "a00b5f8ffce2438bd6a875da6cc425c7337dcbdcb0de579fca8cf9cd0ea0a187",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 0,
+      "status": "PASS",
+      "duration_seconds": 2.073,
+      "log_sha256": "82cdc19e9044cacbfdfcc4f2fb98034df9f31ac660d3cf9e1fbffc6670e8eed2",
+      "passed_test_entries": 6000,
+      "passed_top_level_tests": 1500,
+      "passed_test_packages": 1,
+      "failed_events": []
+    },
+    "protocol-before": {
+      "name": "protocol-before",
+      "at_utc": "2026-09-17T03:06:12.986280+00:00",
+      "command": [
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "test",
+        "-mod=vendor",
+        "-json",
+        "./transport/socks5",
+        "-count=1",
+        "-shuffle=17092026",
+        "-timeout=120s",
+        "-run=TestGephTunHandshakeServerValidation",
+        "-overlay=/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/protocol-overlay.json"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.2",
+      "source_code_inputs_sha256": "ae50db6aadb3641147bdb2e8b820332b76ee864d8ade331d01649bfe3f5a9a6d",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 1,
+      "status": "FAIL",
+      "duration_seconds": 0.69,
+      "log_sha256": "dcf59cab6568b2eef76108de763aef3b7d189694953d113ff8c00b7d697caef5",
+      "overlay_sha256": "9af9ca38ef3936a1ee1e5b566ca71535a3e69ef6dca6465c2559bad368b6b3fe",
+      "overlay_sources": {
+        "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/protocol_test.go": "5d36044c7bce39930582e56e1cb1eec420c34ec3a7fbdbcbda6e5ce67eb36544"
+      },
+      "passed_test_entries": 7,
+      "passed_top_level_tests": 0,
+      "passed_test_packages": 0,
+      "failed_events": [
+        {
+          "Time": "2026-09-16T20:06:13.500319108-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/transport/socks5",
+          "Test": "TestGephTunHandshakeServerValidation/wrong-reply-version",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:06:13.500388329-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/transport/socks5",
+          "Test": "TestGephTunHandshakeServerValidation/nonzero-reply-reserved",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:06:13.500452192-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/transport/socks5",
+          "Test": "TestGephTunHandshakeServerValidation/unoffered-no-auth",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:06:13.500671103-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/transport/socks5",
+          "Test": "TestGephTunHandshakeServerValidation/wrong-userpass-version",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:06:13.50072428-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/transport/socks5",
+          "Test": "TestGephTunHandshakeServerValidation",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:06:13.501291159-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/transport/socks5",
+          "Elapsed": 0.004
+        }
+      ]
+    },
+    "socket-protocol-before": {
+      "name": "socket-protocol-before",
+      "at_utc": "2026-09-17T03:13:53.936452+00:00",
+      "command": [
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "test",
+        "-mod=vendor",
+        "-json",
+        "./proxy/socks5",
+        "-count=1",
+        "-shuffle=17092026",
+        "-timeout=120s",
+        "-run=TestGephTunMalformedReplyClosesTCP",
+        "-overlay=/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/lifecycle-before-overlay.json"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.2",
+      "source_code_inputs_sha256": "ae50db6aadb3641147bdb2e8b820332b76ee864d8ade331d01649bfe3f5a9a6d",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 1,
+      "status": "FAIL",
+      "duration_seconds": 0.573,
+      "log_sha256": "2e8ca1611085ca234e2d8e7c31fa290f6db415f85a2f9e35f21ca3edcefed176",
+      "overlay_sha256": "7a8cbf688a451f3ca9f9e61f074831969f6ec53f5205e5296745ddfc67f54e94",
+      "overlay_sources": {
+        "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.3/proxy/socks5/gephtun_lifecycle_test.go": "674758fb523a0c4c0c5b72b8a8809e6c05a96f4fdfd4f125ebf3f38adc9da7c1"
+      },
+      "passed_test_entries": 0,
+      "passed_top_level_tests": 0,
+      "passed_test_packages": 0,
+      "failed_events": [
+        {
+          "Time": "2026-09-16T20:13:54.351781899-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/proxy/socks5",
+          "Test": "TestGephTunMalformedReplyClosesTCP/wrong-version",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:13:54.352019458-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/proxy/socks5",
+          "Test": "TestGephTunMalformedReplyClosesTCP/reserved-byte",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:13:54.35202775-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/proxy/socks5",
+          "Test": "TestGephTunMalformedReplyClosesTCP",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-09-16T20:13:54.352533195-07:00",
+          "Action": "fail",
+          "Package": "github.com/xjasonlyu/tun2socks/v2/proxy/socks5",
+          "Elapsed": 0.005
+        }
+      ]
+    },
+    "baseline-rebuild": {
+      "name": "baseline-rebuild",
+      "at_utc": "2026-09-17T03:05:24.572499+00:00",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.2/build-gephtun.py",
+        "--go",
+        "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+        "--test",
+        "--output",
+        "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/baseline-rebuild.exe"
+      ],
+      "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source/tun2socks-2.7.0-gephtun.2",
+      "source_code_inputs_sha256": "ae50db6aadb3641147bdb2e8b820332b76ee864d8ade331d01649bfe3f5a9a6d",
+      "source_unchanged_during_run": true,
+      "go_version": "1.26.8",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "CGO_ENABLED": "0",
+        "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/go-cache",
+        "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/empty-module-cache"
+      },
+      "returncode": 0,
+      "status": "PASS",
+      "duration_seconds": 47.718,
+      "log_sha256": "b1abffdac34a552484fce8150aa11019e2f0bbcbd1c76f814fea74de5c0950d7",
+      "binary_sha256": "0fefa84b260b483018c8e0a6f07a011f74195d407d8b968701ba1332f439107a",
+      "binary_size": 12001792
+    }
+  },
+  "current_receipts_in_source": "verification/gephtun.3/",
+  "baseline_receipts_in_source": "verification/history/gephtun.2-retested/",
+  "source_archive": "third_party/tun2socks-2.7.0-gephtun.3-source.tar.gz",
+  "source_archive_sha256": "d7dfb2c51dec52b9aa918551a5b1d8ddd38a9d235745156807d0d380dce5d24c",
+  "executable_sha256": "6435bf99650b47551b46ca1a7b5ac44ff64fdbdf1b13d3ccb0b8c329a5734e8e",
+  "final_source_delivery_rebuild": {
+    "at_utc": "2026-09-17T03:22:50.329934+00:00",
+    "status": "PASS",
+    "source_archive": "third_party/tun2socks-2.7.0-gephtun.3-source.tar.gz",
+    "source_archive_sha256": "d7dfb2c51dec52b9aa918551a5b1d8ddd38a9d235745156807d0d380dce5d24c",
+    "source_manifest_sha256": "9118215a2974edd6dc59b8fc3a2c8ef7fd55405557a2568f798f620a0cabe934",
+    "source_manifest_verified_files": 1699,
+    "complete_manifest_verified_before_and_after": true,
+    "source": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/final-source-delivery/tun2socks-2.7.0-gephtun.3",
+    "go_version": "1.26.8",
+    "command": [
+      "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+      "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/final-source-delivery/tun2socks-2.7.0-gephtun.3/build-gephtun.py",
+      "--go",
+      "/workspace/scratch/b4191ee3e51c/dependency-build/go/bin/go",
+      "--test",
+      "--output",
+      "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/source-delivery-rebuilt.exe"
+    ],
+    "environment": {
+      "GOCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/final-clean-go-cache",
+      "GOMODCACHE": "/workspace/scratch/6c4e0dabb50d/audit-1.3.4/dependency/final-empty-module-cache",
+      "GOPROXY": "off",
+      "GOSUMDB": "off",
+      "GOTOOLCHAIN": "local"
+    },
+    "clean_build_cache": true,
+    "empty_module_cache": true,
+    "native_suite_passed_before_build": true,
+    "returncode": 0,
+    "duration_seconds": 46.977,
+    "build_log_sha256": "3b0284d4462714887dff7f72be97c2e412e078359e7ba8fe0dbd1eb0f742d9f3",
+    "rebuilt_binary_sha256": "6435bf99650b47551b46ca1a7b5ac44ff64fdbdf1b13d3ccb0b8c329a5734e8e",
+    "expected_binary_sha256": "6435bf99650b47551b46ca1a7b5ac44ff64fdbdf1b13d3ccb0b8c329a5734e8e",
+    "byte_identical": true,
+    "binary_size": 12002816,
+    "windows_executable_run": false,
+    "limits": "Native Linux source tests and a Windows cross-build do not qualify Windows runtime/driver/network behavior."
+  }
+}

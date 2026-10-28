@@ -1,0 +1,10 @@
+{
+  "Package": "GephTun",
+  "Version": "1.4.0",
+  "Status": "Network-resilience update candidate; PowerShell/C# execution and live Windows qualification pending",
+  "Date": "2026-10-09",
+  "InputArchiveSha256": "e5a1c373d8bc2893c8dcbde21274003862681919e262d5d1d8fcad49ec2695a4",
+  "Target": "Windows 11 x64; Windows PowerShell 5.1; separately connected Geph local SOCKS proxy",
+  "Channel": "Test candidate",
+  "ProductionQualified": false
+}

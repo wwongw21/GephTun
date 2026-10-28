@@ -1,0 +1,19 @@
+{
+  "Schema": "GephTun.IdentityCandidate.StaticResults.v2",
+  "Version": "1.5.0",
+  "CandidateRevision": "application-icons-1",
+  "Status": "STATIC_REPAIR_REVIEW_ONLY",
+  "PowerShellParseFiles": "NOT_RUN_FOR_REPAIRED_CANDIDATE",
+  "CSharpCompileFiles": 2,
+  "CompileScope": "Two unchanged C# sources; compilation only; no native method calls",
+  "ProductionQualified": false,
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "BehaviorTests": "NOT_RUN_FOR_REPAIRED_CANDIDATE",
+  "LiveTests": 0,
+  "ReviewScope": "Static review of the receipt helper and prepared synthetic fixtures, including matching, conflicting, and nonboolean co-present Result/Passed fields. The revised verifier/runner fixture scripts were not executed.",
+  "ApplicationIcons": {
+    "BaseCandidateRevision": "identity-safeguards-verifier-repair-3",
+    "Scope": "Window/taskbar icon, five tray icons, and shortcut creation only.",
+    "Qualification": "The base preparation fields below remain conservative; icon checks are recorded separately."
+  }
+}

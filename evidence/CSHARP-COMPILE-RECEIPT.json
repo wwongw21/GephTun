@@ -1,0 +1,20 @@
+{
+    "Schema":  "GephTun.IdentityCandidate.CSharpCompile.v1",
+    "Runtime":  "5.1.26100.9549",
+    "Files":  [
+                  {
+                      "Name":  "GephTun.Network.cs",
+                      "Status":  "PASS_COMPILE_ONLY",
+                      "Sha256":  "D5AF45962BA84886E62FA5385304870D46237362722F384D259EA1B00AB34A39"
+                  },
+                  {
+                      "Name":  "GephTun.Wfp.cs",
+                      "Status":  "PASS_COMPILE_ONLY",
+                      "Sha256":  "4853A984F851C6F6128081AE2CD90D3B34489F81AA4AA9000661EFCE18327BD0"
+                  }
+              ],
+    "NativeAPICalls":  0,
+    "NetworkConnections":  0,
+    "ModuleImported":  false,
+    "Scope":  "Compilation only; no application or network/WFP methods called"
+}

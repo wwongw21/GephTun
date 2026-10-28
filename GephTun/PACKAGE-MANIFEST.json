@@ -1,0 +1,745 @@
+{
+  "Schema": "GephTun.IdentityCandidate.PackageManifest.v1",
+  "Package": "GephTun",
+  "Version": "1.5.0",
+  "CandidateRevision": "application-icons-1",
+  "ProductionQualified": false,
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "BehavioralChecks": "NOT_RUN",
+  "BaseArchiveSha256": "41E7A3A76DC952623453448F82E81AB6325338011FE9EB68601E32C9AA684F1F",
+  "Files": [
+    {
+      "Path": "APPLICATION-ICONS.md",
+      "Bytes": 2147,
+      "Sha256": "C965F87EBB2FE2D9643B183EB620E29EA4CF76044EC1F32DA74B44A865C7E1E5"
+    },
+    {
+      "Path": "assets/GephTun-Busy.ico",
+      "Bytes": 419110,
+      "Sha256": "153A1B2B72845AA04EC674920DAF6D7B50D74842BBDF3B275EBD7711B03AD8CB"
+    },
+    {
+      "Path": "assets/GephTun-Connected.ico",
+      "Bytes": 419110,
+      "Sha256": "1DB6C2C152D11A76B2A5B6B99029F845E14453D2D33734D71331F4DBF2ADFE68"
+    },
+    {
+      "Path": "assets/GephTun-Error.ico",
+      "Bytes": 419110,
+      "Sha256": "DD0C10FD821209D4D3591924080F17F76614BD686FE740F14D5BB0B77EEA42DD"
+    },
+    {
+      "Path": "assets/GephTun-Idle.ico",
+      "Bytes": 419110,
+      "Sha256": "87EB8B95F1F3455544E72148D72D0D8506068A92ACBA7D65A4BD6E48C5199B79"
+    },
+    {
+      "Path": "assets/GephTun-Warning.ico",
+      "Bytes": 419110,
+      "Sha256": "E7B0F7DA886715DC826742B418AFD365483E803AA124D1501C07C1301B111FAB"
+    },
+    {
+      "Path": "assets/GephTun.ico",
+      "Bytes": 419110,
+      "Sha256": "9F1F5AEDD935FF8FE69BFF108D27C144986240E2C22D3F10451C592B8E582B52"
+    },
+    {
+      "Path": "assets/GephTun.png",
+      "Bytes": 31938,
+      "Sha256": "894DDE397EDC44E1E765277AF213E48D22AF7E938C4F95DFBB5D88E203B2A371"
+    },
+    {
+      "Path": "assets/GephTun.svg",
+      "Bytes": 311,
+      "Sha256": "330AA8C3493E70612E894D00AA19C125677FBF9CF24A6B85E55BC1EFAECC97E2"
+    },
+    {
+      "Path": "bin/tun2socks-windows-amd64.exe",
+      "Bytes": 12002816,
+      "Sha256": "6435BF99650B47551B46CA1A7B5AC44FF64FDBDF1B13D3CCB0B8C329A5734E8E"
+    },
+    {
+      "Path": "bin/wintun.dll",
+      "Bytes": 427552,
+      "Sha256": "E5DA8447DC2C320EDC0FC52FA01885C103DE8C118481F683643CACC3220DAFCE"
+    },
+    {
+      "Path": "CANDIDATE-FIXES.md",
+      "Bytes": 4642,
+      "Sha256": "DDB4123E855439C7A7DAEC46EBB4AE59B629BB2AAD3DC00EC72EEEB3AC46D2D5"
+    },
+    {
+      "Path": "CHANGELOG.md",
+      "Bytes": 2171,
+      "Sha256": "DE75E23F7907CF69431C6A0CBC2625E3B72E6F001281FCAF83A3CCD7802661E9"
+    },
+    {
+      "Path": "Create-GephTunShortcut.ps1",
+      "Bytes": 2247,
+      "Sha256": "3A433F1F350530624607DEAD747C188D67FF94435A2DFC40FF0ADE7BF907314F"
+    },
+    {
+      "Path": "DELIVERY-REPORT.md",
+      "Bytes": 1753,
+      "Sha256": "C9DFB3C4B369D877A258AA739DD0EFDAA909FDFD74CA522F937644F9788D7D3C"
+    },
+    {
+      "Path": "DEPENDENCIES.json",
+      "Bytes": 692,
+      "Sha256": "7802252DE9609333062955175029506DE85464F8F8F54DE0725BB44CE968FB2D"
+    },
+    {
+      "Path": "docs/BYPASS-DESIGN.md",
+      "Bytes": 3138,
+      "Sha256": "C487A3F2B2395F2680AB6CA3020EB85424865EB9587A1F905273ADF5338EAA5A"
+    },
+    {
+      "Path": "docs/ENGINEERING.md",
+      "Bytes": 1561,
+      "Sha256": "B03B143BBAA97484FED8F99BDC820EB7D768EA700AB49B9362C6BDD0189AE3C3"
+    },
+    {
+      "Path": "docs/history/1.3.9/AUDIT.md",
+      "Bytes": 2389,
+      "Sha256": "9670A14F77B5AB9BB92ADE102B9DD280E9DFEFF13F45711D2D08620657DEA8AC"
+    },
+    {
+      "Path": "docs/history/1.3.9/DECISIONS.md",
+      "Bytes": 1522,
+      "Sha256": "523F2EE17BAF20C949C123216055AAD05D153E0DDCE79F1C9414B8C6E4379E49"
+    },
+    {
+      "Path": "docs/history/1.3.9/DELIVERY-REPORT.md",
+      "Bytes": 806,
+      "Sha256": "859F9524DC772D8F2CA99D9F64BF6AC311BFFB2732EC9531AD651CB305FF2F8B"
+    },
+    {
+      "Path": "docs/history/1.3.9/DEPENDENCY-VERIFICATION.json",
+      "Bytes": 1244,
+      "Sha256": "FF5BE69C2790579C661C0A38E58B1F18DD6D61F6090FAE4FB51A91AF2AA612BF"
+    },
+    {
+      "Path": "docs/history/1.3.9/original-archive-index.json",
+      "Bytes": 1125,
+      "Sha256": "8FF0BDB0893CF226F2C04869E44CD57437DDD49549B1950FEBCDF4B2E3796099"
+    },
+    {
+      "Path": "docs/history/1.3.9/original-cleanup-summary.json",
+      "Bytes": 560,
+      "Sha256": "E143AEB30868B70A6556BFC2AE2E070E9A83E2859E18D8F7393938336AB180D3"
+    },
+    {
+      "Path": "docs/history/1.3.9/original-evidence-index.json",
+      "Bytes": 67380,
+      "Sha256": "AA3B35A3BBF94D5C55F77BDDB33032791FDC0BDB07A51256FED0C0761711DF26"
+    },
+    {
+      "Path": "docs/history/1.3.9/original-HISTORY.md",
+      "Bytes": 1406,
+      "Sha256": "FD7159DF9D570C734AA3E07F9FAA7DC4A973D4CA9F3C9FC0F8095D18A55C11B8"
+    },
+    {
+      "Path": "docs/history/1.3.9/original-RECONCILIATION-REPORT.md",
+      "Bytes": 2418,
+      "Sha256": "11199FF93DF65D61A96F82DE93E0F9B7E6BE0069B758AE61636F492E3A1D834C"
+    },
+    {
+      "Path": "docs/history/1.3.9/PACKAGE-MANIFEST.json",
+      "Bytes": 21189,
+      "Sha256": "ACD5FF6D999ECFB8650C3CDA1EFFBA27BCA0417C849F28C0CEEFF80F9D7ECF9E"
+    },
+    {
+      "Path": "docs/history/1.3.9/QUALIFICATION.json",
+      "Bytes": 11935,
+      "Sha256": "7C2E626E528849AF3D9A04CA0213DA0F179DB2D86CD30065FEC6C41AD2CE2F33"
+    },
+    {
+      "Path": "docs/history/1.3.9/README.md",
+      "Bytes": 3997,
+      "Sha256": "16EC7BD97179D0FD852BE719601101CBBA8FF4225E2697716DA619CB26A5ED6D"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/acceptance-results.json",
+      "Bytes": 16793,
+      "Sha256": "4A8270F4B2C358546C22061C06482A281A3D8794DDA2CBA1C6178F13708286FE"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/controller-results.json",
+      "Bytes": 114471,
+      "Sha256": "ECD39F2AE2C692AD920BE2DF4D44CE176A70A0FF2BD9DF97DAC5285E2B0B8B66"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/current-validation.json",
+      "Bytes": 14093,
+      "Sha256": "746EDEDD88BB00A7270D83EFF96E3A367790FBFD6CF81CC660871ADCFD3A586F"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/diagnostic-results.json",
+      "Bytes": 6510,
+      "Sha256": "1C59DFD52FD45E3DCE215AB687F31B6B04A36F0EFFEF0BB842F9F587AA267DF6"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/package-results.json",
+      "Bytes": 29797,
+      "Sha256": "E094E4E41CC0EB5B76F29E1734EBA60CC174370598C27A75801C0F5CB3EC9AB6"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/parser-compile-results.json",
+      "Bytes": 19281,
+      "Sha256": "B4068CBBEDBEE001772F4873EAF5BF9E33861367305337EE06F2413D4FD39281"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/proxy-helper-results.json",
+      "Bytes": 18350,
+      "Sha256": "F89AB6025178373EF76399CC17D30DDE94CBA057215E2317DF43418EA4E6D25F"
+    },
+    {
+      "Path": "docs/history/1.3.9/receipts/ui-results.json",
+      "Bytes": 20907,
+      "Sha256": "762FF9F31E3C4FB5A290417698727EAB4C646CA0A9E98CD4A6317887FBC02AEA"
+    },
+    {
+      "Path": "docs/history/1.3.9/RECONCILIATION.json",
+      "Bytes": 15102130,
+      "Sha256": "AF13C1860BE922B5DF913E672B9A006CAAE3A4D75F450858A56B7D6C3EBE9297"
+    },
+    {
+      "Path": "docs/history/1.3.9/RUNTIME-README.md",
+      "Bytes": 2153,
+      "Sha256": "057C647DE84BA2FB39346654455B747C547AA0D7C005BD5A1BBAAD1FDBE272EB"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Acceptance.Tests.ps1.txt",
+      "Bytes": 52117,
+      "Sha256": "4881412FF9515880A972B4D916121E26C14C93231CC50888FA2B9F1490C63EDB"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/build-package.ps1.txt",
+      "Bytes": 9046,
+      "Sha256": "EFFB7C2636A1A59BDC91F483411641B67B9967A9A8CC318E89FD65A9799C3724"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Collect-Validation.ps1.txt",
+      "Bytes": 4925,
+      "Sha256": "213F27F2FFB919754A62ACC69B441EAC01208FA0D480273C141840A6CBFF9819"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Collect-WindowsAcceptance.ps1.txt",
+      "Bytes": 39549,
+      "Sha256": "7EB7BF89C8C6A7FF51383C97F0095667ED4E9D25D81E2BCF5E48D7B82521EBEA"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Controller.Tests.ps1.txt",
+      "Bytes": 234284,
+      "Sha256": "2A76738D50BCD5C1B2FAA9D334BF8D54B8F2BD487A622416A01C9E6A42648492"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Package.Tests.ps1.txt",
+      "Bytes": 72115,
+      "Sha256": "9502CCF71E0A77F5FCC46334D3FE1034E8B3A9E602D04A7032A17D97F6830C8F"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Run-IsolatedValidation.ps1.txt",
+      "Bytes": 10334,
+      "Sha256": "D6FF60EBA0EB904C18AF3C335C0C25D6387192CB3E01DB2B61B87E49CD0BC8A6"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Run-WindowsValidation.ps1.txt",
+      "Bytes": 13919,
+      "Sha256": "E94C9C6D2AED76930BC26F6EBBF3ED08752AE9C03372EBA09246D0CA3671D27B"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/UI.Tests.ps1.txt",
+      "Bytes": 75690,
+      "Sha256": "27345874D1481C6AF436889C433179ACFCCCA4E3F8E966D894122C9FD72F073D"
+    },
+    {
+      "Path": "docs/history/1.3.9/tooling/Verify-Runtime.ps1.txt",
+      "Bytes": 11016,
+      "Sha256": "C6C98852C46170FFCB4944469CE35336A6678C65E0A4D5DCA61C73F189B73A06"
+    },
+    {
+      "Path": "docs/history/1.3.9/VALIDATION.md",
+      "Bytes": 4057,
+      "Sha256": "4C240BFF8D6D08DD6503E543C0B338E1D411586A2DF91B6681DEA2A61500A475"
+    },
+    {
+      "Path": "docs/history/1.3.9/WINDOWS-ACCEPTANCE.md",
+      "Bytes": 800,
+      "Sha256": "D9B2419C7AE6CDD61C8536E6621E806C7CAD04A570850B204D343C528D103647"
+    },
+    {
+      "Path": "docs/history/1.3.9/WINDOWS-PRODUCTION-TEST-PLAN.md",
+      "Bytes": 2788,
+      "Sha256": "6EBBF9C9EC05789AB99C1A1F3C1DFDA0709EB363AC40A5F53729700BA31ED3B1"
+    },
+    {
+      "Path": "docs/history/1.4.0/QUALIFICATION.json",
+      "Bytes": 6034,
+      "Sha256": "D01F3294A847A6F123D77896B16FC593C16DB8EA0F34FD6EF9C797DD76C5DC59"
+    },
+    {
+      "Path": "docs/history/1.4.0/README.md",
+      "Bytes": 7483,
+      "Sha256": "72223147F1411137248AB8926061EAD1EC7F9F69FEFE570461EB62EF864A6AD2"
+    },
+    {
+      "Path": "docs/history/1.4.0/RELEASE.json",
+      "Bytes": 442,
+      "Sha256": "2506D296828B263188910AC7E49BC5968FD735EF1732652C3130F2EB322257E3"
+    },
+    {
+      "Path": "docs/history/1.4.0/tests/current-validation.json",
+      "Bytes": 6021,
+      "Sha256": "572DBC2B815A051F543DBB52581D1027BDA57A4FC68EAF2730F616DDF0FFF32A"
+    },
+    {
+      "Path": "docs/history/1.4.0/tests/static-results.json",
+      "Bytes": 26049,
+      "Sha256": "4C671B887739BD6BDC74FFC8D2579BCE882A849D6FF4ADBC0748E17598786D58"
+    },
+    {
+      "Path": "docs/history/1.4.0/tools/release_tool.py.txt",
+      "Bytes": 25274,
+      "Sha256": "631224BAFA0842C066E4CC38CE0E00BAE3670842908B7B5AC70ECD52DD38DEF4"
+    },
+    {
+      "Path": "docs/history/optional-kill-switch-1-before-identity-safeguards/PACKAGE-MANIFEST.json",
+      "Bytes": 22075,
+      "Sha256": "677B82D95F7CE66A6A53D4FAFC1BE48A94522C5597A61BFC77577E8E469EA131"
+    },
+    {
+      "Path": "docs/history/optional-kill-switch-1-before-identity-safeguards/QUALIFICATION.json",
+      "Bytes": 7616,
+      "Sha256": "A76A2D03AC188A5301CD9A9342E044943CEF6390954DA2625626174192D6BBD1"
+    },
+    {
+      "Path": "docs/history/optional-kill-switch-1-before-identity-safeguards/README.md",
+      "Bytes": 13202,
+      "Sha256": "788AA93FE872BC69A69A2ABB2B944C918B2F9CDA0F2861E4F696A22329070E9A"
+    },
+    {
+      "Path": "docs/history/optional-kill-switch-1-before-identity-safeguards/RELEASE.json",
+      "Bytes": 594,
+      "Sha256": "8B29A21568319986ADAF8D523B5E68EC4B3458493FEE10D6A5DEDD4110011FE3"
+    },
+    {
+      "Path": "docs/history/optional-kill-switch-1-before-identity-safeguards/tests-current-validation.json",
+      "Bytes": 7666,
+      "Sha256": "22B76183AF8AFAE32202C3721AE97158531474E13DFE1C05565527C97DB47EF0"
+    },
+    {
+      "Path": "docs/history/optional-kill-switch-1-before-identity-safeguards/tests-static-results.json",
+      "Bytes": 43563,
+      "Sha256": "F21F9F4A2905B5BF58B5D6FEC1B0D3254A42852718B323AD62727BD9B9268EFE"
+    },
+    {
+      "Path": "docs/history/README.md",
+      "Bytes": 655,
+      "Sha256": "C3DE15AD170FF9D4B4C2DC47B63CFE3592652C205DD73C0378D9FDEC03768258"
+    },
+    {
+      "Path": "docs/RECOMMENDATIONS.md",
+      "Bytes": 2224,
+      "Sha256": "804EBDA126FB52B2342FFA6B96F6856BA565F8B1BFF851B42344F74654CA7689"
+    },
+    {
+      "Path": "docs/WFP-DESIGN.md",
+      "Bytes": 8337,
+      "Sha256": "6536729659DC1DC030B67796D655E453074AE5281B21BD4C40BC300EA5866473"
+    },
+    {
+      "Path": "Emergency-Unlock-GephTun.ps1",
+      "Bytes": 1488,
+      "Sha256": "67630C0337C73B291AFDA0DEAE1B81C52FB0EA9AA535578C667E5BA2E2155766"
+    },
+    {
+      "Path": "GEPH-COMPATIBILITY.md",
+      "Bytes": 1123,
+      "Sha256": "25ABD99C8038F95ED6EA8000DB40A370716BFC681FD97BE8A25762C77BF80608"
+    },
+    {
+      "Path": "GephTun-BootReconcile.ps1",
+      "Bytes": 10855,
+      "Sha256": "22A0A4C9A77D06455828E9216E50FF825174BDA381A86C91174060FF93BD506A"
+    },
+    {
+      "Path": "GephTun.Bypasses.ps1",
+      "Bytes": 13639,
+      "Sha256": "413BD87290E9DA9CEF87A1D9ABDABCAC54FF6FBE9286D4ECC84EC693EB44C6EF"
+    },
+    {
+      "Path": "GephTun.Core.psm1",
+      "Bytes": 121287,
+      "Sha256": "10923628C400D0E918EEF801AC0F20AB751B6F86753FE76524807A68C3DDCA42"
+    },
+    {
+      "Path": "GephTun.Network.cs",
+      "Bytes": 59440,
+      "Sha256": "D5AF45962BA84886E62FA5385304870D46237362722F384D259EA1B00AB34A39"
+    },
+    {
+      "Path": "GephTun.Protection.ps1",
+      "Bytes": 11996,
+      "Sha256": "7DA4F53A6FE86F1DEFE5EDB17488B46DF10D07D19837BB5A60046CB17A1FFF89"
+    },
+    {
+      "Path": "GephTun.Resilience.ps1",
+      "Bytes": 15122,
+      "Sha256": "CC80808F518CB51FD2673C1F737DBFAEA012DF1358E74E5804E5D841CA17CA9D"
+    },
+    {
+      "Path": "GephTun.UI.ps1",
+      "Bytes": 79342,
+      "Sha256": "08D639F7B6AA9DFB8296DBBE7F50B30EFF3A16DBE25CE430EE9EFA962F31C365"
+    },
+    {
+      "Path": "GephTun.Wfp.cs",
+      "Bytes": 34447,
+      "Sha256": "4853A984F851C6F6128081AE2CD90D3B34489F81AA4AA9000661EFCE18327BD0"
+    },
+    {
+      "Path": "GephTun.Worker.ps1",
+      "Bytes": 5996,
+      "Sha256": "498232D33F5A1B4D3DEAE7751C91101310FA7A8365368A112CF83FBB8AE23E9B"
+    },
+    {
+      "Path": "GephTun.WorkerHost.ps1",
+      "Bytes": 4131,
+      "Sha256": "4C22E7A3BEB7A0A4A6BB33E3C5C7B219D5DD8622E530C854D8A79E50D75E3461"
+    },
+    {
+      "Path": "IDENTITY-SAFEGUARDS-CANDIDATE.md",
+      "Bytes": 2446,
+      "Sha256": "EC6FBCCAEF51CE8B150A2B0574C37D57AC596EC04F84B1027B65CFF1DC7356DA"
+    },
+    {
+      "Path": "Launch-GephTun.cmd",
+      "Bytes": 590,
+      "Sha256": "C4A8708C6F2F3046620C746AF58C915AFC2DFB829D3E97655FFD516D8834BDBC"
+    },
+    {
+      "Path": "Launch-GephTun.ps1",
+      "Bytes": 4181,
+      "Sha256": "92E374AC014DCDB6037F1A60C31BD521502D739056B82708C074FFEBB0AF5A33"
+    },
+    {
+      "Path": "licenses/tun2socks-LICENSE.txt",
+      "Bytes": 1066,
+      "Sha256": "796ABBF6D0258A01321F88F72C1D712417ACDD75342510F0796F7C567B6F05E5"
+    },
+    {
+      "Path": "licenses/Wintun-LICENSE.txt",
+      "Bytes": 5431,
+      "Sha256": "183ADAC21E7D96C508C8FD34D394B7B6708BC81564AD1BAD61AB66143A008CD2"
+    },
+    {
+      "Path": "Protection-GephTun.cmd",
+      "Bytes": 357,
+      "Sha256": "5CDBCCE84B1E38E5111E2149AF43EE4EFB3DBF636C6CFF46D8BE1785A888BF12"
+    },
+    {
+      "Path": "Protection-GephTun.ps1",
+      "Bytes": 6595,
+      "Sha256": "5C9428D82F34F8B13DECC28B4A79EAFFB09A56E20086554CE98219134E3278C0"
+    },
+    {
+      "Path": "QUALIFICATION.json",
+      "Bytes": 9217,
+      "Sha256": "D91377D056752BDE1184FF4C5204C3A906312310F09591C70C942A46D4C9EB82"
+    },
+    {
+      "Path": "README.md",
+      "Bytes": 14736,
+      "Sha256": "2AC40BCDEAF75CD214F5F8166307CBA899A8605D6BEC039A384BCCE0BB93B8C0"
+    },
+    {
+      "Path": "RELEASE.json",
+      "Bytes": 843,
+      "Sha256": "1595A8D12C760D25765EA440660EABF3085F384072F0030DF86A4AFC7BDCF701"
+    },
+    {
+      "Path": "RUNTIME-CHANGES.patch",
+      "Bytes": 152776,
+      "Sha256": "3E57FBF9D707F139FBD16A1E1F2169B6C98A3109F911E1C05BB6F1072AEC637D"
+    },
+    {
+      "Path": "RUNTIME-README.md",
+      "Bytes": 512,
+      "Sha256": "4BDC7D51785744005FED56DC986ACF474A5732469F6BFA8BA8EF54210A96CE6E"
+    },
+    {
+      "Path": "Start-GephTun.cmd",
+      "Bytes": 593,
+      "Sha256": "D36714EB01DB025B7C71D6477C5B12E5A6A7F683DC8262E6F68A9844914B50B2"
+    },
+    {
+      "Path": "START-HERE.md",
+      "Bytes": 1744,
+      "Sha256": "65ACCB852107509D490AD291C93A30DAD7337708BD9309399177E85BC23DBEDA"
+    },
+    {
+      "Path": "Stop-GephTun.cmd",
+      "Bytes": 596,
+      "Sha256": "A0C2DB5C91C7C0F28153CCC4CBCBC011B1A9EA8D0C45362C5D6A33A016CFAA26"
+    },
+    {
+      "Path": "tests/BootRecovery.Tests.ps1",
+      "Bytes": 18702,
+      "Sha256": "3D0D75B5D7222C3EA2E7CD4A92872FEEB41954814F5896BE1D541B53C3EC601B"
+    },
+    {
+      "Path": "tests/Bypasses.Tests.ps1",
+      "Bytes": 21095,
+      "Sha256": "4C5F97E8443CBE4CE262867997484F736444B868054E9ACE2098990C14D777D0"
+    },
+    {
+      "Path": "tests/Controller.Tests.ps1",
+      "Bytes": 15246,
+      "Sha256": "484FB538B59995F1DC77372C948A0B538ECF4DAF486822CA98F8EA5261DFD4F3"
+    },
+    {
+      "Path": "tests/current-validation.json",
+      "Bytes": 1545,
+      "Sha256": "3BE91E1A069CC7D37E8126BE4FBD1A5FB26B768C35FC36B1C91E8800E43E488E"
+    },
+    {
+      "Path": "tests/Diagnostics.Tests.ps1",
+      "Bytes": 11426,
+      "Sha256": "FDCDA3E739937683531FD3527669099DB5EE85EE9C76CF728BAF4141DDE81FE7"
+    },
+    {
+      "Path": "tests/dns-mandatory-fixtures.json",
+      "Bytes": 5692,
+      "Sha256": "FA85C311B3F8DA0DEF2AB4ACB805FFC3C3E163FA9E69BAD70AFACF1BEB061272"
+    },
+    {
+      "Path": "tests/DnsMandatory.Tests.ps1",
+      "Bytes": 5035,
+      "Sha256": "41C36821E061CB40FAF64052A2A3DA19055E0ACF209538D8965CB82794194AE1"
+    },
+    {
+      "Path": "tests/IdentitySafeguards.Tests.ps1",
+      "Bytes": 14318,
+      "Sha256": "D7C7B2E754BAD5F1604997204F918102FE74BEFA0C814705517FD63881149292"
+    },
+    {
+      "Path": "tests/Measure-WindowsResources.ps1",
+      "Bytes": 4954,
+      "Sha256": "7A373677709DAFC1B734A271F25134E8E00B7E2DB796429112ADDD93AC3D3450"
+    },
+    {
+      "Path": "tests/Package.Common.ps1",
+      "Bytes": 34474,
+      "Sha256": "3CC5A1926BCD3FDDA766635715764388438DEF056D1EA624C6845F429AB84DE5"
+    },
+    {
+      "Path": "tests/Package.Tests.ps1",
+      "Bytes": 3854,
+      "Sha256": "1005353FFABB5AD55F7F149A0D6FD839C2C94BF0DAA43C5600FE8EF382CBD9E6"
+    },
+    {
+      "Path": "tests/Protection.Tests.ps1",
+      "Bytes": 26452,
+      "Sha256": "B4C011A08019E130920570EF18684ED12B66278FBFF0B44AFC29B30DF26AF38C"
+    },
+    {
+      "Path": "tests/proxy-helper-driver.ps1",
+      "Bytes": 13224,
+      "Sha256": "2B37A5E015D9E27E7FF7E57276E5E85F236E23F14DFB44D91B02A9722B2EB130"
+    },
+    {
+      "Path": "tests/proxy-helper-tests.py",
+      "Bytes": 68591,
+      "Sha256": "91D4298E086D796FF52A791CAEEC5A3A9C9DB7C58798B48413F20C460F0914EB"
+    },
+    {
+      "Path": "tests/Resilience.Tests.ps1",
+      "Bytes": 23458,
+      "Sha256": "182435B449F1BAA80B96062665105993BAE545506CBD11782B1676EA8BFDE102"
+    },
+    {
+      "Path": "tests/Run-UpdateValidation.ps1",
+      "Bytes": 8271,
+      "Sha256": "D1581CBEE35362CB5EE3D1ED4347CE4042644635A0F8D74ABBFCE402586CFFE7"
+    },
+    {
+      "Path": "tests/static-results.json",
+      "Bytes": 1036,
+      "Sha256": "BF3A019034748761890FBB1E25E644887F82FCB32111E27D871DCA7B73FEA986"
+    },
+    {
+      "Path": "tests/Targeted-D001-SvcParamFilter.ps1",
+      "Bytes": 5327,
+      "Sha256": "5E869092C59B0162CB48FC11C1122ADE34B96E568109023F28C06FF235BFE4EB"
+    },
+    {
+      "Path": "tests/Test-NrptConflict.ps1",
+      "Bytes": 14603,
+      "Sha256": "FA0C4594767F23C5EBB4E86D00B1682FDB11F3A92EBE9DF8317FA168D251C6A5"
+    },
+    {
+      "Path": "tests/tray-harness.ps1",
+      "Bytes": 29291,
+      "Sha256": "B2AA7CA70D467B569E29A861C7DB08C7BA755BAFBE976BDCEA0E5EFAD8D479B4"
+    },
+    {
+      "Path": "tests/Validate-Source.ps1",
+      "Bytes": 3285,
+      "Sha256": "6F3D8D9B62810632C93988D1ECE7B2E0EFC3DE64817CB71847DCC47E57809C52"
+    },
+    {
+      "Path": "tests/Verify-IdentityCandidate.Tests.ps1",
+      "Bytes": 12731,
+      "Sha256": "D298EEA7921C71B521A0981C41101876A8FD12C2D2E4FF0E4F073516C231E9DD"
+    },
+    {
+      "Path": "tests/Wfp-NativeSmoke.ps1",
+      "Bytes": 3618,
+      "Sha256": "D3C4BBC478240DA4BEC3479EADF7649158F98227A48C4FA0E0CE58549D6E5E7D"
+    },
+    {
+      "Path": "tests/WfpPolicy.Tests.ps1",
+      "Bytes": 10887,
+      "Sha256": "E48E20BECBAC854836F69F50B450EE42111F54F1A6BAD45BC124F80441F3C945"
+    },
+    {
+      "Path": "third_party/BUILD-TUN2SOCKS.md",
+      "Bytes": 5900,
+      "Sha256": "0BC2576E93D988E8E2E2267A562C7E05999FFC7AE13954887D882DA59349C629"
+    },
+    {
+      "Path": "third_party/DEPENDENCY-REVIEW.md",
+      "Bytes": 7859,
+      "Sha256": "4E78E96048D0C428B7D9369360E940C7013106C2FD9C278E2FBC9FF1716715F8"
+    },
+    {
+      "Path": "third_party/tun2socks-2.7.0-gephtun.3-source.tar.gz",
+      "Bytes": 4328734,
+      "Sha256": "D7DFB2C51DEC52B9AA918551A5B1D8DDD38A9D235745156807D0D380DCE5D24C"
+    },
+    {
+      "Path": "third_party/tun2socks-2.7.0-gephtun.3.patch",
+      "Bytes": 38744,
+      "Sha256": "798562D415EDB41238861E90BCABF50C22BC4552285A6EAE6FDA39C91CF7A0A2"
+    },
+    {
+      "Path": "third_party/tun2socks-binary-build-info.txt",
+      "Bytes": 1278,
+      "Sha256": "1321335A9ECB3B6FE107F169A969DDBBDFF72A8448B8C211935BB8B374AACE48"
+    },
+    {
+      "Path": "third_party/tun2socks-source-delivery-rebuild.json",
+      "Bytes": 1936,
+      "Sha256": "053FB69EC4B38A254094ECED0118574080DAA3E6B1D1EB4F6F575BAA6BDFA6E7"
+    },
+    {
+      "Path": "third_party/tun2socks-source-delivery-rebuild.txt",
+      "Bytes": 2667,
+      "Sha256": "3B0284D4462714887DFF7F72BE97C2E412E078359E7BA8FE0DBD1EB0F742D9F3"
+    },
+    {
+      "Path": "third_party/tun2socks-THIRD-PARTY-LICENSES.txt",
+      "Bytes": 84826,
+      "Sha256": "20F0FD7AECE41E23F18BB1DABD5DDBE0E0D4175EA621ED93BDB1F355D3787C98"
+    },
+    {
+      "Path": "third_party/tun2socks-validation-1.3.4.json",
+      "Bytes": 20579,
+      "Sha256": "D04558556C1F344C89826E4B63B5ABFD410193A4B90A91D0D916FA7BD0CAC971"
+    },
+    {
+      "Path": "third_party/tun2socks-validation-1.3.5.json",
+      "Bytes": 3489,
+      "Sha256": "13233FE8DA7DA2EA62CE0BF4CF24B083E6D6AAB76542CC66EC8A83081F174923"
+    },
+    {
+      "Path": "third_party/tun2socks-vulnerability-screen.json",
+      "Bytes": 4039,
+      "Sha256": "70A13562CC9F573B85E78759BE1BC5AAB028074B2937A6A4910786560E01D131"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-BypassQueries.ps1",
+      "Bytes": 3944,
+      "Sha256": "0DCAEF571E0591031DECFFFDA2B57EE4105F0F20761979F784A09D41375C997A"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Bytes": 5696,
+      "Sha256": "D1A68AF98298C527FBC4A94C807F9517F8159879282039F45AE0FE73CFE69272"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Bytes": 4779,
+      "Sha256": "1BD8E8844312D1C64AB1673693854E2F9D6E2BAF3975C0225948946EABF036F8"
+    },
+    {
+      "Path": "tools/benchmarks/performance-fixtures.json",
+      "Bytes": 89908,
+      "Sha256": "5E4232687BEBA0E9999306F53A5C03D2649BB631DCDCED44B905CC48843A7209"
+    },
+    {
+      "Path": "tools/benchmarks/README.md",
+      "Bytes": 838,
+      "Sha256": "E26AD69071670D6F7109307E0B213585C640484CC5603CBA4618A590B2E78FC6"
+    },
+    {
+      "Path": "tools/build_icons.py",
+      "Bytes": 3441,
+      "Sha256": "C49A0CA2C9FB9F82E782C6B6D94918337EA04EF7A2B4D22EA6A0145139D2031C"
+    },
+    {
+      "Path": "tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Bytes": 1726,
+      "Sha256": "0C9EE08F87F55CBDBB3F2B252F8C4C5E89B87989D6CB447B3C2DD87BD901181C"
+    },
+    {
+      "Path": "tools/diagnostics/Diagnostics.Common.ps1",
+      "Bytes": 2279,
+      "Sha256": "2817BB6EBD4471D35F53FDBB021DF91CCE8078EDE29769AB4B25DC0819C808D6"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Bytes": 3518,
+      "Sha256": "19CFD0457CCB67757B11DBC8113915EFD0A24BBFA728F6DABA00382A9AA21598"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Bytes": 5478,
+      "Sha256": "218BE09C3F4AEB03CB4CDC58724D9DAFEF4D73D878BA3903A9690C34E45439B6"
+    },
+    {
+      "Path": "tools/diagnostics/Measure-CimWorkload.ps1",
+      "Bytes": 2890,
+      "Sha256": "E5F7D397FFF9BDD45BDFC547A9536FBA1015B9C24C1A117FDC2043F34BA29938"
+    },
+    {
+      "Path": "tools/diagnostics/README.md",
+      "Bytes": 1724,
+      "Sha256": "D8E43B7EFFE04A6279B7E78B532B455DCA1125A712A834614B3EA8F57939AF7F"
+    },
+    {
+      "Path": "tools/release_tool.py",
+      "Bytes": 38360,
+      "Sha256": "8D7A4F84A797C98BDA81C6E10C2A2FBFF128916F38C156A95FE76AB3B8CEC079"
+    },
+    {
+      "Path": "VALIDATION.md",
+      "Bytes": 3866,
+      "Sha256": "DFB71B089F92709B2B20B4C3146A93A381BE664AF8B701AB8F053FEF18D84533"
+    },
+    {
+      "Path": "Verify-GephTun.ps1",
+      "Bytes": 11519,
+      "Sha256": "5F7D4E6E9339742D1C09140A3EE5CAF6FA626A3D6B4ACDAD9B54706CEDAD3FF5"
+    },
+    {
+      "Path": "WINDOWS-ACCEPTANCE.md",
+      "Bytes": 5835,
+      "Sha256": "69034233E6094771F242452761FB2B6891AEBEF63D20D95110D411C0FBE947FC"
+    }
+  ],
+  "Status": "UNQUALIFIED application icon update candidate; no live acceptance",
+  "Date": "2026-10-28",
+  "InputArchiveSha256": "41E7A3A76DC952623453448F82E81AB6325338011FE9EB68601E32C9AA684F1F"
+}

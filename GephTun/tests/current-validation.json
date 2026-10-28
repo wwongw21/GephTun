@@ -1,0 +1,23 @@
+{
+  "Schema": "GephTun.IdentityCandidate.LocalValidation.v1",
+  "Version": "1.5.0",
+  "CandidateRevision": "application-icons-1",
+  "ProductionQualified": false,
+  "CoverageComplete": false,
+  "Status": "UNQUALIFIED_RUNNER_RECEIPT_GATE_REPAIR_TESTS_NOT_RUN",
+  "PowerShellParsing": "NOT_RUN_FOR_REPAIRED_CANDIDATE",
+  "CSharpCompilation": "PASS_TWO_UNCHANGED_SOURCES_COMPILE_ONLY",
+  "FocusedIdentityBehaviorTests": "NOT_RUN_FOR_REPAIRED_CANDIDATE",
+  "VerifierIntegrityTests": "PREPARED_NOT_RUN_EXECUTION_POLICY_RESTRICTED",
+  "FullRegressionSuite": "NOT_RUN",
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "LiveTests": 0,
+  "Reason": "This derivative checks each reported case pass field when present: Result must be PASS and Passed must be the boolean true, including when both fields occur. Synthetic fixtures cover matching, contradictory and nonboolean fields. The revised harness and normal runner are prepared but were not run; the prior blocked behavior receipt applies to revision 1 only. The unchanged C# sources retain their compile-only receipt. This is not qualification.",
+  "ExternalReceiptsRoot": "../evidence",
+  "CSharpCompileReceiptSha256": "DE827478D8C83C186B70132A1E837F4430AE3B305A8975618DD13C7CE9C3C062",
+  "ApplicationIcons": {
+    "BaseCandidateRevision": "identity-safeguards-verifier-repair-3",
+    "Scope": "Window/taskbar icon, five tray icons, and shortcut creation only.",
+    "Qualification": "The base preparation fields below remain conservative; icon checks are recorded separately."
+  }
+}

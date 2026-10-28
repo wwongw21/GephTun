@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>GephTun tunnel badge</title>
+  <circle cx="50" cy="50" r="48" fill="#12243D"/>
+  <path fill="#FFFFFF" d="M24 76V46a26 26 0 0 1 52 0v30H62V46a12 12 0 0 0-24 0v30Z"/>
+  <path fill="#70C9FF" d="M49 58H70V49L85 64L70 79V70H49Z"/>
+</svg>

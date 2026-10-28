@@ -1,0 +1,16 @@
+{
+  "Package": "GephTun",
+  "Version": "1.5.0",
+  "Status": "UNQUALIFIED application icon update candidate; no live acceptance",
+  "Date": "2026-10-28",
+  "InputArchiveSha256": "41E7A3A76DC952623453448F82E81AB6325338011FE9EB68601E32C9AA684F1F",
+  "Channel": "Test candidate",
+  "ProductionQualified": false,
+  "Target": "Windows 11 x64 / Windows PowerShell 5.1",
+  "AutomaticCrashRecovery": "NOT_IMPLEMENTED; recommended for later",
+  "CandidateRevision": "application-icons-1",
+  "PreviousCandidateRevision": "identity-safeguards-verifier-repair-3",
+  "CandidateBaseCommit": "452180886b43f1faed849c57af18315052e1d755",
+  "BaseCandidateArchiveSha256": "41E7A3A76DC952623453448F82E81AB6325338011FE9EB68601E32C9AA684F1F",
+  "HistoricalBaseInputArchiveSha256": "625f5465acc0f1b061f12d46c51c5e231d0626bb4845fe0af1095aae2412ebb1"
+}

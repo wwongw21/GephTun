@@ -1,0 +1,455 @@
+{
+    "Suite":  "UI launcher and isolated worker behavior",
+    "Runtime":  "5.1.26100.9444",
+    "Platform":  "Win32NT",
+    "Total":  80,
+    "Passed":  80,
+    "Failed":  0,
+    "NativeWindowsUIVerified":  false,
+    "NativeTrayHarness":  "Not run on this host; expanded production-layout and tray harness parsed only",
+    "NetworkMutationsPerformed":  false,
+    "StressIterations":  5000,
+    "AtomicSnapshotReplacements":  1000,
+    "AtomicSnapshotReads":  2950,
+    "Scope":  "Production functions extracted without WinForms startup; actual worker child processes use an isolated fake controller module.",
+    "Tests":  [
+                  {
+                      "Name":  "Production scripts parse without executing native startup",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Layout widths account for content padding and scrollbar space at narrow sizes",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Production layout defers automatic scaling until font and complete control tree exist",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Production text rows and long messages have no fixed-height or ellipsis clipping policy",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Proxy port selection preserves manual values and switches back to auto-detect",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Build identity uses bounded validated release metadata and remains available without it",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Production input handlers bind once and dispatch the selected action and port",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Native harness output reservation preserves source files and earlier evidence",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Existing unowned UI mutex is acquired",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Live successful Connect supervisor does not block operations",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Failed Connect in recovery does not block Disconnect",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Check still waits for process exit after its result",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Pending Connect cancellation is written once and scoped to its token",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A denied cancellation write keeps safe Disconnect queued and reports the problem once",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Cancellation write recovers after a temporary denial without aborting the pending worker",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Completed startup is handled by session Disconnect instead of stale cancellation",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Disconnect waits before journal creation and starts as soon as session exists",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Disconnect does not overlap an unfinished Check or another Disconnect",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Stop during preflight cancels pending auto-Connect and queues safe recovery",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Connect cannot start while recovery is queued or during an active session",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Check and Connect refuse a saved recovery journal even over a stale disconnected screen",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Active states without a living supervisor become RecoveryRequired",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "JSON timestamps preserve UTC instead of shifting by the local timezone",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Supervisor identity accepts exact round-trip start time and rejects nearby process lifetimes",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Running supervisor with stale health confirmation is not shown as connected",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Malformed or oversized status produces recovery guidance",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Snapshot reader reports missing paths as IO failures and bounds complete content",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Chunked snapshot reads retain complete content at tiny, chunk and maximum bounds",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Chunked snapshots preserve UTF encodings and characters across chunk boundaries",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Snapshot byte ceilings reject oversized ASCII and multibyte text at every caller limit",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A status snapshot that disappears once is retried without a false redirection warning",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A transient status-file collision retries instead of flashing recovery state",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "UI reads coherent connected states during actual concurrent atomic replacement",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A status snapshot absent during atomic publish is retried before recovery",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A persistent nonmissing status IO failure never reuses disconnected startup state",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Snapshot failures hold the last connected presentation while the worker stays alive",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A dead worker never pins a stale connected presentation",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A status file that stays locked still produces recovery guidance",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Persistent status IO failures stop blocking repeated polls and restore retries after recovery",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Action failure remains visible over a disconnected cached status",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Success clears the previous action failure and reports verified proxy port",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "String success flags are rejected and malformed result warnings are deduplicated",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Worker exiting without a valid result becomes an explicit failed operation",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Unreported slow operation receives one warning without killing its worker",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Worker exit removes its result and cancellation files",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Launcher requests accept only known fresh actions for this desktop session",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Secondary launcher writes a protected-session command and dispatch consumes it",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Queued Connect from a second launcher cannot override a requested Exit",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A saved session overrides a cached disconnected status",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Failed initial status without a status file is actionable rather than checking forever",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Exit checks the saved session even when the last displayed status is disconnected",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Exit rechecks a connection that changed since the displayed disconnected state",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Completed exit refuses to close over a remaining recovery journal",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Exit closes after a fresh disconnected status and completed recovery",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Exit waits for queued recovery even if cached status says disconnected",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Repeated stop while preflight is pending does not repeatedly report the same queued action",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Successful Status result must include a recognized tunnel state",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Successful Check result must contain a valid verified proxy port",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A numeric verified Check port remains accepted after result validation",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Malformed successful Check cannot hide its error after its worker exits",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Repeated cancellation and failed-result consumption stays bounded and releases process handles",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Temporarily unreadable launcher requests survive and dispatch once after recovery",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A handled launcher request never replays while its deletion is denied",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Twenty undeletable consumed requests cannot starve a later Disconnect",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Twenty unreadable requests cannot starve a later readable Disconnect",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "An older readable Stop gets a turn before a stream of later new requests",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Consumed request tracking expires and stale requests never dispatch",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "A secondary Connect waits for Check or Status completion and dispatches once",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Disconnect clears a deferred secondary Connect and later inbox Connect cannot reverse Stop",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Quoted -File launch round-trips paths containing spaces, apostrophes and command syntax",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Launcher handles nested UAC cancellation without misclassifying access denied",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Launcher validates the UI script before starting a hidden child",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Worker result paths reject traversal, sibling directories and cancellation filenames",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Actual worker reports failed Check with exit 1 and releases its lock",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Actual worker recovers failed Connect before releasing lock and forwards operation token",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Worker never claims disconnected recovery after preflight leaves an existing journal",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Supervision failure leaves the consumed startup result intact and recovers before exit",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Actual worker refuses to write a result outside its protected results directory",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Worker host refuses an outside result or capture path before fallback publication",
+                      "Passed":  true,
+                      "Error":  ""
+                  },
+                  {
+                      "Name":  "Worker host publishes an actionable failure when the worker cannot start",
+                      "Passed":  true,
+                      "Error":  ""
+                  }
+              ],
+    "Sources":  [
+                    {
+                        "Path":  "GephTun.UI.ps1",
+                        "Sha256":  "948b065dc389dfc37310171b550b8ba99333bfbdf8b84c5cdcf5e15856c53648"
+                    },
+                    {
+                        "Path":  "GephTun.Worker.ps1",
+                        "Sha256":  "3c9c25b196b940d247866534ce23102b33a1a40cfd246633579c564ccf09571e"
+                    },
+                    {
+                        "Path":  "GephTun.WorkerHost.ps1",
+                        "Sha256":  "760605967fc8489ccd83d53c4df6c94d318642aab76f2e80e23dcb961e310e1c"
+                    },
+                    {
+                        "Path":  "Launch-GephTun.ps1",
+                        "Sha256":  "274cbe09478a2f8a0ade4be208c5e027d79f4baf3744073fca4e942fecf54310"
+                    },
+                    {
+                        "Path":  "Launch-GephTun.cmd",
+                        "Sha256":  "c4a8708c6f2f3046620c746af58c915afc2dfb829d3e97655ffd516d8834bdbc"
+                    },
+                    {
+                        "Path":  "Start-GephTun.cmd",
+                        "Sha256":  "d36714eb01db025b7c71d6477c5b12e5a6a7f683dc8262e6f68a9844914b50b2"
+                    },
+                    {
+                        "Path":  "Stop-GephTun.cmd",
+                        "Sha256":  "a0c2db5c91c7c0f28153ccc4cbcbc011b1a9ea8d0c45362c5d6a33a016cfaa26"
+                    },
+                    {
+                        "Path":  "tests/UI.Tests.ps1",
+                        "Sha256":  "27345874d1481c6af436889c433179acfccca4e3f8e966d894122c9fd72f073d"
+                    },
+                    {
+                        "Path":  "tests/tray-harness.ps1",
+                        "Sha256":  "f8f93c988e9d3620fe6b2228130e001a5dd574075d0de5462ed0e4e5060e9918"
+                    }
+                ]
+}

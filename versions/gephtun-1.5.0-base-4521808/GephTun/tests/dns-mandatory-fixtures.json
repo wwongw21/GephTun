@@ -1,0 +1,144 @@
+{
+  "Schema": 1,
+  "Description": "In-memory fixtures for the actual C# filter. Documentation-range IPs only. ExpectedAnswers=0 means malformed or incompatible RR must not be forwarded.",
+  "Tests": [
+    {
+      "Name": "Optional ipv6hint is removed, ALPN and IPv4 are preserved",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ADYAAQNzdmMHZXhhbXBsZQNjb20AAAEAAwJoMgAEAATAAAIBAAYAECABDbgAAAAAAAAAAAAAAAE=",
+      "ExpectedAnswers": 1,
+      "ExpectedKeys": [
+        1,
+        4
+      ]
+    },
+    {
+      "Name": "Mandatory ipv6hint makes an HTTPS record incompatible",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ADwAAQNzdmMHZXhhbXBsZQNjb20AAAAAAgAGAAEAAwJoMgAEAATAAAIBAAYAECABDbgAAAAAAAAAAAAAAAE=",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Mandatory IPv4 is kept while optional IPv6 is removed",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ADwAAQNzdmMHZXhhbXBsZQNjb20AAAAAAgAEAAEAAwJoMgAEAATAAAIBAAYAECABDbgAAAAAAAAAAAAAAAE=",
+      "ExpectedAnswers": 1,
+      "ExpectedKeys": [
+        0,
+        1,
+        4
+      ]
+    },
+    {
+      "Name": "An unknown mandatory key is preserved when actually present",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACoAAQNzdmMHZXhhbXBsZQNjb20AAAAAAv3oAAEAAwJoMv3oAAZvcGFxdWU=",
+      "ExpectedAnswers": 1,
+      "ExpectedKeys": [
+        0,
+        1,
+        65000
+      ]
+    },
+    {
+      "Name": "A mandatory key missing from SvcParams is refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACgAAQNzdmMHZXhhbXBsZQNjb20AAAAAAgADAAEAAwJoMgAEAATAAAIB",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "An empty mandatory list is refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8AB4AAQNzdmMHZXhhbXBsZQNjb20AAAAAAAABAAMCaDI=",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "The mandatory list cannot name itself",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACAAAQNzdmMHZXhhbXBsZQNjb20AAAAAAgAAAAEAAwJoMg==",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Unordered mandatory keys are refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACoAAQNzdmMHZXhhbXBsZQNjb20AAAAABAAEAAEAAQADAmgyAAQABMAAAgE=",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Duplicate mandatory keys are refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACIAAQNzdmMHZXhhbXBsZQNjb20AAAAABAABAAEAAQADAmgy",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Odd-length mandatory data is refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8AB8AAQNzdmMHZXhhbXBsZQNjb20AAAAAAQEAAQADAmgy",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Duplicate SvcParam keys are refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACkAAQNzdmMHZXhhbXBsZQNjb20AAAEAAwJoMgABAAMCaDIABAAEwAACAQ==",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Unordered SvcParam keys are refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACIAAQNzdmMHZXhhbXBsZQNjb20AAAQABMAAAgEAAQADAmgy",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Reserved-invalid SvcParam key 65535 is refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8AB4AAQNzdmMHZXhhbXBsZQNjb20AAAEAAwJoMv//AAA=",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Truncated IPv6-hint address length is refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8AC0AAQNzdmMHZXhhbXBsZQNjb20AAAEAAwJoMgAGAA8AAAAAAAAAAAAAAAAAAAA=",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Zero-length IPv6-hint value is refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8AB4AAQNzdmMHZXhhbXBsZQNjb20AAAEAAwJoMgAGAAA=",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "Multiple well-formed IPv6 hints are removed",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8AEYAAQNzdmMHZXhhbXBsZQNjb20AAAEAAwJoMgAEAATAAAIBAAYAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "ExpectedAnswers": 1,
+      "ExpectedKeys": [
+        1,
+        4
+      ]
+    },
+    {
+      "Name": "A record without IPv6 remains usable",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACIAAQNzdmMHZXhhbXBsZQNjb20AAAEAAwJoMgAEAATAAAIB",
+      "ExpectedAnswers": 1,
+      "ExpectedKeys": [
+        1,
+        4
+      ]
+    },
+    {
+      "Name": "Mandatory 65535 is refused",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ACQAAQNzdmMHZXhhbXBsZQNjb20AAAAAAv//AAEAAwJoMv//AAA=",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    },
+    {
+      "Name": "An incompatible HTTPS record does not remove a following A record",
+      "WireBase64": "EjSBoAABAAIAAAAAB2V4YW1wbGUDY29tAABBAAHADABBAAEAAAA8ADQAAQNzdmMHZXhhbXBsZQNjb20AAAAAAgAGAAEAAwJoMgAGABAgAQ24AAAAAAAAAAAAAAABwAwAAQABAAAAPAAEwAACKg==",
+      "ExpectedAnswers": 1,
+      "ExpectedKeys": [],
+      "ExpectedType": 1
+    },
+    {
+      "Name": "The mandatory check also applies to SVCB type 64",
+      "WireBase64": "EjSBoAABAAEAAAAAB2V4YW1wbGUDY29tAABAAAHADABAAAEAAAA8ADQAAQNzdmMHZXhhbXBsZQNjb20AAAAAAgAGAAEAAwJoMgAGABAgAQ24AAAAAAAAAAAAAAAB",
+      "ExpectedAnswers": 0,
+      "ExpectedKeys": []
+    }
+  ]
+}

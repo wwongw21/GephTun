@@ -1,0 +1,4 @@
+* text=auto
+/GephTun/** -text
+/versions/** -text
+/evidence/** -text

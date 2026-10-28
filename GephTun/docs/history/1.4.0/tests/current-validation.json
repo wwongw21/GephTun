@@ -1,0 +1,183 @@
+{
+  "Schema": 3,
+  "Version": "1.4.0",
+  "Mode": "STATIC_SOURCE_REVIEW",
+  "CapturedUtc": "2026-10-09T13:19:59.477288+00:00",
+  "PowerShellExecution": "NOT_RUN",
+  "CSharpCompilation": "NOT_RUN",
+  "NativeWindowsAcceptance": "NOT_RUN",
+  "ProductionQualified": false,
+  "Sources": [
+    {
+      "Path": "DEPENDENCIES.json",
+      "Sha256": "0539bfd833da95988a6999f8d6171bc3bb073b74ce992a2c443d5ac8ee3c7a79"
+    },
+    {
+      "Path": "GephTun-BootReconcile.ps1",
+      "Sha256": "4d2cff454adcdb00fc076cefe6ebadebd3e3d82770a4b81c6a4b9912b72b77c4"
+    },
+    {
+      "Path": "GephTun.Core.psm1",
+      "Sha256": "da9426507a008506de35f4619ab147f5122eb824292bf8f12c5a632ad5979437"
+    },
+    {
+      "Path": "GephTun.Network.cs",
+      "Sha256": "d5af45962ba84886e62fa5385304870d46237362722f384d259ea1b00ab34a39"
+    },
+    {
+      "Path": "GephTun.Resilience.ps1",
+      "Sha256": "f8a451d0a72859b52062db4f6716eb7cf7efd057e4106783d28953871742f9ae"
+    },
+    {
+      "Path": "GephTun.UI.ps1",
+      "Sha256": "5a8069be8a13fb218019ddd9b84354ff9c9813a202c48a85df21d2bf6d33e9df"
+    },
+    {
+      "Path": "GephTun.Worker.ps1",
+      "Sha256": "642611841be2a6f4d689609fac625f8e04273341dc78bdd892638254bd7a2f0d"
+    },
+    {
+      "Path": "GephTun.WorkerHost.ps1",
+      "Sha256": "760605967fc8489ccd83d53c4df6c94d318642aab76f2e80e23dcb961e310e1c"
+    },
+    {
+      "Path": "Launch-GephTun.cmd",
+      "Sha256": "c4a8708c6f2f3046620c746af58c915afc2dfb829d3e97655ffd516d8834bdbc"
+    },
+    {
+      "Path": "Launch-GephTun.ps1",
+      "Sha256": "274cbe09478a2f8a0ade4be208c5e027d79f4baf3744073fca4e942fecf54310"
+    },
+    {
+      "Path": "RELEASE.json",
+      "Sha256": "2506d296828b263188910ac7e49bc5968fd735ef1732652c3130f2eb322257e3"
+    },
+    {
+      "Path": "Start-GephTun.cmd",
+      "Sha256": "d36714eb01db025b7c71d6477c5b12e5a6a7f683dc8262e6f68a9844914b50b2"
+    },
+    {
+      "Path": "Stop-GephTun.cmd",
+      "Sha256": "a0c2db5c91c7c0f28153ccc4cbcbc011b1a9ea8d0c45362c5d6a33a016cfaa26"
+    },
+    {
+      "Path": "Verify-GephTun.ps1",
+      "Sha256": "40a1b85a536f83ffe924f6e7d01f26ab105aeb667e95f5caaaadb8c78978e57d"
+    },
+    {
+      "Path": "tests/BootRecovery.Tests.ps1",
+      "Sha256": "a00f14d11420e85e4daeb38d19378794f23ea6fe30c652291780b30a509d89c7"
+    },
+    {
+      "Path": "tests/Controller.Tests.ps1",
+      "Sha256": "3e5459df89536358d29476803a693aa419fb03986feb004c01b0dab0cf9205f6"
+    },
+    {
+      "Path": "tests/Diagnostics.Tests.ps1",
+      "Sha256": "3c8fbc7f87063f9bf80a6a271d492a3d8eaa64a03ac9fb6483e4e4bf1b9f9c04"
+    },
+    {
+      "Path": "tests/DnsMandatory.Tests.ps1",
+      "Sha256": "3e166352e0901b9953960eb84c0a3918f315004541dc239e86c4c3e8290297a2"
+    },
+    {
+      "Path": "tests/Measure-WindowsResources.ps1",
+      "Sha256": "9a5ab55d793404051232baa62161169d3c179c9f6c0d8d7996ad28062429341b"
+    },
+    {
+      "Path": "tests/Package.Common.ps1",
+      "Sha256": "ff0fe496ac116088460f7204172d07d089b298eece60ed863fd862de7a08cbd3"
+    },
+    {
+      "Path": "tests/Package.Tests.ps1",
+      "Sha256": "22a1db01b06366afab47f167e556adc0693d0e02bbb2e907cb704df1e83c193f"
+    },
+    {
+      "Path": "tests/Resilience.Tests.ps1",
+      "Sha256": "58a5087a3139d85db6c21b3df6c2539fd2c090b8c5296caf456a0bba2e432514"
+    },
+    {
+      "Path": "tests/Run-UpdateValidation.ps1",
+      "Sha256": "90871ee34c0f5d44cab26dafae872c89ea2eef0ca3b1362b1ee21ff81249c373"
+    },
+    {
+      "Path": "tests/Targeted-D001-SvcParamFilter.ps1",
+      "Sha256": "5e869092c59b0162cb48fc11c1122ade34b96e568109023f28c06ff235bfe4eb"
+    },
+    {
+      "Path": "tests/Test-NrptConflict.ps1",
+      "Sha256": "d3867f80bab202c6ec99e692bdfa43ff3cb609b25bb0f5df52427803273f5a55"
+    },
+    {
+      "Path": "tests/Validate-Source.ps1",
+      "Sha256": "a35b6a0975c0ad5a5e90777ab95604bc851bd89e7659c62474c2baf5efaeee24"
+    },
+    {
+      "Path": "tests/proxy-helper-driver.ps1",
+      "Sha256": "da748c8232f91df0cfd66c4fd4b824231eb0febf12108de00bb75d570ba1d7ba"
+    },
+    {
+      "Path": "tests/proxy-helper-tests.py",
+      "Sha256": "91d4298e086d796ff52a791caeec5a3a9c9db7c58798b48413f20c460f0914eb"
+    },
+    {
+      "Path": "tests/tray-harness.ps1",
+      "Sha256": "f8f93c988e9d3620fe6b2228130e001a5dd574075d0de5462ed0e4e5060e9918"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-BypassQueries.ps1",
+      "Sha256": "4b6aedbecd6f60ebf3bbc3cc60e2a9cf2309c1d2ff5ed838e664027f8da6dedc"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-NetworkHelper.ps1",
+      "Sha256": "fd7ad45ef8f16c411ff8dd900057246a12af9625e3ebefc133fb45076a35e16a"
+    },
+    {
+      "Path": "tools/benchmarks/Measure-UiSnapshot.ps1",
+      "Sha256": "8d0e2994576ad347d1ae18bc435c31adad6a8307099921b4c9c6b194e8f89394"
+    },
+    {
+      "Path": "tools/diagnostics/Compare-GephTunFiles.ps1",
+      "Sha256": "c934914eb7b3f32d5d2b162412fc999db852406410b19b8b5cb7f39ba66eef17"
+    },
+    {
+      "Path": "tools/diagnostics/Diagnostics.Common.ps1",
+      "Sha256": "3df2f899fdaae6f99304b6ec66287e722b5772df63527e9e016670ceb7fbdeaf"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunCleanupState.ps1",
+      "Sha256": "e6fc125bdd63478e810abc1bcfaa34ffe267396b9e44bcc62869fdc0f4a0ca18"
+    },
+    {
+      "Path": "tools/diagnostics/Get-GephTunDiagnostics.ps1",
+      "Sha256": "e5be64c177e2f58e7ac2acffe21f1470ac115d6a3169c25d7d689b30353bbc7c"
+    },
+    {
+      "Path": "tools/diagnostics/Measure-CimWorkload.ps1",
+      "Sha256": "fa555e4f902d8b8adad2312e6e5951a978414433781b643bde208f124757eb42"
+    },
+    {
+      "Path": "tools/release_tool.py",
+      "Sha256": "631224bafa0842c066e4cc38ce0e00bae3670842908b7b5ac70ecd52dd38def4"
+    }
+  ],
+  "Evidence": [
+    {
+      "Path": "tests/static-results.json",
+      "Sha256": "4c671b887739bd6bdc74ffc8d2579bce882a849d6ff4adbc0748e17598786d58"
+    }
+  ],
+  "StaticChecks": {
+    "Total": 149,
+    "Passed": 149,
+    "Failed": 0
+  },
+  "PreparedSuitesNotExecuted": [
+    "Source",
+    "Resilience",
+    "Controller",
+    "DnsMandatory",
+    "BootRecovery",
+    "Package"
+  ]
+}
